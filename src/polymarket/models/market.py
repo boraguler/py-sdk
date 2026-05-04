@@ -1,7 +1,4 @@
-"""Canonical SDK models.
-
-These models define the public objects returned by the SDK.
-"""
+"""Market model."""
 
 from __future__ import annotations
 
@@ -10,24 +7,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, cast
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
+
+from polymarket.models.base import BaseModel
+from polymarket.models.types import ConditionId, MarketId
 
 
-class SDKModel(BaseModel):
-    """Base model for immutable SDK objects."""
-
-    model_config = ConfigDict(
-        extra="ignore",
-        frozen=True,
-        populate_by_name=True,
-    )
-
-
-class Market(SDKModel):
+class Market(BaseModel):
     """A Polymarket market."""
 
-    id: str = Field(validation_alias=AliasChoices("id", "market_id", "marketId"))
-    condition_id: str = Field(
+    id: MarketId = Field(validation_alias=AliasChoices("id", "market_id", "marketId"))
+    condition_id: ConditionId = Field(
         validation_alias=AliasChoices("condition_id", "conditionId", "condition")
     )
     question: str
@@ -100,4 +90,4 @@ def _parse_decimal(value: object) -> Decimal:
     return Decimal(str(value))
 
 
-__all__ = ["Market", "SDKModel"]
+__all__ = ["Market"]

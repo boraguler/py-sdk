@@ -1,6 +1,6 @@
 """Python SDK for Polymarket."""
 
-from polymarket.client import PublicClient
+from polymarket.clients import AsyncPublicClient, PublicClient
 from polymarket.errors import (
     CancelledSigningError,
     InsufficientLiquidityError,
@@ -14,20 +14,30 @@ from polymarket.errors import (
     UnexpectedResponseError,
     UserInputError,
 )
-from polymarket.models import Market
+from polymarket.models import ConditionId, EventId, Market, MarketId, OrderId, TokenId
+from polymarket.types import EvmAddress, HexString, TransactionHash
 from polymarket.version import __version__
 
 __all__ = [
+    "AsyncPublicClient",
     "CancelledSigningError",
+    "ConditionId",
+    "EventId",
+    "EvmAddress",
+    "HexString",
     "InsufficientLiquidityError",
     "Market",
+    "MarketId",
+    "OrderId",
     "PolymarketError",
     "PublicClient",
     "RateLimitError",
     "RequestRejectedError",
     "SigningError",
     "TimeoutError",
+    "TokenId",
     "TransactionFailedError",
+    "TransactionHash",
     "TransportError",
     "UnexpectedResponseError",
     "UserInputError",

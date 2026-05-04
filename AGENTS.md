@@ -17,6 +17,8 @@
 - In public-facing docs, docstrings, type descriptions, and examples, describe SDK objects directly as the objects users work with. Do not mention that objects are normalized from raw responses, hide uneven internal/API surfaces, or frame models around which backend currently provides data.
 - Lower-level controls are acceptable when they support a concrete integration need, but the default experience should feel unified.
 - For internal invariant checks, use Python-native `RuntimeError`, `AssertionError`, or `typing.assert_never` as appropriate instead of introducing a public `InvariantError` SDK exception.
+- Use `typing.NewType` selectively for meaningful SDK domain types. Generic primitives such as `EvmAddress`, `HexString`, and `TransactionHash` belong outside `polymarket.models`; model-specific identifiers such as `MarketId`, `EventId`, `ConditionId`, `TokenId`, and `OrderId` belong under `polymarket.models` and should be re-exported from the public package where useful.
+- Do not mark every primitive field. Prefer marked types for key identifiers and domain concepts where the IDE/type name adds meaning or prevents confusion. Keep public method inputs developer-friendly by accepting plain primitives like `str` unless stricter typing has a concrete benefit; returned models may expose marked types.
 
 ## Client Sync/Async Design
 
