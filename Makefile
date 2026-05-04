@@ -1,4 +1,4 @@
-.PHONY: sync lint format format-check typecheck test test-integration check build
+.PHONY: sync lint format format-check typecheck test test-watch test-integration check build
 
 sync:
 	uv sync --all-extras --all-groups
@@ -17,6 +17,9 @@ typecheck:
 
 test:
 	uv run pytest -m "not integration"
+
+test-watch:
+	uv run ptw --now . -- -m "not integration"
 
 test-integration:
 	uv run pytest -m integration

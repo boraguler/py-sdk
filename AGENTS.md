@@ -1,6 +1,5 @@
 # Agent Instructions
 
-- Follow the workspace-level `AGENTS.md`.
 - Use `uv` for dependency management, testing, and builds.
 - Keep the PyPI distribution name as `polymarket-sdk` and the import package as `polymarket` unless explicitly changed.
 - When implementing new areas where guidance is vague, choose the most idiomatic Python approach but avoid premature abstractions.

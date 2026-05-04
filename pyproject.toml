@@ -51,6 +51,7 @@ dev = [
   "respx>=0.22,<1",
   "ruff>=0.11,<1",
   "pyright>=1.1,<2",
+  "pytest-watcher>=0.6.3",
 ]
 
 [tool.hatch.build.targets.wheel]

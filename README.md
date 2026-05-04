@@ -54,6 +54,14 @@ Unit tests run by default:
 make test
 ```
 
+Run unit tests in watch mode:
+
+```bash
+make test-watch
+```
+
+This runs the tests once immediately, then reruns them when Python files change.
+
 Integration tests are opt-in:
 
 ```bash
