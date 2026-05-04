@@ -3,7 +3,7 @@
 ## Development Setup
 
 ```bash
-uv sync --all-extras --all-groups
+make sync
 ```
 
 ## Checks
