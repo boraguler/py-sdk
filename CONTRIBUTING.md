@@ -65,3 +65,20 @@ POLYMARKET_RUN_METERED_TESTS=1 make test-integration
 ## Releases
 
 Use Conventional Commits. Release PRs and changelog updates are managed by release-please.
+
+Commit subjects and PR titles must use this format:
+
+```text
+<type>(optional-scope): <description>
+```
+
+Examples:
+
+```text
+feat: add market lookup
+fix(auth): refresh expired credentials
+```
+
+Allowed types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`.
+
+If using squash merges, make sure the squash commit title matches the PR title so release-please can classify the change after it lands on `main`.

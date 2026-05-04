@@ -43,3 +43,5 @@
 - Do not merge or generate a release PR until the SDK has a meaningful first beta surface and the user explicitly asks for release preparation.
 - For the first published package, prefer one manually curated changelog entry for the initial beta release instead of listing every setup/early-development change.
 - Use PEP 440 pre-release versions for beta/RC publishing, such as `0.1.0b1` or `0.1.0rc1`.
+- Use Conventional Commit subjects and PR titles because release-please classifies changes from commits on `main`.
+- If using squash merges, the squash commit title should match the Conventional Commit PR title.
