@@ -1,4 +1,4 @@
-"""Market model."""
+"""Market models."""
 
 from __future__ import annotations
 

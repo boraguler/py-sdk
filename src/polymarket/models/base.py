@@ -1,6 +1,6 @@
 """Base model configuration for SDK objects."""
 
-from typing import Self
+from typing import Self, cast
 
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, ValidationError
@@ -26,6 +26,15 @@ class BaseModel(PydanticBaseModel):
             raise UnexpectedResponseError(
                 f"{cls.__name__} response did not match expected shape"
             ) from error
+
+    @classmethod
+    def parse_response_list(cls, data: object) -> tuple[Self, ...]:
+        """Parse response data into a tuple of SDK objects."""
+        if not isinstance(data, list):
+            raise UnexpectedResponseError(f"{cls.__name__} response did not match expected shape")
+
+        items = cast(list[object], data)
+        return tuple(cls.parse_response(item) for item in items)
 
 
 __all__ = ["BaseModel"]

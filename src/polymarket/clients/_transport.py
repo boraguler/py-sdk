@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -12,6 +13,8 @@ from polymarket.errors import (
     TransportError,
     UnexpectedResponseError,
 )
+
+QueryParamValue = str | int | float | bool
 
 
 class SyncTransport:
@@ -26,18 +29,29 @@ class SyncTransport:
     ) -> None:
         self._client = client or httpx.Client(base_url=base_url, timeout=timeout)
 
-    def get_json(self, path: str) -> Any:
+    def get_json(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> Any:
         """GET a JSON response body."""
-        response = self._request("GET", path)
+        response = self._request("GET", path, params=params)
         return _read_json(response)
 
     def close(self) -> None:
         """Close the underlying HTTP client."""
         self._client.close()
 
-    def _request(self, method: str, path: str) -> httpx.Response:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> httpx.Response:
         try:
-            response = self._client.request(method, path)
+            response = self._client.request(method, path, params=_clean_params(params))
         except httpx.HTTPError as error:
             raise TransportError(str(error) or "Request failed") from error
 
@@ -57,18 +71,29 @@ class AsyncTransport:
     ) -> None:
         self._client = client or httpx.AsyncClient(base_url=base_url, timeout=timeout)
 
-    async def get_json(self, path: str) -> Any:
+    async def get_json(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> Any:
         """GET a JSON response body."""
-        response = await self._request("GET", path)
+        response = await self._request("GET", path, params=params)
         return _read_json(response)
 
     async def close(self) -> None:
         """Close the underlying HTTP client."""
         await self._client.aclose()
 
-    async def _request(self, method: str, path: str) -> httpx.Response:
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> httpx.Response:
         try:
-            response = await self._client.request(method, path)
+            response = await self._client.request(method, path, params=_clean_params(params))
         except httpx.HTTPError as error:
             raise TransportError(str(error) or "Request failed") from error
 
@@ -87,6 +112,15 @@ def _raise_for_response_status(response: httpx.Response) -> None:
         _extract_response_error_message(response),
         status=response.status_code,
     )
+
+
+def _clean_params(
+    params: Mapping[str, QueryParamValue | None] | None,
+) -> dict[str, QueryParamValue] | None:
+    if params is None:
+        return None
+
+    return {key: value for key, value in params.items() if value is not None}
 
 
 def _read_json(response: httpx.Response) -> Any:

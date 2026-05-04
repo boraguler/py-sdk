@@ -33,6 +33,26 @@ We evaluated common Python SDKs in trading, exchange, and Web3 ecosystems. The m
 
 The sync and async clients should share request builders, models, auth/signing, serialization, validation, response parsing, and namespace structure. Their implementations should differ at the transport boundary: sync clients use sync transports, async clients use async transports.
 
+Clients that own network transports should support explicit cleanup. Synchronous clients should be usable as context managers:
+
+```python
+from polymarket import PublicClient
+
+with PublicClient() as client:
+    market = client.get_market("540816")
+```
+
+Async clients should support the corresponding async context-manager pattern:
+
+```python
+from polymarket import AsyncPublicClient
+
+async with AsyncPublicClient() as client:
+    market = await client.get_market("540816")
+```
+
+Clients should also expose explicit `close()` methods. Async clients should expose `await client.close()` so callers that do not use `async with` can still release async HTTP sessions, sockets, or other transport resources deterministically.
+
 ## Domain Types
 
 The SDK uses lightweight marked types for important domain values where a plain primitive would hide useful meaning in IDEs and type hints.
