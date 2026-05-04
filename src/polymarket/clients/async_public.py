@@ -1,8 +1,9 @@
 """Asynchronous public Polymarket client."""
 
+from urllib.parse import quote
+
 import httpx
 
-from polymarket.clients._markets import market_url, parse_market
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.models import Market
 
@@ -19,7 +20,9 @@ class AsyncPublicClient:
     async def get_market(self, market_id: str) -> Market:
         """Get a market by ID."""
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(market_url(self.environment, market_id))
+            response = await client.get(
+                f"{self.environment.gamma_url}/markets/{quote(market_id, safe='')}"
+            )
 
         response.raise_for_status()
-        return parse_market(response.json())
+        return Market.parse_response(response.json())
