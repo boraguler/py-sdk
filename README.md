@@ -18,11 +18,29 @@ pip install polymarket-sdk
 
 ## Usage
 
+Synchronous client:
+
 ```python
 from polymarket import Market, PublicClient
 
-client = PublicClient()
-market: Market = client.get_market("540816")
+with PublicClient() as client:
+    market: Market = client.get_market(id="540816")
+```
+
+Asynchronous client:
+
+```python
+import asyncio
+
+from polymarket import AsyncPublicClient, Market
+
+
+async def main() -> None:
+    async with AsyncPublicClient() as client:
+        market: Market = await client.get_market(id="540816")
+
+
+asyncio.run(main())
 ```
 
 ## API Design
