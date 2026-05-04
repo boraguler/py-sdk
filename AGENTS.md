@@ -16,6 +16,17 @@
 - Public docs and docstrings should describe the unified SDK behavior; avoid mentioning underlying service names unless the user specifically asks, a low-level escape hatch requires it, or a test needs to document a boundary.
 - Lower-level controls are acceptable when they support a concrete integration need, but the default experience should feel unified.
 
+## Client Sync/Async Design
+
+- The default public clients should be synchronous: use `PublicClient` and `SecureClient` for normal imports, docs, examples, notebooks, scripts, and basic bot usage.
+- Async clients should be explicit alternatives named with an `Async` prefix, such as `AsyncPublicClient` and `AsyncSecureClient`.
+- Keep sync and async method names the same where possible: sync methods return values directly, async methods return awaitables and are called with `await`.
+- Avoid mixed-mode clients with flags such as `async_mode=True`, and avoid adding `_async` method variants to synchronous clients by default.
+- Share business logic between sync and async implementations. Request construction, URL/path selection, auth/signing, serialization, validation, response parsing, models, and endpoint namespace structure should be reusable.
+- Keep the transport boundary separate: synchronous clients should use a synchronous transport, and async clients should use an asynchronous transport.
+- Do not implement sync clients by calling `asyncio.run()` around async methods unless there is a specific, reviewed reason. Event-loop ownership causes issues in notebooks, async apps, tests, and agent runtimes.
+- Prefer small shared request builders plus separate sync/async transport execution over duplicating endpoint method bodies.
+
 ## Tests
 
 - Do not add live trading tests to the default test suite.
