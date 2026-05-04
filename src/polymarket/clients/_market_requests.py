@@ -2,12 +2,10 @@
 
 from urllib.parse import quote, urlparse
 
-from polymarket.environments import Environment
 from polymarket.errors import UserInputError
 
 
 def build_market_request_url(
-    environment: Environment,
     *,
     id: str | None,
     slug: str | None,
@@ -16,12 +14,12 @@ def build_market_request_url(
     lookup_type, value = _resolve_market_lookup(id=id, slug=slug, url=url)
 
     if lookup_type == "id":
-        return f"{environment.gamma_url}/markets/{quote(value, safe='')}"
+        return f"/markets/{quote(value, safe='')}"
 
     if lookup_type == "url":
         value = _parse_market_slug_url(value)
 
-    return f"{environment.gamma_url}/markets/slug/{quote(value, safe='')}"
+    return f"/markets/slug/{quote(value, safe='')}"
 
 
 def _resolve_market_lookup(

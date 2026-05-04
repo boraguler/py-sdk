@@ -1,8 +1,7 @@
 """Synchronous public Polymarket client."""
 
-import httpx
-
 from polymarket.clients._market_requests import build_market_request_url
+from polymarket.clients._transport import SyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.models import Market
 
@@ -15,6 +14,7 @@ class PublicClient:
 
     def __init__(self, environment: Environment = PRODUCTION) -> None:
         self.environment = environment
+        self._transport = SyncTransport(base_url=environment.gamma_url)
 
     def get_market(
         self,
@@ -24,9 +24,5 @@ class PublicClient:
         url: str | None = None,
     ) -> Market:
         """Get a market."""
-        response = httpx.get(
-            build_market_request_url(self.environment, id=id, slug=slug, url=url),
-            timeout=10,
-        )
-        response.raise_for_status()
-        return Market.parse_response(response.json())
+        payload = self._transport.get_json(build_market_request_url(id=id, slug=slug, url=url))
+        return Market.parse_response(payload)

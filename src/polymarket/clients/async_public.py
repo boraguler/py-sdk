@@ -1,8 +1,7 @@
 """Asynchronous public Polymarket client."""
 
-import httpx
-
 from polymarket.clients._market_requests import build_market_request_url
+from polymarket.clients._transport import AsyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.models import Market
 
@@ -15,6 +14,7 @@ class AsyncPublicClient:
 
     def __init__(self, environment: Environment = PRODUCTION) -> None:
         self.environment = environment
+        self._transport = AsyncTransport(base_url=environment.gamma_url)
 
     async def get_market(
         self,
@@ -24,10 +24,7 @@ class AsyncPublicClient:
         url: str | None = None,
     ) -> Market:
         """Get a market."""
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(
-                build_market_request_url(self.environment, id=id, slug=slug, url=url)
-            )
-
-        response.raise_for_status()
-        return Market.parse_response(response.json())
+        payload = await self._transport.get_json(
+            build_market_request_url(id=id, slug=slug, url=url)
+        )
+        return Market.parse_response(payload)
