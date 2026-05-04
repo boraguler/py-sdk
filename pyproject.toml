@@ -52,6 +52,7 @@ dev = [
   "ruff>=0.11,<1",
   "pyright>=1.1,<2",
   "pytest-watcher>=0.6.3",
+  "python-dotenv>=1.2.2",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -62,6 +63,7 @@ testpaths = ["tests"]
 addopts = "--strict-markers"
 markers = [
   "integration: tests that call live Polymarket services or require credentials",
+  "metered: integration tests that require explicit opt-in because they may place orders, spend funds, or mutate live state",
 ]
 
 [tool.ruff]

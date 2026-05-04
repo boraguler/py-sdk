@@ -68,4 +68,45 @@ Integration tests are opt-in:
 make test-integration
 ```
 
-Integration tests must not place orders, spend funds, or require credentials unless explicitly marked and documented.
+Integration tests can load local secrets from a gitignored `.env` copied from `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+See `.env.example` for the supported local and CI secret names.
+
+Tests that require credentials should use the `require_env` fixture so they skip when secrets are unavailable:
+
+```python
+import pytest
+
+
+@pytest.mark.integration
+def test_authenticated_flow(require_env):
+    private_key = require_env("POLYMARKET_TEST_PRIVATE_KEY")
+    builder_api_key = require_env("POLYMARKET_BUILDER_API_KEY")
+
+    assert private_key
+    assert builder_api_key
+```
+
+The SDK does not load `.env` files at runtime. The integration test fixture loads `.env` only for tests that request credentials, and existing environment variables take precedence over local `.env` values.
+
+Tests that place orders, spend funds, or mutate live state must also use `@pytest.mark.metered`. Metered tests are skipped unless `POLYMARKET_RUN_METERED_TESTS=1` is set:
+
+```python
+import pytest
+
+
+@pytest.mark.integration
+@pytest.mark.metered
+def test_order_lifecycle(require_env):
+    private_key = require_env("POLYMARKET_TEST_PRIVATE_KEY")
+
+    assert private_key
+```
+
+```bash
+POLYMARKET_RUN_METERED_TESTS=1 make test-integration
+```
