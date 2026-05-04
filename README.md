@@ -2,7 +2,7 @@
 
 Official Python SDK for Polymarket.
 
-The SDK gives Python developers one coherent, workflow-oriented interface for building on Polymarket. It follows developer workflows instead of exposing internal service boundaries, starting with public data access and expanding toward authenticated account, trading, builder attribution, and relayer-backed workflows.
+The SDK gives Python developers one coherent, workflow-oriented interface for building on Polymarket, starting with public data access and expanding toward authenticated account, trading, builder attribution, and relayer-backed workflows.
 
 ## Installation
 
@@ -19,10 +19,39 @@ pip install polymarket-sdk
 ## Usage
 
 ```python
+from polymarket import Market, PublicClient
+
+client = PublicClient()
+market: Market = client.get_market("540816")
+```
+
+## API Design Decisions
+
+This section documents developer-experience decisions that shape the public SDK API.
+
+### Sync and Async Clients
+
+The default clients are synchronous. They are intended to feel natural in scripts, notebooks, CLIs, tests, and simple bots:
+
+```python
 from polymarket import PublicClient
 
 client = PublicClient()
+market = client.get_market("540816")
 ```
+
+When async support is added, it should use explicit async client classes while retaining the same mental model:
+
+```python
+from polymarket import AsyncPublicClient
+
+client = AsyncPublicClient()
+market = await client.get_market("540816")
+```
+
+We evaluated common Python SDKs in trading, exchange, and Web3 ecosystems. The most Pythonic convention is to keep unprefixed clients synchronous and expose async variants with an `Async` prefix, rather than using mode flags or adding separate `_async` methods to every sync client.
+
+The sync and async clients should share request builders, models, auth/signing, serialization, validation, response parsing, and namespace structure. Their implementations should differ at the transport boundary: sync clients use sync transports, async clients use async transports.
 
 ## Development
 

@@ -14,6 +14,7 @@
 - Design public APIs around developer workflows rather than the current split between underlying APIs.
 - Do not mirror today's service fragmentation directly in the public SDK surface.
 - Public docs and docstrings should describe the unified SDK behavior; avoid mentioning underlying service names unless the user specifically asks, a low-level escape hatch requires it, or a test needs to document a boundary.
+- In public-facing docs, docstrings, type descriptions, and examples, describe SDK objects directly as the objects users work with. Do not mention that objects are normalized from raw responses, hide uneven internal/API surfaces, or frame models around which backend currently provides data.
 - Lower-level controls are acceptable when they support a concrete integration need, but the default experience should feel unified.
 - For internal invariant checks, use Python-native `RuntimeError`, `AssertionError`, or `typing.assert_never` as appropriate instead of introducing a public `InvariantError` SDK exception.
 

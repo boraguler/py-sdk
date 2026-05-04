@@ -14,11 +14,13 @@ from polymarket.errors import (
     UnexpectedResponseError,
     UserInputError,
 )
+from polymarket.models import Market
 from polymarket.version import __version__
 
 __all__ = [
     "CancelledSigningError",
     "InsufficientLiquidityError",
+    "Market",
     "PolymarketError",
     "PublicClient",
     "RateLimitError",
