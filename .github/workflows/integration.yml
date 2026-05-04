@@ -1,9 +1,8 @@
 name: Integration
 
 on:
+  workflow_call:
   workflow_dispatch:
-  schedule:
-    - cron: "0 13 * * 1"
 
 permissions:
   contents: read
