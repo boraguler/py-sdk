@@ -8,6 +8,7 @@ from typing import Any, cast
 from pydantic import Field, model_validator
 
 from polymarket.models.base import BaseModel
+from polymarket.models.gamma.common import parse_optional_datetime
 from polymarket.types import EvmAddress
 
 
@@ -42,6 +43,7 @@ class PublicProfile(BaseModel):
         data = dict(cast(dict[str, Any], value))
         if "wallet" not in data:
             data["wallet"] = data.get("proxyWallet")
+        data["createdAt"] = parse_optional_datetime(data.get("createdAt"))
         return data
 
 

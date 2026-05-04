@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, cast
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from polymarket.models.base import BaseModel
-from polymarket.models.gamma.common import ImageOptimization
+from polymarket.models.gamma.common import ImageOptimization, parse_optional_datetime
 from polymarket.models.types import TokenId
 from polymarket.types import EvmAddress
 
@@ -58,6 +58,11 @@ class Reaction(BaseModel):
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
     profile: CommentProfile | None = None
 
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
+
 
 class CommentMedia(BaseModel):
     id: str
@@ -68,6 +73,11 @@ class CommentMedia(BaseModel):
     media_type: str | None = Field(default=None, validation_alias="mediaType")
     alt_text: str | None = Field(default=None, validation_alias="altText")
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class Comment(BaseModel):
@@ -86,6 +96,23 @@ class Comment(BaseModel):
     report_count: int | None = Field(default=None, validation_alias="reportCount")
     reaction_count: int | None = Field(default=None, validation_alias="reactionCount")
     trade_asset: str | None = Field(default=None, validation_alias="tradeAsset")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_comment(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+
+        data = dict(cast(dict[str, Any], value))
+        for key in ("parentEntityID", "parentCommentID"):
+            if key in data and data[key] is not None:
+                data[key] = str(data[key])
+        return data
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 __all__ = [

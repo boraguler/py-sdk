@@ -2,54 +2,64 @@ import asyncio
 
 import pytest
 
-from polymarket import AsyncPublicClient, Market, PublicClient
+from polymarket import AsyncPublicClient, Market, PublicClient, TagReference
+
+MARKET_ID = "540816"
+MARKET_SLUG = "russia-ukraine-ceasefire-before-gta-vi-554"
 
 
 @pytest.mark.integration
 def test_get_market_returns_canonical_market() -> None:
-    client = PublicClient()
+    with PublicClient() as client:
+        market = client.get_market(id=MARKET_ID)
 
-    market = client.get_market(id="540816")
-
-    assert isinstance(market, Market)
-    assert market.id == "540816"
-    assert market.outcomes.yes.label
-    assert market.outcomes.no.label
+        assert isinstance(market, Market)
+        assert market.id == MARKET_ID
+        assert market.outcomes.yes.label
+        assert market.outcomes.no.label
 
 
 @pytest.mark.integration
 def test_get_market_by_slug_returns_canonical_market() -> None:
-    client = PublicClient()
+    with PublicClient() as client:
+        market = client.get_market(slug=MARKET_SLUG)
 
-    market = client.get_market(slug="russia-ukraine-ceasefire-before-gta-vi-554")
-
-    assert isinstance(market, Market)
-    assert market.id == "540816"
-    assert market.outcomes.yes.label
-    assert market.outcomes.no.label
+        assert isinstance(market, Market)
+        assert market.id == MARKET_ID
+        assert market.outcomes.yes.label
+        assert market.outcomes.no.label
 
 
 @pytest.mark.integration
 def test_get_market_by_url_returns_canonical_market() -> None:
-    client = PublicClient()
+    with PublicClient() as client:
+        market = client.get_market(url=f"https://polymarket.com/market/{MARKET_SLUG}")
 
-    market = client.get_market(
-        url="https://polymarket.com/market/russia-ukraine-ceasefire-before-gta-vi-554"
-    )
+        assert isinstance(market, Market)
+        assert market.id == MARKET_ID
+        assert market.outcomes.yes.label
+        assert market.outcomes.no.label
 
-    assert isinstance(market, Market)
-    assert market.id == "540816"
-    assert market.outcomes.yes.label
-    assert market.outcomes.no.label
+
+@pytest.mark.integration
+def test_get_market_tags_returns_tags() -> None:
+    with PublicClient() as client:
+        tags = client.get_market_tags(MARKET_ID)
+
+        assert tags
+        assert all(isinstance(tag, TagReference) for tag in tags)
+        assert any(tag.slug == "politics" for tag in tags)
 
 
 @pytest.mark.integration
 def test_async_get_market_returns_canonical_market() -> None:
-    client = AsyncPublicClient()
+    async def run() -> None:
+        async with AsyncPublicClient() as client:
+            market = await client.get_market(id=MARKET_ID)
 
-    market = asyncio.run(client.get_market(id="540816"))
+            assert isinstance(market, Market)
+            assert market.id == MARKET_ID
+            assert market.outcomes.yes.label
+            assert market.outcomes.no.label
 
-    assert isinstance(market, Market)
-    assert market.id == "540816"
-    assert market.outcomes.yes.label
-    assert market.outcomes.no.label
+    asyncio.run(run())

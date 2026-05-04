@@ -46,6 +46,11 @@ class CategoryReference(BaseModel):
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
     updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
 
+    @field_validator("published_at", "created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
+
 
 class TagReference(BaseModel):
     id: TagId
@@ -64,6 +69,11 @@ class TagReference(BaseModel):
         validation_alias="requiresTranslation",
     )
     active_events_count: int | None = Field(default=None, validation_alias="activeEventsCount")
+
+    @field_validator("published_at", "created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class CollectionReference(BaseModel):
@@ -94,6 +104,11 @@ class CollectionReference(BaseModel):
     updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
     disqus_thread: str | None = Field(default=None, validation_alias="disqusThread")
     comments_enabled: bool | None = Field(default=None, validation_alias="commentsEnabled")
+
+    @field_validator("published_at", "created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class SeriesReference(BaseModel):
@@ -141,6 +156,11 @@ class SeriesReference(BaseModel):
     def _parse_decimal(cls, value: object) -> Decimal | None:
         return parse_optional_decimal(value)
 
+    @field_validator("published_at", "created_at", "updated_at", "start_date", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
+
 
 class TemplateReference(BaseModel):
     id: str
@@ -162,6 +182,11 @@ class TemplateReference(BaseModel):
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
     updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
 
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
+
 
 class Chat(BaseModel):
     id: str
@@ -171,6 +196,11 @@ class Chat(BaseModel):
     live: bool | None = None
     start_time: datetime | None = Field(default=None, validation_alias="startTime")
     end_time: datetime | None = Field(default=None, validation_alias="endTime")
+
+    @field_validator("start_time", "end_time", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class Partner(BaseModel):
@@ -198,6 +228,11 @@ class Team(BaseModel):
     provider_id: int | None = Field(default=None, validation_alias="providerId")
     color: str | None = None
 
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
+
 
 class SportsMetadata(BaseModel):
     id: int
@@ -209,6 +244,11 @@ class SportsMetadata(BaseModel):
     series: str
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
     updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class SportsMarketTypes(BaseModel):
@@ -249,6 +289,23 @@ def parse_optional_decimal(value: object) -> Decimal | None:
     return Decimal(str(value))
 
 
+def parse_optional_datetime(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+
+    if isinstance(value, datetime):
+        return value
+
+    if isinstance(value, str):
+        normalized = value.replace(" ", "T", 1)
+        if normalized.endswith("+00"):
+            normalized = f"{normalized}:00"
+        return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+
+    msg = "expected a datetime"
+    raise ValueError(msg)
+
+
 __all__ = [
     "BestLine",
     "CategoryReference",
@@ -264,5 +321,6 @@ __all__ = [
     "TemplateReference",
     "parse_dicts",
     "parse_optional_decimal",
+    "parse_optional_datetime",
     "parse_sequence",
 ]

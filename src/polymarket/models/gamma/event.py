@@ -16,6 +16,7 @@ from polymarket.models.gamma.common import (
     SportsMetadata,
     Team,
     parse_dicts,
+    parse_optional_datetime,
     parse_optional_decimal,
     parse_sequence,
 )
@@ -29,6 +30,11 @@ class EventPartner(BaseModel):
     partner: Partner | None = None
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
     updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class EventState(BaseModel):
@@ -58,6 +64,19 @@ class EventSchedule(BaseModel):
     event_date: str | None = Field(default=None, validation_alias="eventDate")
     event_week: int | None = Field(default=None, validation_alias="eventWeek")
     finished_at: datetime | None = Field(default=None, validation_alias="finishedAt")
+
+    @field_validator(
+        "start_date",
+        "creation_date",
+        "end_date",
+        "closed_time",
+        "start_time",
+        "finished_at",
+        mode="before",
+    )
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class EventMetrics(BaseModel):
@@ -163,6 +182,11 @@ class EventSportsMetadata(BaseModel):
     last_highlight_type: str | None = Field(default=None, validation_alias="lastHighlightType")
     last_highlight_at: datetime | None = Field(default=None, validation_alias="lastHighlightAt")
 
+    @field_validator("last_highlight_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
+
 
 class EventSeries(BaseModel):
     id: str
@@ -184,6 +208,11 @@ class EventSeries(BaseModel):
     def _parse_decimal(cls, value: object) -> Decimal | None:
         return parse_optional_decimal(value)
 
+    @field_validator("start_date", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
+
 
 class EventTag(BaseModel):
     id: TagId
@@ -199,6 +228,11 @@ class EventCreator(BaseModel):
     image: str | None = None
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
     updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class Event(BaseModel):
@@ -232,6 +266,11 @@ class Event(BaseModel):
     series: tuple[EventSeries, ...]
     tags: tuple[EventTag, ...]
     creators: tuple[EventCreator, ...]
+
+    @field_validator("created_at", "updated_at", "published_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
     @model_validator(mode="before")
     @classmethod

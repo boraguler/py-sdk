@@ -11,6 +11,7 @@ from typing import Any, cast
 from pydantic import AliasChoices, Field, field_validator, model_validator
 
 from polymarket.models.base import BaseModel
+from polymarket.models.gamma.common import parse_optional_datetime
 from polymarket.models.types import (
     ClobRewardId,
     ConditionId,
@@ -60,6 +61,11 @@ class MarketState(BaseModel):
         default=None,
         validation_alias="closedTime",
     )
+
+    @field_validator("start_date", "end_date", "closed_time", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class MarketOutcome(BaseModel):
@@ -298,6 +304,11 @@ class MarketSportsMetadata(BaseModel):
         default=None,
         validation_alias="gameStartTime",
     )
+
+    @field_validator("game_start_time", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class MarketEvent(BaseModel):
