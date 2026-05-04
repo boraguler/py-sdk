@@ -14,5 +14,6 @@ jobs:
 
   integration:
     name: Integration
+    needs: verify
     uses: ./.github/workflows/integration.yml
     secrets: inherit
