@@ -1,11 +1,8 @@
 """Public Polymarket client."""
 
-from dataclasses import dataclass
-
 from polymarket.environments import PRODUCTION, Environment
 
 
-@dataclass(frozen=True, slots=True)
 class PublicClient:
     """Client for public Polymarket data workflows.
 
@@ -13,4 +10,5 @@ class PublicClient:
     requiring callers to understand which underlying service provides the data.
     """
 
-    environment: Environment = PRODUCTION
+    def __init__(self, environment: Environment = PRODUCTION) -> None:
+        self.environment = environment
