@@ -1,6 +1,6 @@
 """Python SDK for Polymarket."""
 
-from polymarket.clients import AsyncPublicClient, PublicClient
+from polymarket.clients import AsyncPublicClient, AsyncSecureClient, PublicClient, SecureClient
 from polymarket.errors import (
     CancelledSigningError,
     InsufficientLiquidityError,
@@ -40,6 +40,7 @@ from polymarket.version import __version__
 
 __all__ = [
     "AsyncPublicClient",
+    "AsyncSecureClient",
     "CancelledSigningError",
     "ClobRewardId",
     "Comment",
@@ -61,6 +62,7 @@ __all__ = [
     "RequestRejectedError",
     "ResolutionRequestId",
     "Series",
+    "SecureClient",
     "SigningError",
     "SportsMarketTypes",
     "SportsMetadata",
