@@ -1,0 +1,9 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "polymarket-sdk",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}
