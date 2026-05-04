@@ -25,33 +25,9 @@ client = PublicClient()
 market: Market = client.get_market("540816")
 ```
 
-## API Design Decisions
+## API Design
 
-This section documents developer-experience decisions that shape the public SDK API.
-
-### Sync and Async Clients
-
-The default clients are synchronous. They are intended to feel natural in scripts, notebooks, CLIs, tests, and simple bots:
-
-```python
-from polymarket import PublicClient
-
-client = PublicClient()
-market = client.get_market("540816")
-```
-
-When async support is added, it should use explicit async client classes while retaining the same mental model:
-
-```python
-from polymarket import AsyncPublicClient
-
-client = AsyncPublicClient()
-market = await client.get_market("540816")
-```
-
-We evaluated common Python SDKs in trading, exchange, and Web3 ecosystems. The most Pythonic convention is to keep unprefixed clients synchronous and expose async variants with an `Async` prefix, rather than using mode flags or adding separate `_async` methods to every sync client.
-
-The sync and async clients should share request builders, models, auth/signing, serialization, validation, response parsing, and namespace structure. Their implementations should differ at the transport boundary: sync clients use sync transports, async clients use async transports.
+See [SDK Direction](docs/sdk-direction.md) for public API design principles and developer-experience decisions.
 
 ## Development
 
