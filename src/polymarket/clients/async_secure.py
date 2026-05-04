@@ -10,11 +10,21 @@ from polymarket.clients._transport import AsyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import UserInputError
 
+_CREATE_TOKEN = object()
+
 
 class AsyncSecureClient:
     """Async client for authenticated Polymarket workflows."""
 
-    def __init__(self, *, private_key: str, environment: Environment = PRODUCTION) -> None:
+    def __init__(
+        self,
+        *,
+        private_key: str,
+        environment: Environment = PRODUCTION,
+        _create_token: object | None = None,
+    ) -> None:
+        if _create_token is not _CREATE_TOKEN:
+            raise RuntimeError("Use AsyncSecureClient.create(...) to create a secure client")
         if not private_key:
             raise UserInputError("private_key is required")
 
@@ -25,7 +35,11 @@ class AsyncSecureClient:
     @classmethod
     async def create(cls, *, private_key: str, environment: Environment = PRODUCTION) -> Self:
         """Create an authenticated secure client from a private key."""
-        client = cls(private_key=private_key, environment=environment)
+        client = cls(
+            private_key=private_key,
+            environment=environment,
+            _create_token=_CREATE_TOKEN,
+        )
         return await client._login()
 
     async def __aenter__(self) -> Self:

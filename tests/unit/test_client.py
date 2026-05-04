@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from polymarket import AsyncPublicClient, AsyncSecureClient, PublicClient, SecureClient
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
@@ -38,6 +40,11 @@ def test_secure_client_factory_uses_production_by_default() -> None:
         client.close()
 
 
+def test_secure_client_requires_factory() -> None:
+    with pytest.raises(RuntimeError, match="SecureClient.create"):
+        SecureClient(private_key=PRIVATE_KEY)
+
+
 def test_secure_client_supports_context_manager() -> None:
     with SecureClient.create(private_key=PRIVATE_KEY) as client:
         assert client.environment.name == "production"
@@ -52,6 +59,11 @@ def test_async_secure_client_factory_uses_production_by_default() -> None:
             await client.close()
 
     asyncio.run(run())
+
+
+def test_async_secure_client_requires_factory() -> None:
+    with pytest.raises(RuntimeError, match="AsyncSecureClient.create"):
+        AsyncSecureClient(private_key=PRIVATE_KEY)
 
 
 def test_async_secure_client_supports_context_manager() -> None:
