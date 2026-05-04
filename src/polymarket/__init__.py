@@ -14,13 +14,25 @@ from polymarket.errors import (
     UnexpectedResponseError,
     UserInputError,
 )
-from polymarket.models import ConditionId, EventId, Market, MarketId, OrderId, TokenId
+from polymarket.models import (
+    ClobRewardId,
+    ConditionId,
+    EventId,
+    Market,
+    MarketId,
+    OrderId,
+    QuestionId,
+    ResolutionRequestId,
+    TagId,
+    TokenId,
+)
 from polymarket.types import EvmAddress, HexString, TransactionHash
 from polymarket.version import __version__
 
 __all__ = [
     "AsyncPublicClient",
     "CancelledSigningError",
+    "ClobRewardId",
     "ConditionId",
     "EventId",
     "EvmAddress",
@@ -31,9 +43,12 @@ __all__ = [
     "OrderId",
     "PolymarketError",
     "PublicClient",
+    "QuestionId",
     "RateLimitError",
     "RequestRejectedError",
+    "ResolutionRequestId",
     "SigningError",
+    "TagId",
     "TimeoutError",
     "TokenId",
     "TransactionFailedError",

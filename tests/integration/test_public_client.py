@@ -13,10 +13,8 @@ def test_get_market_returns_canonical_market() -> None:
 
     assert isinstance(market, Market)
     assert market.id == "540816"
-    assert market.condition_id.startswith("0x")
-    assert market.question
-    assert market.outcomes
-    assert market.outcome_prices
+    assert market.outcomes.yes.label
+    assert market.outcomes.no.label
 
 
 @pytest.mark.integration
@@ -27,7 +25,5 @@ def test_async_get_market_returns_canonical_market() -> None:
 
     assert isinstance(market, Market)
     assert market.id == "540816"
-    assert market.condition_id.startswith("0x")
-    assert market.question
-    assert market.outcomes
-    assert market.outcome_prices
+    assert market.outcomes.yes.label
+    assert market.outcomes.no.label

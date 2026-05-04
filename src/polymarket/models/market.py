@@ -3,74 +3,466 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from typing import Any, cast
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 
 from polymarket.models.base import BaseModel
-from polymarket.models.types import ConditionId, MarketId
+from polymarket.models.types import (
+    ClobRewardId,
+    ConditionId,
+    EventId,
+    MarketId,
+    QuestionId,
+    ResolutionRequestId,
+    TagId,
+    TokenId,
+)
+from polymarket.types import EvmAddress
 
 
-class Market(BaseModel):
-    """A Polymarket market."""
+class UmaResolutionStatus(StrEnum):
+    DISPUTED = "disputed"
+    PROPOSED = "proposed"
+    REQUESTED = "requested"
+    RESOLVED = "resolved"
+    SETTLED = "settled"
 
-    id: MarketId = Field(validation_alias=AliasChoices("id", "market_id", "marketId"))
-    condition_id: ConditionId = Field(
-        validation_alias=AliasChoices("condition_id", "conditionId", "condition")
-    )
-    question: str
-    slug: str | None = None
+
+class MarketState(BaseModel):
     active: bool | None = None
     closed: bool | None = None
     archived: bool | None = None
     accepting_orders: bool | None = Field(
         default=None,
-        validation_alias=AliasChoices("accepting_orders", "acceptingOrders"),
+        validation_alias="acceptingOrders",
     )
-    outcomes: tuple[str, ...] = ()
-    outcome_prices: tuple[Decimal, ...] = Field(
-        default=(),
-        validation_alias=AliasChoices("outcome_prices", "outcomePrices"),
+    enable_order_book: bool | None = Field(
+        default=None,
+        validation_alias="enableOrderBook",
     )
+    neg_risk: bool | None = Field(
+        default=None,
+        validation_alias="negRisk",
+    )
+    start_date: datetime | None = Field(
+        default=None,
+        validation_alias="startDate",
+    )
+    end_date: datetime | None = Field(
+        default=None,
+        validation_alias="endDate",
+    )
+    closed_time: datetime | None = Field(
+        default=None,
+        validation_alias="closedTime",
+    )
+
+
+class MarketOutcome(BaseModel):
+    label: str
+    token_id: TokenId | None = Field(
+        default=None,
+        validation_alias="tokenId",
+    )
+    price: Decimal | None = None
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _parse_price(cls, value: object) -> Decimal | None:
+        return _parse_optional_decimal(value)
+
+
+class MarketOutcomes(BaseModel):
+    yes: MarketOutcome
+    no: MarketOutcome
+
+
+class MarketMetrics(BaseModel):
     volume: Decimal | None = None
+    volume_num: Decimal | None = Field(
+        default=None,
+        validation_alias="volumeNum",
+    )
+    volume_24hr: Decimal | None = Field(
+        default=None,
+        validation_alias="volume24hr",
+    )
+    volume_1wk: Decimal | None = Field(
+        default=None,
+        validation_alias="volume1wk",
+    )
+    volume_1mo: Decimal | None = Field(
+        default=None,
+        validation_alias="volume1mo",
+    )
+    volume_1yr: Decimal | None = Field(
+        default=None,
+        validation_alias="volume1yr",
+    )
+    volume_amm: Decimal | None = Field(
+        default=None,
+        validation_alias="volumeAmm",
+    )
+    volume_clob: Decimal | None = Field(
+        default=None,
+        validation_alias="volumeClob",
+    )
     liquidity: Decimal | None = None
-    created_at: datetime | None = Field(
+    liquidity_num: Decimal | None = Field(
         default=None,
-        validation_alias=AliasChoices("created_at", "createdAt"),
+        validation_alias="liquidityNum",
     )
-    end_at: datetime | None = Field(
+    liquidity_clob: Decimal | None = Field(
         default=None,
-        validation_alias=AliasChoices("end_at", "endDate", "endDateIso"),
+        validation_alias="liquidityClob",
     )
 
-    @field_validator("outcomes", mode="before")
+    @field_validator("*", mode="before")
     @classmethod
-    def _parse_outcomes(cls, value: object) -> tuple[str, ...]:
-        if value is None:
-            return ()
+    def _parse_metric(cls, value: object) -> Decimal | None:
+        return _parse_optional_decimal(value)
 
-        return tuple(str(item) for item in _parse_sequence(value))
 
-    @field_validator("outcome_prices", mode="before")
+class MarketPrices(BaseModel):
+    best_bid: Decimal | None = Field(
+        default=None,
+        validation_alias="bestBid",
+    )
+    best_ask: Decimal | None = Field(
+        default=None,
+        validation_alias="bestAsk",
+    )
+    last_trade_price: Decimal | None = Field(
+        default=None,
+        validation_alias="lastTradePrice",
+    )
+    spread: Decimal | None = None
+    one_hour_price_change: Decimal | None = Field(
+        default=None,
+        validation_alias="oneHourPriceChange",
+    )
+    one_day_price_change: Decimal | None = Field(
+        default=None,
+        validation_alias="oneDayPriceChange",
+    )
+    one_week_price_change: Decimal | None = Field(
+        default=None,
+        validation_alias="oneWeekPriceChange",
+    )
+    one_month_price_change: Decimal | None = Field(
+        default=None,
+        validation_alias="oneMonthPriceChange",
+    )
+    one_year_price_change: Decimal | None = Field(
+        default=None,
+        validation_alias="oneYearPriceChange",
+    )
+
+    @field_validator("*", mode="before")
     @classmethod
-    def _parse_outcome_prices(cls, value: object) -> tuple[Decimal, ...]:
-        if value is None:
-            return ()
+    def _parse_price(cls, value: object) -> Decimal | None:
+        return _parse_optional_decimal(value)
 
-        return tuple(_parse_decimal(item) for item in _parse_sequence(value))
 
-    @field_validator("volume", "liquidity", mode="before")
+class FeeSchedule(BaseModel):
+    exponent: int | float
+    rate: Decimal
+    taker_only: bool = Field(validation_alias="takerOnly")
+    rebate_rate: Decimal = Field(validation_alias="rebateRate")
+
+    @field_validator("rate", "rebate_rate", mode="before")
     @classmethod
-    def _parse_optional_decimal(cls, value: object) -> Decimal | None:
-        if value in (None, ""):
-            return None
-
+    def _parse_decimal(cls, value: object) -> Decimal:
         return _parse_decimal(value)
 
 
+class MarketTrading(BaseModel):
+    minimum_order_size: Decimal | None = Field(
+        default=None,
+        validation_alias="minimumOrderSize",
+    )
+    minimum_tick_size: Decimal | None = Field(
+        default=None,
+        validation_alias="minimumTickSize",
+    )
+    seconds_delay: int | None = Field(
+        default=None,
+        validation_alias="secondsDelay",
+    )
+    fees_enabled: bool | None = Field(
+        default=None,
+        validation_alias="feesEnabled",
+    )
+    fee_type: str | None = Field(
+        default=None,
+        validation_alias="feeType",
+    )
+    fee_schedule: FeeSchedule | None = Field(
+        default=None,
+        validation_alias="feeSchedule",
+    )
+
+    @field_validator("minimum_order_size", "minimum_tick_size", mode="before")
+    @classmethod
+    def _parse_optional_decimal(cls, value: object) -> Decimal | None:
+        return _parse_optional_decimal(value)
+
+
+class MarketResolution(BaseModel):
+    question_id: QuestionId | None = Field(
+        default=None,
+        validation_alias="questionId",
+    )
+    neg_risk_request_id: ResolutionRequestId | None = Field(
+        default=None,
+        validation_alias="negRiskRequestId",
+    )
+    uma_resolution_status: UmaResolutionStatus | None = Field(
+        default=None,
+        validation_alias="umaResolutionStatus",
+    )
+    source: str | None = None
+    resolved_by: EvmAddress | None = Field(
+        default=None,
+        validation_alias="resolvedBy",
+    )
+
+    @field_validator("question_id", "neg_risk_request_id", "resolved_by", mode="before")
+    @classmethod
+    def _empty_string_to_none(cls, value: object) -> object | None:
+        return None if value == "" else value
+
+    @field_validator("uma_resolution_status", mode="before")
+    @classmethod
+    def _parse_uma_status(cls, value: object) -> object | None:
+        return None if value in (None, "") else value
+
+
+class ClobReward(BaseModel):
+    id: ClobRewardId
+    condition_id: ConditionId = Field(validation_alias="conditionId")
+    asset_address: str = Field(validation_alias="assetAddress")
+    rewards_amount: Decimal = Field(validation_alias="rewardsAmount")
+    rewards_daily_rate: Decimal = Field(validation_alias="rewardsDailyRate")
+    start_date: date = Field(validation_alias="startDate")
+    end_date: date | None = Field(
+        default=None,
+        validation_alias="endDate",
+    )
+
+    @field_validator("rewards_amount", "rewards_daily_rate", mode="before")
+    @classmethod
+    def _parse_decimal(cls, value: object) -> Decimal:
+        return _parse_decimal(value)
+
+
+class MarketRewards(BaseModel):
+    clob_rewards: tuple[ClobReward, ...] | None = Field(
+        default=None,
+        validation_alias="clobRewards",
+    )
+    rewards_min_size: Decimal | None = Field(
+        default=None,
+        validation_alias="rewardsMinSize",
+    )
+    rewards_max_spread: float | None = Field(
+        default=None,
+        validation_alias="rewardsMaxSpread",
+    )
+    holding_rewards_enabled: bool | None = Field(
+        default=None,
+        validation_alias="holdingRewardsEnabled",
+    )
+
+    @field_validator("rewards_min_size", mode="before")
+    @classmethod
+    def _parse_optional_decimal(cls, value: object) -> Decimal | None:
+        return _parse_optional_decimal(value)
+
+
+class MarketSportsMetadata(BaseModel):
+    sports_market_type: str | None = Field(
+        default=None,
+        validation_alias="sportsMarketType",
+    )
+    line: float | None = None
+    game_id: str | None = Field(
+        default=None,
+        validation_alias="gameId",
+    )
+    game_start_time: datetime | None = Field(
+        default=None,
+        validation_alias="gameStartTime",
+    )
+
+
+class MarketEvent(BaseModel):
+    id: EventId
+    slug: str | None = None
+    title: str | None = None
+
+
+class MarketTag(BaseModel):
+    id: TagId
+    slug: str | None = None
+    label: str | None = None
+
+
+class Market(BaseModel):
+    """A Polymarket market."""
+
+    id: MarketId
+    slug: str | None = None
+    condition_id: ConditionId | None = Field(
+        default=None,
+        validation_alias=AliasChoices("conditionId", "condition"),
+    )
+    question: str | None = None
+    description: str | None = None
+    category: str | None = None
+    image: str | None = None
+    icon: str | None = None
+    state: MarketState
+    outcomes: MarketOutcomes
+    metrics: MarketMetrics
+    prices: MarketPrices
+    trading: MarketTrading
+    resolution: MarketResolution
+    rewards: MarketRewards
+    sports: MarketSportsMetadata
+    events: tuple[MarketEvent, ...]
+    tags: tuple[MarketTag, ...]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_market(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+
+        data = cast(dict[str, Any], value)
+        if "state" in data:
+            return data
+
+        outcomes = _parse_string_sequence(data.get("outcomes"))
+        outcome_prices = tuple(
+            _parse_decimal(item) for item in _parse_sequence(data.get("outcomePrices"))
+        )
+        token_ids = tuple(str(item) for item in _parse_sequence(data.get("clobTokenIds")))
+
+        if len(outcomes) != 2:
+            msg = f"Expected binary market outcomes, received {len(outcomes)}"
+            raise ValueError(msg)
+
+        return {
+            "id": data.get("id"),
+            "slug": data.get("slug"),
+            "condition_id": _empty_string_to_none(data.get("conditionId")),
+            "question": data.get("question"),
+            "description": data.get("description"),
+            "category": data.get("category"),
+            "image": data.get("image"),
+            "icon": data.get("icon"),
+            "state": {
+                "active": data.get("active"),
+                "closed": data.get("closed"),
+                "archived": data.get("archived"),
+                "accepting_orders": data.get("acceptingOrders"),
+                "enable_order_book": data.get("enableOrderBook"),
+                "neg_risk": data.get("negRisk"),
+                "start_date": data.get("startDate"),
+                "end_date": data.get("endDate"),
+                "closed_time": data.get("closedTime"),
+            },
+            "outcomes": {
+                "yes": {
+                    "label": outcomes[0],
+                    "token_id": token_ids[0] if len(token_ids) > 0 else None,
+                    "price": outcome_prices[0] if len(outcome_prices) > 0 else None,
+                },
+                "no": {
+                    "label": outcomes[1],
+                    "token_id": token_ids[1] if len(token_ids) > 1 else None,
+                    "price": outcome_prices[1] if len(outcome_prices) > 1 else None,
+                },
+            },
+            "metrics": {
+                "volume": data.get("volume"),
+                "volume_num": data.get("volumeNum"),
+                "volume_24hr": data.get("volume24hr"),
+                "volume_1wk": data.get("volume1wk"),
+                "volume_1mo": data.get("volume1mo"),
+                "volume_1yr": data.get("volume1yr"),
+                "volume_amm": data.get("volumeAmm"),
+                "volume_clob": data.get("volumeClob"),
+                "liquidity": data.get("liquidity"),
+                "liquidity_num": data.get("liquidityNum"),
+                "liquidity_clob": data.get("liquidityClob"),
+            },
+            "prices": {
+                "best_bid": data.get("bestBid"),
+                "best_ask": data.get("bestAsk"),
+                "last_trade_price": data.get("lastTradePrice"),
+                "spread": data.get("spread"),
+                "one_hour_price_change": data.get("oneHourPriceChange"),
+                "one_day_price_change": data.get("oneDayPriceChange"),
+                "one_week_price_change": data.get("oneWeekPriceChange"),
+                "one_month_price_change": data.get("oneMonthPriceChange"),
+                "one_year_price_change": data.get("oneYearPriceChange"),
+            },
+            "trading": {
+                "minimum_order_size": data.get("orderMinSize"),
+                "minimum_tick_size": data.get("orderPriceMinTickSize"),
+                "seconds_delay": data.get("secondsDelay"),
+                "fees_enabled": data.get("feesEnabled"),
+                "fee_type": data.get("feeType"),
+                "fee_schedule": data.get("feeSchedule"),
+            },
+            "resolution": {
+                "question_id": _empty_string_to_none(data.get("questionID")),
+                "neg_risk_request_id": _empty_string_to_none(data.get("negRiskRequestID")),
+                "uma_resolution_status": _empty_string_to_none(data.get("umaResolutionStatus")),
+                "source": data.get("resolutionSource"),
+                "resolved_by": _empty_string_to_none(data.get("resolvedBy")),
+            },
+            "rewards": {
+                "clob_rewards": data.get("clobRewards"),
+                "rewards_min_size": data.get("rewardsMinSize"),
+                "rewards_max_spread": data.get("rewardsMaxSpread"),
+                "holding_rewards_enabled": data.get("holdingRewardsEnabled"),
+            },
+            "sports": {
+                "sports_market_type": data.get("sportsMarketType"),
+                "line": data.get("line"),
+                "game_id": data.get("gameId"),
+                "game_start_time": data.get("gameStartTime"),
+            },
+            "events": [
+                {
+                    "id": event.get("id"),
+                    "slug": event.get("slug"),
+                    "title": event.get("title"),
+                }
+                for event in _parse_dicts(data.get("events"))
+            ],
+            "tags": [
+                {
+                    "id": tag.get("id"),
+                    "slug": tag.get("slug"),
+                    "label": tag.get("label"),
+                }
+                for tag in _parse_dicts(data.get("tags"))
+            ],
+        }
+
+
 def _parse_sequence(value: object) -> tuple[Any, ...]:
+    if value is None:
+        return ()
+
     if isinstance(value, str):
         parsed = json.loads(value)
         if not isinstance(parsed, list):
@@ -86,8 +478,52 @@ def _parse_sequence(value: object) -> tuple[Any, ...]:
     raise ValueError(msg)
 
 
+def _parse_string_sequence(value: object) -> tuple[str, ...]:
+    return tuple(str(item) for item in _parse_sequence(value))
+
+
+def _parse_dicts(value: object) -> tuple[dict[str, Any], ...]:
+    items = _parse_sequence(value)
+    dicts: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            msg = "expected an object"
+            raise ValueError(msg)
+
+        dicts.append(cast(dict[str, Any], item))
+
+    return tuple(dicts)
+
+
+def _empty_string_to_none(value: object) -> object | None:
+    return None if value == "" else value
+
+
+def _parse_optional_decimal(value: object) -> Decimal | None:
+    if value in (None, ""):
+        return None
+
+    return _parse_decimal(value)
+
+
 def _parse_decimal(value: object) -> Decimal:
     return Decimal(str(value))
 
 
-__all__ = ["Market"]
+__all__ = [
+    "ClobReward",
+    "FeeSchedule",
+    "Market",
+    "MarketEvent",
+    "MarketMetrics",
+    "MarketOutcome",
+    "MarketOutcomes",
+    "MarketPrices",
+    "MarketResolution",
+    "MarketRewards",
+    "MarketSportsMetadata",
+    "MarketState",
+    "MarketTag",
+    "MarketTrading",
+    "UmaResolutionStatus",
+]
