@@ -35,7 +35,7 @@ class PublicClient:
 
     def __init__(self, environment: Environment = PRODUCTION) -> None:
         self.environment = environment
-        self._transport = SyncTransport(base_url=environment.gamma_url)
+        self._gamma = SyncTransport(base_url=environment.gamma_url)
 
     def __enter__(self) -> Self:
         return self
@@ -50,7 +50,7 @@ class PublicClient:
 
     def close(self) -> None:
         """Close the underlying network transport."""
-        self._transport.close()
+        self._gamma.close()
 
     def get_market(
         self,
@@ -62,7 +62,7 @@ class PublicClient:
         locale: str | None = None,
     ) -> Market:
         """Get a market."""
-        payload = self._transport.get_json(
+        payload = self._gamma.get_json(
             build_market_path(id=id, slug=slug, url=url),
             params={"include_tag": include_tag, "locale": locale},
         )
@@ -70,7 +70,7 @@ class PublicClient:
 
     def get_market_tags(self, id: str) -> tuple[TagReference, ...]:
         """Get a market's tags."""
-        payload = self._transport.get_json(f"/markets/{id}/tags")
+        payload = self._gamma.get_json(f"/markets/{id}/tags")
         return TagReference.parse_response_list(payload)
 
     def get_event(
@@ -85,7 +85,7 @@ class PublicClient:
         locale: str | None = None,
     ) -> Event:
         """Get an event."""
-        payload = self._transport.get_json(
+        payload = self._gamma.get_json(
             build_event_path(id=id, slug=slug, url=url),
             params={
                 "include_best_lines": include_best_lines,
@@ -98,7 +98,7 @@ class PublicClient:
 
     def get_event_tags(self, id: str) -> tuple[TagReference, ...]:
         """Get an event's tags."""
-        payload = self._transport.get_json(f"/events/{id}/tags")
+        payload = self._gamma.get_json(f"/events/{id}/tags")
         return TagReference.parse_response_list(payload)
 
     def get_series(
@@ -109,7 +109,7 @@ class PublicClient:
         locale: str | None = None,
     ) -> Series:
         """Get a series."""
-        payload = self._transport.get_json(
+        payload = self._gamma.get_json(
             f"/series/{id}",
             params={"include_chat": include_chat, "locale": locale},
         )
@@ -130,7 +130,7 @@ class PublicClient:
                 "include_chat and include_template are only supported for tag id lookup."
             )
 
-        payload = self._transport.get_json(
+        payload = self._gamma.get_json(
             build_tag_path(id=id, slug=slug),
             params={
                 "include_chat": include_chat,
@@ -154,7 +154,7 @@ class PublicClient:
                 "omit_empty and status are only supported for related tag id lookup."
             )
 
-        payload = self._transport.get_json(
+        payload = self._gamma.get_json(
             build_related_tags_path(id=id, slug=slug),
             params={"omit_empty": omit_empty, "status": status},
         )
@@ -170,7 +170,7 @@ class PublicClient:
         status: str | None = None,
     ) -> tuple[Tag, ...]:
         """Get tag resources linked from related tag relationships."""
-        payload = self._transport.get_json(
+        payload = self._gamma.get_json(
             build_related_tag_resources_path(id=id, slug=slug),
             params={"locale": locale, "omit_empty": omit_empty, "status": status},
         )
@@ -178,18 +178,18 @@ class PublicClient:
 
     def get_sports(self) -> tuple[SportsMetadata, ...]:
         """Get available sports metadata."""
-        payload = self._transport.get_json("/sports")
+        payload = self._gamma.get_json("/sports")
         return SportsMetadata.parse_response_list(payload)
 
     def get_sports_market_types(self) -> SportsMarketTypes:
         """Get available sports market types."""
-        payload = self._transport.get_json("/sports/market-types")
+        payload = self._gamma.get_json("/sports/market-types")
         return SportsMarketTypes.parse_response(payload)
 
     def get_public_profile(self, address: str) -> PublicProfile | None:
         """Get a public profile by wallet address."""
         try:
-            payload = self._transport.get_json("/public-profile", params={"address": address})
+            payload = self._gamma.get_json("/public-profile", params={"address": address})
         except RequestRejectedError as error:
             if error.status == 404:
                 return None
@@ -201,7 +201,7 @@ class PublicClient:
         self, id: str, *, get_positions: bool | None = None
     ) -> tuple[Comment, ...]:
         """Get a comment thread by comment ID."""
-        payload = self._transport.get_json(
+        payload = self._gamma.get_json(
             f"/comments/{id}",
             params={"get_positions": get_positions},
         )
