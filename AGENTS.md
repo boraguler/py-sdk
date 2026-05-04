@@ -15,6 +15,7 @@
 - Do not mirror today's service fragmentation directly in the public SDK surface.
 - Public docs and docstrings should describe the unified SDK behavior; avoid mentioning underlying service names unless the user specifically asks, a low-level escape hatch requires it, or a test needs to document a boundary.
 - Lower-level controls are acceptable when they support a concrete integration need, but the default experience should feel unified.
+- For internal invariant checks, use Python-native `RuntimeError`, `AssertionError`, or `typing.assert_never` as appropriate instead of introducing a public `InvariantError` SDK exception.
 
 ## Client Sync/Async Design
 
