@@ -31,6 +31,7 @@
 
 ## Tests
 
+- Do not add low-value unit tests that only assert language mechanics, simple inheritance, imports, or direct assignment. Prefer tests that cover SDK behavior, meaningful validation, error mapping, serialization, request construction, or user-visible workflows.
 - Do not add live trading tests to the default test suite.
 - Mark live service tests with `@pytest.mark.integration`.
 - Integration tests that need secrets must use the `require_env` fixture from `tests/integration/conftest.py`; do not read secret env vars at import time.
