@@ -55,6 +55,19 @@ dev = [
   "python-dotenv>=1.2.2",
 ]
 
+[tool.hatch.build]
+exclude = [
+  "/.github",
+  "/.vscode",
+  "/dist",
+  "/docs",
+  "/tests",
+  "/AGENTS.md",
+  "/CONTRIBUTING.md",
+  "/release-please-config.json",
+  "/Makefile",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/polymarket"]
 
