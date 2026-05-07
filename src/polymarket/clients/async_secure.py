@@ -1,26 +1,25 @@
-"""Asynchronous secure Polymarket client."""
-
-from types import TracebackType
+import logging
 from typing import Self, cast
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 
-from polymarket.clients._transport import AsyncTransport
+from polymarket.clients._transport import TransportOptions
+from polymarket.clients.async_public import AsyncPublicClient
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import UserInputError
 
 _CREATE_TOKEN = object()
 
 
-class AsyncSecureClient:
-    """Async client for authenticated Polymarket workflows."""
-
+class AsyncSecureClient(AsyncPublicClient):
     def __init__(
         self,
         *,
         private_key: str,
         environment: Environment = PRODUCTION,
+        transport_options: TransportOptions | None = None,
+        logger: logging.Logger | None = None,
         _create_token: object | None = None,
     ) -> None:
         if _create_token is not _CREATE_TOKEN:
@@ -28,34 +27,39 @@ class AsyncSecureClient:
         if not private_key:
             raise UserInputError("private_key is required")
 
-        self.environment = environment
-        self._signer = cast(LocalAccount, Account.from_key(private_key))
-        self._gamma = AsyncTransport(base_url=environment.gamma_url)
+        try:
+            signer = cast(LocalAccount, Account.from_key(private_key))
+        except (ValueError, TypeError) as error:
+            raise UserInputError(f"Invalid private_key: {error}") from error
+
+        super().__init__(
+            environment=environment,
+            transport_options=transport_options,
+            logger=logger,
+        )
+        self._signer = signer
 
     @classmethod
-    async def create(cls, *, private_key: str, environment: Environment = PRODUCTION) -> Self:
-        """Create an authenticated secure client from a private key."""
+    async def create(
+        cls,
+        *,
+        private_key: str,
+        environment: Environment = PRODUCTION,
+        transport_options: TransportOptions | None = None,
+        logger: logging.Logger | None = None,
+    ) -> Self:
         client = cls(
             private_key=private_key,
             environment=environment,
+            transport_options=transport_options,
+            logger=logger,
             _create_token=_CREATE_TOKEN,
         )
-        return await client._login()
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        await self.close()
-
-    async def close(self) -> None:
-        """Close the underlying network transport."""
-        await self._gamma.close()
+        try:
+            return await client._login()
+        except BaseException:
+            await client.close()
+            raise
 
     async def _login(self) -> Self:
         return self

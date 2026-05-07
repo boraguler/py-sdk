@@ -1,5 +1,16 @@
 """SDK model objects."""
 
+from polymarket.models.data import (
+    BuilderVolumeEntry,
+    BuilderVolumeTimePeriod,
+    Holder,
+    LiveVolume,
+    MarketVolume,
+    MetaHolder,
+    OpenInterest,
+    PortfolioValue,
+    TradedMarketCount,
+)
 from polymarket.models.gamma import (
     Comment,
     Event,
@@ -25,14 +36,22 @@ from polymarket.models.types import (
 )
 
 __all__ = [
+    "BuilderVolumeEntry",
+    "BuilderVolumeTimePeriod",
     "ClobRewardId",
     "Comment",
     "ConditionId",
     "Event",
     "EventId",
+    "Holder",
+    "LiveVolume",
     "Market",
     "MarketId",
+    "MarketVolume",
+    "MetaHolder",
+    "OpenInterest",
     "OrderId",
+    "PortfolioValue",
     "PublicProfile",
     "QuestionId",
     "RelatedTag",
@@ -40,8 +59,9 @@ __all__ = [
     "Series",
     "SportsMarketTypes",
     "SportsMetadata",
-    "TagId",
     "Tag",
+    "TagId",
     "TagReference",
     "TokenId",
+    "TradedMarketCount",
 ]

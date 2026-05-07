@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 from polymarket import AsyncPublicClient, AsyncSecureClient, PublicClient, SecureClient
+from polymarket.errors import UserInputError
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
@@ -71,5 +72,47 @@ def test_async_secure_client_supports_context_manager() -> None:
         client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
         async with client:
             assert client.environment.name == "production"
+
+    asyncio.run(run())
+
+
+def test_secure_client_inherits_public_read_methods() -> None:
+    client = SecureClient.create(private_key=PRIVATE_KEY)
+    try:
+        assert callable(client.get_market)
+        assert callable(client.get_event)
+        assert callable(client.get_event_live_volumes)
+        assert callable(client.get_market_holders)
+        assert callable(client.get_traded_market_count)
+        assert callable(client.get_builder_volumes)
+    finally:
+        client.close()
+
+
+def test_async_secure_client_inherits_public_read_methods() -> None:
+    async def run() -> None:
+        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
+        try:
+            assert callable(client.get_market)
+            assert callable(client.get_event)
+            assert callable(client.get_event_live_volumes)
+            assert callable(client.get_market_holders)
+            assert callable(client.get_traded_market_count)
+            assert callable(client.get_builder_volumes)
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+
+def test_secure_client_invalid_key_raises_user_input_error() -> None:
+    with pytest.raises(UserInputError, match="Invalid private_key"):
+        SecureClient.create(private_key="not-a-valid-key")
+
+
+def test_async_secure_client_invalid_key_raises_user_input_error() -> None:
+    async def run() -> None:
+        with pytest.raises(UserInputError, match="Invalid private_key"):
+            await AsyncSecureClient.create(private_key="not-a-valid-key")
 
     asyncio.run(run())
