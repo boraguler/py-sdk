@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 from polymarket import AsyncPublicClient, Event, PublicClient, TagReference
+from polymarket.models.gamma import EventState
 
 EVENT_ID = "902661"
 
@@ -16,6 +17,10 @@ def test_get_event_returns_event() -> None:
         assert event.id == EVENT_ID
         assert event.slug == "did-israeli-intelligence-have-advanced-knowledge-of-the-attack"
         assert event.markets
+        assert isinstance(event.state, EventState)
+        first_market = event.markets[0]
+        assert first_market.outcomes.yes.label
+        assert first_market.outcomes.no.label
 
 
 @pytest.mark.integration

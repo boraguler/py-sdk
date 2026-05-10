@@ -15,6 +15,7 @@ def test_get_tag_returns_tag() -> None:
         assert isinstance(tag, Tag)
         assert tag.id == TAG_ID
         assert tag.slug == "all"
+        assert tag.label is not None
 
 
 @pytest.mark.integration

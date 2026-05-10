@@ -4,17 +4,29 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
 from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
-from polymarket.models.types import TagId
+from polymarket.models.types import (
+    BestLineId,
+    CategoryId,
+    ChatId,
+    CollectionId,
+    ImageOptimizationId,
+    PartnerId,
+    SeriesId,
+    SportId,
+    TagId,
+    TeamId,
+    TemplateId,
+)
 
 
 class ImageOptimization(BaseModel):
-    id: str
+    id: ImageOptimizationId
     image_url_source: str | None = Field(default=None, validation_alias="imageUrlSource")
     image_url_optimized: str | None = Field(default=None, validation_alias="imageUrlOptimized")
     image_size_kb_source: float | None = Field(default=None, validation_alias="imageSizeKbSource")
@@ -36,7 +48,7 @@ class ImageOptimization(BaseModel):
 
 
 class CategoryReference(BaseModel):
-    id: str
+    id: CategoryId
     label: str | None = None
     parent_category: str | None = Field(default=None, validation_alias="parentCategory")
     slug: str | None = None
@@ -77,7 +89,7 @@ class TagReference(BaseModel):
 
 
 class CollectionReference(BaseModel):
-    id: str
+    id: CollectionId
     ticker: str | None = None
     slug: str | None = None
     title: str | None = None
@@ -112,7 +124,7 @@ class CollectionReference(BaseModel):
 
 
 class SeriesReference(BaseModel):
-    id: str
+    id: SeriesId
     ticker: str | None = None
     slug: str | None = None
     title: str | None = None
@@ -151,6 +163,11 @@ class SeriesReference(BaseModel):
         validation_alias="requiresTranslation",
     )
 
+    @field_validator("id", mode="before")
+    @classmethod
+    def _coerce_id(cls, value: object) -> object:
+        return coerce_string_id(value)
+
     @field_validator("volume_24hr", "volume", "liquidity", mode="before")
     @classmethod
     def _parse_decimal(cls, value: object) -> Decimal | None:
@@ -163,7 +180,7 @@ class SeriesReference(BaseModel):
 
 
 class TemplateReference(BaseModel):
-    id: str
+    id: TemplateId
     display_name: str | None = Field(default=None, validation_alias="displayName")
     event_title: str | None = Field(default=None, validation_alias="eventTitle")
     event_slug: str | None = Field(default=None, validation_alias="eventSlug")
@@ -189,7 +206,7 @@ class TemplateReference(BaseModel):
 
 
 class Chat(BaseModel):
-    id: str
+    id: ChatId
     channel_id: str | None = Field(default=None, validation_alias="channelId")
     channel_name: str | None = Field(default=None, validation_alias="channelName")
     channel_image: str | None = Field(default=None, validation_alias="channelImage")
@@ -204,19 +221,19 @@ class Chat(BaseModel):
 
 
 class Partner(BaseModel):
-    id: int
+    id: PartnerId
     slug: str
     name: str
 
 
 class BestLine(BaseModel):
-    id: str
+    id: BestLineId
     line_type: str | None = Field(default=None, validation_alias="lineType")
     line: float | None = None
 
 
 class Team(BaseModel):
-    id: int
+    id: TeamId
     name: str | None = None
     league: str | None = None
     record: str | None = None
@@ -235,7 +252,7 @@ class Team(BaseModel):
 
 
 class SportsMetadata(BaseModel):
-    id: int
+    id: SportId
     sport: str
     image: str
     resolution: str
@@ -277,16 +294,52 @@ def parse_dicts(value: object) -> tuple[dict[str, Any], ...]:
     items = parse_sequence(value)
     dicts: list[dict[str, Any]] = []
     for item in items:
-        if isinstance(item, dict):
-            dicts.append(cast(dict[str, Any], item))
+        if not isinstance(item, dict):
+            msg = "expected an object"
+            raise ValueError(msg)
+        dicts.append(cast(dict[str, Any], item))
     return tuple(dicts)
+
+
+def parse_string_sequence(value: object) -> tuple[str, ...]:
+    items = parse_sequence(value)
+    result: list[str] = []
+    for item in items:
+        if not isinstance(item, str):
+            msg = f"expected a string, got {type(item).__name__}"
+            raise ValueError(msg)
+        result.append(item)
+    return tuple(result)
+
+
+def coerce_string_id(value: object) -> object:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return str(value)
+    return value
+
+
+def empty_string_to_none(value: object) -> object | None:
+    return None if value == "" else value
 
 
 def parse_optional_decimal(value: object) -> Decimal | None:
     if value in (None, ""):
         return None
+    try:
+        return Decimal(str(value))
+    except InvalidOperation as error:
+        msg = f"invalid decimal: {value!r}"
+        raise ValueError(msg) from error
 
-    return Decimal(str(value))
+
+def parse_decimal(value: object) -> Decimal:
+    try:
+        return Decimal(str(value))
+    except InvalidOperation as error:
+        msg = f"invalid decimal: {value!r}"
+        raise ValueError(msg) from error
 
 
 def parse_optional_datetime(value: object) -> datetime | None:
@@ -333,9 +386,13 @@ __all__ = [
     "TagReference",
     "Team",
     "TemplateReference",
+    "coerce_string_id",
+    "empty_string_to_none",
+    "parse_decimal",
     "parse_dicts",
     "parse_epoch_seconds_optional",
     "parse_optional_decimal",
     "parse_optional_datetime",
     "parse_sequence",
+    "parse_string_sequence",
 ]

@@ -15,17 +15,24 @@ from polymarket.models.gamma.common import (
     Partner,
     SportsMetadata,
     Team,
+    coerce_string_id,
     parse_dicts,
     parse_optional_datetime,
     parse_optional_decimal,
     parse_sequence,
 )
 from polymarket.models.gamma.market import Market
-from polymarket.models.types import EventId, TagId
+from polymarket.models.types import (
+    EventCreatorId,
+    EventExternalPartnerMappingId,
+    EventId,
+    SeriesId,
+    TagId,
+)
 
 
 class EventPartner(BaseModel):
-    id: str
+    id: EventExternalPartnerMappingId
     external_id: str = Field(validation_alias="externalId")
     partner: Partner | None = None
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
@@ -189,7 +196,7 @@ class EventSportsMetadata(BaseModel):
 
 
 class EventSeries(BaseModel):
-    id: str
+    id: SeriesId
     slug: str | None = None
     title: str | None = None
     subtitle: str | None = None
@@ -202,6 +209,11 @@ class EventSeries(BaseModel):
     volume: Decimal | None = None
     liquidity: Decimal | None = None
     start_date: datetime | None = Field(default=None, validation_alias="startDate")
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _coerce_id(cls, value: object) -> object:
+        return coerce_string_id(value)
 
     @field_validator("volume", "liquidity", mode="before")
     @classmethod
@@ -221,7 +233,7 @@ class EventTag(BaseModel):
 
 
 class EventCreator(BaseModel):
-    id: str
+    id: EventCreatorId
     name: str | None = None
     handle: str | None = None
     url: str | None = None
@@ -266,6 +278,11 @@ class Event(BaseModel):
     series: tuple[EventSeries, ...]
     tags: tuple[EventTag, ...]
     creators: tuple[EventCreator, ...]
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _coerce_id(cls, value: object) -> object:
+        return coerce_string_id(value)
 
     @field_validator("created_at", "updated_at", "published_at", mode="before")
     @classmethod

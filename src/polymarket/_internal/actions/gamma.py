@@ -1,11 +1,16 @@
 from polymarket._internal.gamma_paths import (
+    build_comment_thread_path,
     build_event_path,
+    build_event_tags_path,
     build_market_path,
+    build_market_tags_path,
     build_related_tag_resources_path,
     build_related_tags_path,
+    build_series_path,
     build_tag_path,
 )
 from polymarket._internal.request import RequestSpec
+from polymarket._internal.validation import require_nonempty
 from polymarket.errors import UserInputError
 from polymarket.models import (
     Comment,
@@ -42,7 +47,7 @@ def get_market_tags_spec(id: str) -> RequestSpec[tuple[TagReference, ...]]:
     return RequestSpec(
         service="gamma",
         method="GET",
-        path=f"/markets/{id}/tags",
+        path=build_market_tags_path(id),
         parse=TagReference.parse_response_list,
     )
 
@@ -75,7 +80,7 @@ def get_event_tags_spec(id: str) -> RequestSpec[tuple[TagReference, ...]]:
     return RequestSpec(
         service="gamma",
         method="GET",
-        path=f"/events/{id}/tags",
+        path=build_event_tags_path(id),
         parse=TagReference.parse_response_list,
     )
 
@@ -89,7 +94,7 @@ def get_series_spec(
     return RequestSpec(
         service="gamma",
         method="GET",
-        path=f"/series/{id}",
+        path=build_series_path(id),
         params={"include_chat": include_chat, "locale": locale},
         parse=Series.parse_response,
     )
@@ -178,7 +183,7 @@ def get_public_profile_spec(address: str) -> RequestSpec[PublicProfile]:
         service="gamma",
         method="GET",
         path="/public-profile",
-        params={"address": address},
+        params={"address": require_nonempty("address", address)},
         parse=PublicProfile.parse_response,
     )
 
@@ -189,7 +194,7 @@ def get_comment_thread_spec(
     return RequestSpec(
         service="gamma",
         method="GET",
-        path=f"/comments/{id}",
+        path=build_comment_thread_path(id),
         params={"get_positions": get_positions},
         parse=Comment.parse_response_list,
     )

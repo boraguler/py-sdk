@@ -15,6 +15,7 @@ def test_get_series_returns_series() -> None:
         assert isinstance(series, Series)
         assert series.id == SERIES_ID
         assert series.slug == "march-madness"
+        assert series.title
 
 
 @pytest.mark.integration

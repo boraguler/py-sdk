@@ -17,6 +17,9 @@ def test_get_market_returns_canonical_market() -> None:
         assert market.id == MARKET_ID
         assert market.outcomes.yes.label
         assert market.outcomes.no.label
+        assert market.outcomes.yes.token_id is not None
+        assert market.outcomes.no.token_id is not None
+        assert market.state.active is not None or market.state.closed is not None
 
 
 @pytest.mark.integration

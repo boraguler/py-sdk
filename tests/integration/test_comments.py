@@ -14,6 +14,9 @@ def test_get_comment_thread_returns_comments() -> None:
 
         assert comments
         assert all(isinstance(comment, Comment) for comment in comments)
+        root = comments[0]
+        assert root.user_address is not None
+        assert root.user_address.startswith("0x")
 
 
 @pytest.mark.integration
