@@ -105,8 +105,10 @@ class PublicClient:
 
     def close(self) -> None:
         """Close the underlying network transports."""
-        self._gamma.close()
-        self._data.close()
+        try:
+            self._gamma.close()
+        finally:
+            self._data.close()
 
     def _dispatch(self, spec: RequestSpec[T]) -> T:
         transport = self._transport_for(spec.service)

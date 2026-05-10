@@ -105,8 +105,10 @@ class AsyncPublicClient:
 
     async def close(self) -> None:
         """Close the underlying network transports."""
-        await self._gamma.close()
-        await self._data.close()
+        try:
+            await self._gamma.close()
+        finally:
+            await self._data.close()
 
     async def _dispatch(self, spec: RequestSpec[T]) -> T:
         transport = self._transport_for(spec.service)

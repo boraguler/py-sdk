@@ -8,15 +8,13 @@ from typing import Any
 
 import httpx
 
+from polymarket._internal.request import QueryParamValue
 from polymarket.errors import (
     RateLimitError,
     RequestRejectedError,
     TransportError,
     UnexpectedResponseError,
 )
-
-QueryParamValue = str | int | float | bool
-
 
 _DEFAULT_LIMITS = httpx.Limits(
     max_connections=100,
@@ -78,46 +76,12 @@ class SyncTransport:
         try:
             response = self._client.request(method, path, params=_clean_params(params))
         except httpx.HTTPError as error:
-            self._log_failure(method, path, error, started)
+            _log_failure(self._logger, method, path, error, started)
             raise TransportError(str(error) or "Request failed") from error
 
-        self._log_response(method, path, response, started)
+        _log_response(self._logger, method, path, response, started)
         _raise_for_response_status(response)
         return response
-
-    def _log_response(
-        self,
-        method: str,
-        path: str,
-        response: httpx.Response,
-        started: float,
-    ) -> None:
-        if self._logger is None or not self._logger.isEnabledFor(logging.DEBUG):
-            return
-        self._logger.debug(
-            "polymarket http %s %s -> %d in %.1fms",
-            method,
-            path,
-            response.status_code,
-            (time.perf_counter() - started) * 1000,
-        )
-
-    def _log_failure(
-        self,
-        method: str,
-        path: str,
-        error: Exception,
-        started: float,
-    ) -> None:
-        if self._logger is None:
-            return
-        self._logger.warning(
-            "polymarket http %s %s failed in %.1fms: %s",
-            method,
-            path,
-            (time.perf_counter() - started) * 1000,
-            error,
-        )
 
 
 class AsyncTransport:
@@ -164,46 +128,48 @@ class AsyncTransport:
         try:
             response = await self._client.request(method, path, params=_clean_params(params))
         except httpx.HTTPError as error:
-            self._log_failure(method, path, error, started)
+            _log_failure(self._logger, method, path, error, started)
             raise TransportError(str(error) or "Request failed") from error
 
-        self._log_response(method, path, response, started)
+        _log_response(self._logger, method, path, response, started)
         _raise_for_response_status(response)
         return response
 
-    def _log_response(
-        self,
-        method: str,
-        path: str,
-        response: httpx.Response,
-        started: float,
-    ) -> None:
-        if self._logger is None or not self._logger.isEnabledFor(logging.DEBUG):
-            return
-        self._logger.debug(
-            "polymarket http %s %s -> %d in %.1fms",
-            method,
-            path,
-            response.status_code,
-            (time.perf_counter() - started) * 1000,
-        )
 
-    def _log_failure(
-        self,
-        method: str,
-        path: str,
-        error: Exception,
-        started: float,
-    ) -> None:
-        if self._logger is None:
-            return
-        self._logger.warning(
-            "polymarket http %s %s failed in %.1fms: %s",
-            method,
-            path,
-            (time.perf_counter() - started) * 1000,
-            error,
-        )
+def _log_response(
+    logger: logging.Logger | None,
+    method: str,
+    path: str,
+    response: httpx.Response,
+    started: float,
+) -> None:
+    if logger is None or not logger.isEnabledFor(logging.DEBUG):
+        return
+    logger.debug(
+        "polymarket http %s %s -> %d in %.1fms",
+        method,
+        path,
+        response.status_code,
+        (time.perf_counter() - started) * 1000,
+    )
+
+
+def _log_failure(
+    logger: logging.Logger | None,
+    method: str,
+    path: str,
+    error: Exception,
+    started: float,
+) -> None:
+    if logger is None:
+        return
+    logger.warning(
+        "polymarket http %s %s failed in %.1fms: %s",
+        method,
+        path,
+        (time.perf_counter() - started) * 1000,
+        error,
+    )
 
 
 def _raise_for_response_status(response: httpx.Response) -> None:
