@@ -1,3 +1,18 @@
+from polymarket.models.data.activity import (
+    Activity,
+    ActivityType,
+    ConversionActivity,
+    MakerRebateActivity,
+    MergeActivity,
+    RedeemActivity,
+    ReferralRewardActivity,
+    RewardActivity,
+    SplitActivity,
+    Trade,
+    TradeActivity,
+    UnknownActivity,
+    YieldActivity,
+)
 from polymarket.models.data.analytics import (
     Holder,
     LiveVolume,
@@ -5,20 +20,53 @@ from polymarket.models.data.analytics import (
     MetaHolder,
     OpenInterest,
 )
-from polymarket.models.data.leaderboard import BuilderVolumeEntry, BuilderVolumeTimePeriod
+from polymarket.models.data.leaderboard import (
+    BuilderVolumeEntry,
+    BuilderVolumeTimePeriod,
+    LeaderboardCategory,
+    LeaderboardEntry,
+    LeaderboardOrderBy,
+    LeaderboardTimePeriod,
+    TraderLeaderboardEntry,
+)
+from polymarket.models.data.market_positions import MarketPosition, MetaMarketPosition
 from polymarket.models.data.portfolio import (
+    ClosedPosition,
     PortfolioValue,
+    Position,
     TradedMarketCount,
 )
 
 __all__ = [
+    "Activity",
+    "ActivityType",
     "BuilderVolumeEntry",
     "BuilderVolumeTimePeriod",
+    "ClosedPosition",
+    "ConversionActivity",
     "Holder",
+    "LeaderboardCategory",
+    "LeaderboardEntry",
+    "LeaderboardOrderBy",
+    "LeaderboardTimePeriod",
     "LiveVolume",
+    "MakerRebateActivity",
+    "MarketPosition",
     "MarketVolume",
+    "MergeActivity",
     "MetaHolder",
+    "MetaMarketPosition",
     "OpenInterest",
     "PortfolioValue",
+    "Position",
+    "RedeemActivity",
+    "ReferralRewardActivity",
+    "RewardActivity",
+    "SplitActivity",
+    "Trade",
+    "TradeActivity",
     "TradedMarketCount",
+    "TraderLeaderboardEntry",
+    "UnknownActivity",
+    "YieldActivity",
 ]

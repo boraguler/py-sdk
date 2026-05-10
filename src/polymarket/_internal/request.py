@@ -19,4 +19,18 @@ class RequestSpec(Generic[T]):
     params: Mapping[str, QueryParamValue | None] | None = None
 
 
-__all__ = ["Method", "QueryParamValue", "RequestSpec", "Service"]
+@dataclass(frozen=True, slots=True)
+class OffsetPaginatedSpec(Generic[T]):
+    service: Service
+    path: str
+    parse_items: Callable[[object], tuple[T, ...]]
+    base_params: Mapping[str, QueryParamValue] | None = None
+
+
+__all__ = [
+    "Method",
+    "OffsetPaginatedSpec",
+    "QueryParamValue",
+    "RequestSpec",
+    "Service",
+]

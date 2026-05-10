@@ -1,20 +1,81 @@
-from collections.abc import Sequence
-from typing import get_args
+from collections.abc import Callable, Sequence
+from typing import Literal, TypeVar, get_args
 
 from polymarket._internal.data_params import build_data_params
-from polymarket._internal.request import RequestSpec
+from polymarket._internal.request import OffsetPaginatedSpec, RequestSpec
 from polymarket.errors import UserInputError
+from polymarket.models.base import BaseModel
 from polymarket.models.data import (
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
+    ClosedPosition,
+    LeaderboardCategory,
+    LeaderboardEntry,
+    LeaderboardOrderBy,
+    LeaderboardTimePeriod,
     LiveVolume,
     MetaHolder,
+    MetaMarketPosition,
     OpenInterest,
     PortfolioValue,
+    Position,
+    Trade,
     TradedMarketCount,
+    TraderLeaderboardEntry,
 )
+from polymarket.models.data.activity import Activity, parse_activities
 
 _BUILDER_VOLUME_TIME_PERIODS: tuple[str, ...] = get_args(BuilderVolumeTimePeriod)
+_LEADERBOARD_TIME_PERIODS: tuple[str, ...] = get_args(LeaderboardTimePeriod)
+_LEADERBOARD_CATEGORIES: tuple[str, ...] = get_args(LeaderboardCategory)
+_LEADERBOARD_ORDER_BY: tuple[str, ...] = get_args(LeaderboardOrderBy)
+
+ActivityTypeFilter = Literal[
+    "TRADE",
+    "SPLIT",
+    "MERGE",
+    "REDEEM",
+    "REWARD",
+    "CONVERSION",
+    "MAKER_REBATE",
+    "REFERRAL_REWARD",
+    "YIELD",
+]
+_ACTIVITY_TYPES: tuple[str, ...] = get_args(ActivityTypeFilter)
+
+ActivitySortBy = Literal["TIMESTAMP", "TOKENS", "CASH"]
+_ACTIVITY_SORT_BY: tuple[str, ...] = get_args(ActivitySortBy)
+
+PositionSortBy = Literal[
+    "CURRENT",
+    "INITIAL",
+    "TOKENS",
+    "CASHPNL",
+    "PERCENTPNL",
+    "TITLE",
+    "RESOLVING",
+    "PRICE",
+    "AVGPRICE",
+]
+_POSITION_SORT_BY: tuple[str, ...] = get_args(PositionSortBy)
+
+ClosedPositionSortBy = Literal["REALIZEDPNL", "TITLE", "PRICE", "AVGPRICE", "TIMESTAMP"]
+_CLOSED_POSITION_SORT_BY: tuple[str, ...] = get_args(ClosedPositionSortBy)
+
+MarketPositionStatus = Literal["OPEN", "CLOSED", "ALL"]
+_MARKET_POSITION_STATUS: tuple[str, ...] = get_args(MarketPositionStatus)
+
+MarketPositionSortBy = Literal["TOKENS", "CASH_PNL", "REALIZED_PNL", "TOTAL_PNL"]
+_MARKET_POSITION_SORT_BY: tuple[str, ...] = get_args(MarketPositionSortBy)
+
+SortDirection = Literal["ASC", "DESC"]
+_SORT_DIRECTION: tuple[str, ...] = get_args(SortDirection)
+
+TradeSide = Literal["BUY", "SELL"]
+_TRADE_SIDE: tuple[str, ...] = get_args(TradeSide)
+
+TradeFilterType = Literal["CASH", "TOKENS"]
+_TRADE_FILTER_TYPE: tuple[str, ...] = get_args(TradeFilterType)
 
 
 def get_event_live_volumes_spec(*, id: str) -> RequestSpec[tuple[LiveVolume, ...]]:
@@ -106,11 +167,271 @@ def get_builder_volumes_spec(
     )
 
 
+def list_positions_spec(
+    *,
+    user: str,
+    market: Sequence[str] | None = None,
+    event_id: Sequence[int] | None = None,
+    size_threshold: float | None = None,
+    redeemable: bool | None = None,
+    mergeable: bool | None = None,
+    sort_by: PositionSortBy | None = None,
+    sort_direction: SortDirection | None = None,
+    title: str | None = None,
+) -> OffsetPaginatedSpec[Position]:
+    if not user:
+        raise UserInputError("user is required.")
+    if market and event_id:
+        raise UserInputError("Provide market or event_id, not both.")
+    _check_enum("sort_by", sort_by, _POSITION_SORT_BY)
+    _check_enum("sort_direction", sort_direction, _SORT_DIRECTION)
+    if title is not None and len(title) > 100:
+        raise UserInputError("title must be at most 100 characters.")
+
+    return OffsetPaginatedSpec(
+        service="data",
+        path="/positions",
+        base_params=build_data_params(
+            {
+                "user": user,
+                "market": market,
+                "eventId": event_id,
+                "sizeThreshold": size_threshold,
+                "redeemable": redeemable,
+                "mergeable": mergeable,
+                "sortBy": sort_by,
+                "sortDirection": sort_direction,
+                "title": title,
+            }
+        ),
+        parse_items=_parser_for(Position),
+    )
+
+
+def list_closed_positions_spec(
+    *,
+    user: str,
+    market: Sequence[str] | None = None,
+    event_id: Sequence[int] | None = None,
+    title: str | None = None,
+    sort_by: ClosedPositionSortBy | None = None,
+    sort_direction: SortDirection | None = None,
+) -> OffsetPaginatedSpec[ClosedPosition]:
+    if not user:
+        raise UserInputError("user is required.")
+    if market and event_id:
+        raise UserInputError("Provide market or event_id, not both.")
+    _check_enum("sort_by", sort_by, _CLOSED_POSITION_SORT_BY)
+    _check_enum("sort_direction", sort_direction, _SORT_DIRECTION)
+    if title is not None and len(title) > 100:
+        raise UserInputError("title must be at most 100 characters.")
+
+    return OffsetPaginatedSpec(
+        service="data",
+        path="/closed-positions",
+        base_params=build_data_params(
+            {
+                "user": user,
+                "market": market,
+                "eventId": event_id,
+                "title": title,
+                "sortBy": sort_by,
+                "sortDirection": sort_direction,
+            }
+        ),
+        parse_items=_parser_for(ClosedPosition),
+    )
+
+
+def list_market_positions_spec(
+    *,
+    market: str,
+    user: str | None = None,
+    status: MarketPositionStatus | None = None,
+    sort_by: MarketPositionSortBy | None = None,
+    sort_direction: SortDirection | None = None,
+) -> OffsetPaginatedSpec[MetaMarketPosition]:
+    if not market:
+        raise UserInputError("market is required.")
+    _check_enum("status", status, _MARKET_POSITION_STATUS)
+    _check_enum("sort_by", sort_by, _MARKET_POSITION_SORT_BY)
+    _check_enum("sort_direction", sort_direction, _SORT_DIRECTION)
+
+    return OffsetPaginatedSpec(
+        service="data",
+        path="/v1/market-positions",
+        base_params=build_data_params(
+            {
+                "market": market,
+                "user": user,
+                "status": status,
+                "sortBy": sort_by,
+                "sortDirection": sort_direction,
+            }
+        ),
+        parse_items=_parser_for(MetaMarketPosition),
+    )
+
+
+def list_trades_spec(
+    *,
+    taker_only: bool | None = None,
+    filter_type: TradeFilterType | None = None,
+    filter_amount: float | None = None,
+    market: Sequence[str] | None = None,
+    event_id: Sequence[int] | None = None,
+    user: str | None = None,
+    side: TradeSide | None = None,
+) -> OffsetPaginatedSpec[Trade]:
+    if market and event_id:
+        raise UserInputError("Provide market or event_id, not both.")
+    if (filter_type is None) != (filter_amount is None):
+        raise UserInputError("filter_type and filter_amount must be provided together.")
+    _check_enum("filter_type", filter_type, _TRADE_FILTER_TYPE)
+    _check_enum("side", side, _TRADE_SIDE)
+
+    return OffsetPaginatedSpec(
+        service="data",
+        path="/trades",
+        base_params=build_data_params(
+            {
+                "takerOnly": taker_only,
+                "filterType": filter_type,
+                "filterAmount": filter_amount,
+                "market": market,
+                "eventId": event_id,
+                "user": user,
+                "side": side,
+            }
+        ),
+        parse_items=_parser_for(Trade),
+    )
+
+
+def list_activity_spec(
+    *,
+    user: str,
+    market: Sequence[str] | None = None,
+    event_id: Sequence[int] | None = None,
+    activity_types: Sequence[ActivityTypeFilter] | None = None,
+    start: int | None = None,
+    end: int | None = None,
+    sort_by: ActivitySortBy | None = None,
+    sort_direction: SortDirection | None = None,
+    side: TradeSide | None = None,
+) -> OffsetPaginatedSpec[Activity]:
+    if not user:
+        raise UserInputError("user is required.")
+    if market and event_id:
+        raise UserInputError("Provide market or event_id, not both.")
+    _check_enum("sort_by", sort_by, _ACTIVITY_SORT_BY)
+    _check_enum("sort_direction", sort_direction, _SORT_DIRECTION)
+    _check_enum("side", side, _TRADE_SIDE)
+    if activity_types is not None:
+        for value in activity_types:
+            if value not in _ACTIVITY_TYPES:
+                raise UserInputError(
+                    f"activity_types entries must be one of {_ACTIVITY_TYPES}, got {value!r}."
+                )
+
+    return OffsetPaginatedSpec(
+        service="data",
+        path="/activity",
+        base_params=build_data_params(
+            {
+                "user": user,
+                "market": market,
+                "eventId": event_id,
+                "type": activity_types,
+                "start": start,
+                "end": end,
+                "sortBy": sort_by,
+                "sortDirection": sort_direction,
+                "side": side,
+            }
+        ),
+        parse_items=parse_activities,
+    )
+
+
+def list_builder_leaderboard_spec(
+    *,
+    time_period: LeaderboardTimePeriod | None = None,
+) -> OffsetPaginatedSpec[LeaderboardEntry]:
+    _check_enum("time_period", time_period, _LEADERBOARD_TIME_PERIODS)
+    return OffsetPaginatedSpec(
+        service="data",
+        path="/v1/builders/leaderboard",
+        base_params=build_data_params({"timePeriod": time_period}),
+        parse_items=_parser_for(LeaderboardEntry),
+    )
+
+
+def list_trader_leaderboard_spec(
+    *,
+    category: LeaderboardCategory | None = None,
+    time_period: LeaderboardTimePeriod | None = None,
+    order_by: LeaderboardOrderBy | None = None,
+    user: str | None = None,
+    user_name: str | None = None,
+) -> OffsetPaginatedSpec[TraderLeaderboardEntry]:
+    _check_enum("category", category, _LEADERBOARD_CATEGORIES)
+    _check_enum("time_period", time_period, _LEADERBOARD_TIME_PERIODS)
+    _check_enum("order_by", order_by, _LEADERBOARD_ORDER_BY)
+    return OffsetPaginatedSpec(
+        service="data",
+        path="/v1/leaderboard",
+        base_params=build_data_params(
+            {
+                "category": category,
+                "timePeriod": time_period,
+                "orderBy": order_by,
+                "user": user,
+                "userName": user_name,
+            }
+        ),
+        parse_items=_parser_for(TraderLeaderboardEntry),
+    )
+
+
+def _check_enum(name: str, value: object, allowed: tuple[str, ...]) -> None:
+    if value is None:
+        return
+    if value not in allowed:
+        raise UserInputError(f"{name} must be one of {allowed}, got {value!r}.")
+
+
+_M = TypeVar("_M", bound=BaseModel)
+
+
+def _parser_for(model: type[_M]) -> Callable[[object], tuple[_M, ...]]:
+    def parse(payload: object) -> tuple[_M, ...]:
+        return model.parse_response_list(payload)
+
+    return parse
+
+
 __all__ = [
+    "ActivitySortBy",
+    "ActivityTypeFilter",
+    "ClosedPositionSortBy",
+    "MarketPositionSortBy",
+    "MarketPositionStatus",
+    "PositionSortBy",
+    "SortDirection",
+    "TradeFilterType",
+    "TradeSide",
     "get_builder_volumes_spec",
     "get_event_live_volumes_spec",
     "get_market_holders_spec",
     "get_open_interests_spec",
     "get_portfolio_values_spec",
     "get_traded_market_count_spec",
+    "list_activity_spec",
+    "list_builder_leaderboard_spec",
+    "list_closed_positions_spec",
+    "list_market_positions_spec",
+    "list_positions_spec",
+    "list_trader_leaderboard_spec",
+    "list_trades_spec",
 ]

@@ -7,10 +7,27 @@ from typing import Self, TypeVar, assert_never
 
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
-from polymarket._internal.request import RequestSpec, Service
+from polymarket._internal.actions.data import (
+    ActivitySortBy,
+    ActivityTypeFilter,
+    ClosedPositionSortBy,
+    MarketPositionSortBy,
+    MarketPositionStatus,
+    PositionSortBy,
+    SortDirection,
+    TradeFilterType,
+    TradeSide,
+)
+from polymarket._internal.pagination import (
+    AsyncPaginator,
+    Page,
+    compute_offset_page,
+    decode_offset_cursor,
+)
+from polymarket._internal.request import OffsetPaginatedSpec, RequestSpec, Service
 from polymarket.clients._transport import AsyncTransport, TransportOptions
 from polymarket.environments import PRODUCTION, Environment
-from polymarket.errors import RequestRejectedError
+from polymarket.errors import RequestRejectedError, UserInputError
 from polymarket.models import (
     Comment,
     Event,
@@ -24,13 +41,23 @@ from polymarket.models import (
     TagReference,
 )
 from polymarket.models.data import (
+    Activity,
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
+    ClosedPosition,
+    LeaderboardCategory,
+    LeaderboardEntry,
+    LeaderboardOrderBy,
+    LeaderboardTimePeriod,
     LiveVolume,
     MetaHolder,
+    MetaMarketPosition,
     OpenInterest,
     PortfolioValue,
+    Position,
+    Trade,
     TradedMarketCount,
+    TraderLeaderboardEntry,
 )
 
 T = TypeVar("T")
@@ -89,6 +116,44 @@ class AsyncPublicClient:
             case _ as unreachable:
                 assert_never(unreachable)
         return spec.parse(payload)
+
+    def _paginate_offset(
+        self,
+        spec: OffsetPaginatedSpec[T],
+        *,
+        page_size: int,
+        initial_cursor: str | None = None,
+    ) -> AsyncPaginator[T]:
+        if page_size < 1:
+            raise UserInputError("page_size must be a positive integer.")
+        transport = self._transport_for(spec.service)
+
+        async def fetch(cursor: str | None) -> Page[T]:
+            offset, effective_size = (
+                decode_offset_cursor(
+                    cursor,
+                    expected_path=spec.path,
+                    expected_base_params=spec.base_params,
+                )
+                if cursor is not None
+                else (0, page_size)
+            )
+            params: dict[str, str | int | float | bool] = {
+                **(spec.base_params or {}),
+                "limit": effective_size + 1,
+                "offset": offset,
+            }
+            payload = await transport.get_json(spec.path, params=params)
+            items = spec.parse_items(payload)
+            return compute_offset_page(
+                path=spec.path,
+                base_params=spec.base_params,
+                offset=offset,
+                page_size=effective_size,
+                items=items,
+            )
+
+        return AsyncPaginator(fetch=fetch, initial_cursor=initial_cursor)
 
     def _transport_for(self, service: Service) -> AsyncTransport:
         match service:
@@ -270,3 +335,148 @@ class AsyncPublicClient:
         self, *, time_period: BuilderVolumeTimePeriod | None = None
     ) -> tuple[BuilderVolumeEntry, ...]:
         return await self._dispatch(_data_actions.get_builder_volumes_spec(time_period=time_period))
+
+    def list_positions(
+        self,
+        *,
+        user: str,
+        market: Sequence[str] | None = None,
+        event_id: Sequence[int] | None = None,
+        size_threshold: float | None = None,
+        redeemable: bool | None = None,
+        mergeable: bool | None = None,
+        sort_by: PositionSortBy | None = None,
+        sort_direction: SortDirection | None = None,
+        title: str | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Position]:
+        spec = _data_actions.list_positions_spec(
+            user=user,
+            market=market,
+            event_id=event_id,
+            size_threshold=size_threshold,
+            redeemable=redeemable,
+            mergeable=mergeable,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
+            title=title,
+        )
+        return self._paginate_offset(spec, page_size=page_size)
+
+    def list_closed_positions(
+        self,
+        *,
+        user: str,
+        market: Sequence[str] | None = None,
+        event_id: Sequence[int] | None = None,
+        title: str | None = None,
+        sort_by: ClosedPositionSortBy | None = None,
+        sort_direction: SortDirection | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[ClosedPosition]:
+        spec = _data_actions.list_closed_positions_spec(
+            user=user,
+            market=market,
+            event_id=event_id,
+            title=title,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
+        )
+        return self._paginate_offset(spec, page_size=page_size)
+
+    def list_market_positions(
+        self,
+        *,
+        market: str,
+        user: str | None = None,
+        status: MarketPositionStatus | None = None,
+        sort_by: MarketPositionSortBy | None = None,
+        sort_direction: SortDirection | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[MetaMarketPosition]:
+        spec = _data_actions.list_market_positions_spec(
+            market=market,
+            user=user,
+            status=status,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
+        )
+        return self._paginate_offset(spec, page_size=page_size)
+
+    def list_trades(
+        self,
+        *,
+        taker_only: bool | None = None,
+        filter_type: TradeFilterType | None = None,
+        filter_amount: float | None = None,
+        market: Sequence[str] | None = None,
+        event_id: Sequence[int] | None = None,
+        user: str | None = None,
+        side: TradeSide | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Trade]:
+        spec = _data_actions.list_trades_spec(
+            taker_only=taker_only,
+            filter_type=filter_type,
+            filter_amount=filter_amount,
+            market=market,
+            event_id=event_id,
+            user=user,
+            side=side,
+        )
+        return self._paginate_offset(spec, page_size=page_size)
+
+    def list_activity(
+        self,
+        *,
+        user: str,
+        market: Sequence[str] | None = None,
+        event_id: Sequence[int] | None = None,
+        activity_types: Sequence[ActivityTypeFilter] | None = None,
+        start: int | None = None,
+        end: int | None = None,
+        sort_by: ActivitySortBy | None = None,
+        sort_direction: SortDirection | None = None,
+        side: TradeSide | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Activity]:
+        spec = _data_actions.list_activity_spec(
+            user=user,
+            market=market,
+            event_id=event_id,
+            activity_types=activity_types,
+            start=start,
+            end=end,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
+            side=side,
+        )
+        return self._paginate_offset(spec, page_size=page_size)
+
+    def list_builder_leaderboard(
+        self,
+        *,
+        time_period: LeaderboardTimePeriod | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[LeaderboardEntry]:
+        spec = _data_actions.list_builder_leaderboard_spec(time_period=time_period)
+        return self._paginate_offset(spec, page_size=page_size)
+
+    def list_trader_leaderboard(
+        self,
+        *,
+        category: LeaderboardCategory | None = None,
+        time_period: LeaderboardTimePeriod | None = None,
+        order_by: LeaderboardOrderBy | None = None,
+        user: str | None = None,
+        user_name: str | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[TraderLeaderboardEntry]:
+        spec = _data_actions.list_trader_leaderboard_spec(
+            category=category,
+            time_period=time_period,
+            order_by=order_by,
+            user=user,
+            user_name=user_name,
+        )
+        return self._paginate_offset(spec, page_size=page_size)
