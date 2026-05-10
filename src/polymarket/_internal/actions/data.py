@@ -2,7 +2,7 @@ from collections.abc import Callable, Sequence
 from typing import Literal, TypeVar, get_args
 
 from polymarket._internal.data_params import build_data_params
-from polymarket._internal.request import OffsetPaginatedSpec, RequestSpec
+from polymarket._internal.request import OffsetPaginatedSpec, QueryParamValue, RequestSpec
 from polymarket.errors import UserInputError
 from polymarket.models.base import BaseModel
 from polymarket.models.data import (
@@ -394,6 +394,12 @@ def list_trader_leaderboard_spec(
     )
 
 
+def build_accounting_snapshot_request(*, user: str) -> tuple[str, dict[str, QueryParamValue]]:
+    if not user:
+        raise UserInputError("user is required.")
+    return "/v1/accounting/snapshot", {"user": user}
+
+
 def _check_enum(name: str, value: object, allowed: tuple[str, ...]) -> None:
     if value is None:
         return
@@ -421,6 +427,7 @@ __all__ = [
     "SortDirection",
     "TradeFilterType",
     "TradeSide",
+    "build_accounting_snapshot_request",
     "get_builder_volumes_spec",
     "get_event_live_volumes_spec",
     "get_market_holders_spec",

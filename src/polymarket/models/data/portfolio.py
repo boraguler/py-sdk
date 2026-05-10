@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
-from polymarket.models.gamma.common import parse_optional_datetime, parse_optional_decimal
+from polymarket.models.gamma.common import parse_epoch_seconds_optional, parse_optional_decimal
 from polymarket.models.types import ConditionId, TokenId
 from polymarket.types import EvmAddress
 
@@ -103,15 +103,7 @@ class ClosedPosition(BaseModel):
     @field_validator("timestamp", mode="before")
     @classmethod
     def _parse_timestamp(cls, value: object) -> datetime | None:
-        if value is None or value == "":
-            return None
-        if isinstance(value, bool):
-            return None
-        if isinstance(value, int | float):
-            return datetime.fromtimestamp(int(value), tz=UTC)
-        if isinstance(value, str) and value.isdigit():
-            return datetime.fromtimestamp(int(value), tz=UTC)
-        return parse_optional_datetime(value)
+        return parse_epoch_seconds_optional(value)
 
 
 __all__ = ["ClosedPosition", "PortfolioValue", "Position", "TradedMarketCount"]

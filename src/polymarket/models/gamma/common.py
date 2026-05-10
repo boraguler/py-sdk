@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
 
@@ -306,6 +306,20 @@ def parse_optional_datetime(value: object) -> datetime | None:
     raise ValueError(msg)
 
 
+def parse_epoch_seconds_optional(value: object) -> datetime | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return datetime.fromtimestamp(int(value), tz=UTC)
+    if isinstance(value, str) and value.isdigit():
+        return datetime.fromtimestamp(int(value), tz=UTC)
+    if isinstance(value, datetime):
+        return value
+    return None
+
+
 __all__ = [
     "BestLine",
     "CategoryReference",
@@ -320,6 +334,7 @@ __all__ = [
     "Team",
     "TemplateReference",
     "parse_dicts",
+    "parse_epoch_seconds_optional",
     "parse_optional_decimal",
     "parse_optional_datetime",
     "parse_sequence",

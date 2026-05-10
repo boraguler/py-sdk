@@ -102,6 +102,17 @@ def test_get_builder_volumes_spec_includes_time_period() -> None:
     assert spec.params == {"timePeriod": "WEEK"}
 
 
+def test_build_accounting_snapshot_request_builds_path_and_params() -> None:
+    path, params = data_actions.build_accounting_snapshot_request(user="0xWALLET")
+    assert path == "/v1/accounting/snapshot"
+    assert params == {"user": "0xWALLET"}
+
+
+def test_build_accounting_snapshot_request_rejects_empty_user() -> None:
+    with pytest.raises(UserInputError, match="user is required"):
+        data_actions.build_accounting_snapshot_request(user="")
+
+
 def test_get_builder_volumes_spec_rejects_unknown_time_period() -> None:
     with pytest.raises(UserInputError, match="time_period must be one of"):
         data_actions.get_builder_volumes_spec(time_period="YEAR")  # type: ignore[arg-type]

@@ -173,6 +173,28 @@ def test_async_get_traded_market_count_returns_count() -> None:
 
 
 @pytest.mark.integration
+def test_download_accounting_snapshot_returns_zip_archive() -> None:
+    with PublicClient() as client:
+        snapshot = client.download_accounting_snapshot(user=WALLET)
+
+    assert isinstance(snapshot, bytes)
+    assert len(snapshot) > 0
+    assert snapshot.startswith(b"PK\x03\x04")
+
+
+@pytest.mark.integration
+def test_async_download_accounting_snapshot_returns_zip_archive() -> None:
+    async def run() -> bytes:
+        async with AsyncPublicClient() as client:
+            return await client.download_accounting_snapshot(user=WALLET)
+
+    snapshot = asyncio.run(run())
+    assert isinstance(snapshot, bytes)
+    assert len(snapshot) > 0
+    assert snapshot.startswith(b"PK\x03\x04")
+
+
+@pytest.mark.integration
 def test_async_get_builder_volumes_returns_entries() -> None:
     async def run() -> None:
         async with AsyncPublicClient() as client:

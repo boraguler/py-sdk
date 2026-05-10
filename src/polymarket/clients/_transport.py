@@ -61,6 +61,15 @@ class SyncTransport:
         response = self._request("GET", path, params=params)
         return _read_json(response)
 
+    def get_bytes(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> bytes:
+        response = self._request("GET", path, params=params)
+        return response.content
+
     def close(self) -> None:
         if self._owns_client:
             self._client.close()
@@ -112,6 +121,15 @@ class AsyncTransport:
     ) -> Any:
         response = await self._request("GET", path, params=params)
         return _read_json(response)
+
+    async def get_bytes(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> bytes:
+        response = await self._request("GET", path, params=params)
+        return response.content
 
     async def close(self) -> None:
         if self._owns_client:

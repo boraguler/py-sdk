@@ -462,6 +462,10 @@ class PublicClient:
         spec = _data_actions.list_builder_leaderboard_spec(time_period=time_period)
         return self._paginate_offset(spec, page_size=page_size)
 
+    def download_accounting_snapshot(self, *, user: str) -> bytes:
+        path, params = _data_actions.build_accounting_snapshot_request(user=user)
+        return self._data.get_bytes(path, params=params)
+
     def list_trader_leaderboard(
         self,
         *,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal, cast
 
@@ -8,7 +8,7 @@ from pydantic import Field, field_validator
 
 from polymarket.errors import UnexpectedResponseError
 from polymarket.models.base import BaseModel
-from polymarket.models.gamma.common import parse_optional_decimal
+from polymarket.models.gamma.common import parse_epoch_seconds_optional, parse_optional_decimal
 from polymarket.models.types import ConditionId, TokenId
 from polymarket.types import EvmAddress, TransactionHash
 
@@ -46,7 +46,7 @@ class Trade(BaseModel):
     @field_validator("timestamp", mode="before")
     @classmethod
     def _parse_timestamp(cls, value: object) -> datetime | None:
-        return _seconds_to_datetime_optional(value)
+        return parse_epoch_seconds_optional(value)
 
 
 ActivityType = Literal[
@@ -77,7 +77,7 @@ class _KnownActivityBase(BaseModel):
     @field_validator("timestamp", mode="before")
     @classmethod
     def _parse_timestamp(cls, value: object) -> datetime | None:
-        return _seconds_to_datetime_optional(value)
+        return parse_epoch_seconds_optional(value)
 
 
 class TradeActivity(_KnownActivityBase):
@@ -175,7 +175,7 @@ class UnknownActivity(BaseModel):
     @field_validator("timestamp", mode="before")
     @classmethod
     def _parse_timestamp(cls, value: object) -> datetime | None:
-        return _seconds_to_datetime_optional(value)
+        return parse_epoch_seconds_optional(value)
 
 
 Activity = (
@@ -241,20 +241,6 @@ def _normalize_activity_payload(data: dict[str, Any]) -> dict[str, Any]:
             normalized["amount"] = amount
 
     return normalized
-
-
-def _seconds_to_datetime_optional(value: object) -> datetime | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        return datetime.fromtimestamp(int(value), tz=UTC)
-    if isinstance(value, str) and value.isdigit():
-        return datetime.fromtimestamp(int(value), tz=UTC)
-    if isinstance(value, datetime):
-        return value
-    return None
 
 
 __all__ = [
