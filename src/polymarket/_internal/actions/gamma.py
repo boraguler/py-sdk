@@ -308,7 +308,6 @@ def get_comment_thread_spec(
 
 
 __all__ = [
-    "get_comment_thread_spec",
     "CommentParentEntityType",
     "Recurrence",
     "TagMatch",
