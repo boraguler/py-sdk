@@ -18,22 +18,35 @@ from polymarket._internal.actions.data import (
     TradeFilterType,
     TradeSide,
 )
+from polymarket._internal.actions.gamma import (
+    CommentParentEntityType,
+    Recurrence,
+    TagMatch,
+)
 from polymarket._internal.context import AsyncClientContext
-from polymarket._internal.dispatch import async_dispatch, async_paginate_offset
+from polymarket._internal.dispatch import (
+    async_dispatch,
+    async_paginate_keyset,
+    async_paginate_offset,
+)
+from polymarket._internal.pagination import decode_page_cursor, encode_page_cursor
+from polymarket._internal.request import QueryParamValue
 from polymarket.clients._transport import AsyncTransport
 from polymarket.environments import PRODUCTION, Environment
-from polymarket.errors import RequestRejectedError
+from polymarket.errors import RequestRejectedError, UserInputError
 from polymarket.models import (
     Comment,
     Event,
     Market,
     PublicProfile,
     RelatedTag,
+    SearchResults,
     Series,
     SportsMarketTypes,
     SportsMetadata,
     Tag,
     TagReference,
+    Team,
 )
 from polymarket.models.data import (
     Activity,
@@ -273,8 +286,8 @@ class AsyncPublicClient:
         self,
         *,
         user: str,
-        market: Sequence[str] | None = None,
-        event_id: Sequence[int] | None = None,
+        market: str | Sequence[str] | None = None,
+        event_id: int | Sequence[int] | None = None,
         size_threshold: float | None = None,
         redeemable: bool | None = None,
         mergeable: bool | None = None,
@@ -300,8 +313,8 @@ class AsyncPublicClient:
         self,
         *,
         user: str,
-        market: Sequence[str] | None = None,
-        event_id: Sequence[int] | None = None,
+        market: str | Sequence[str] | None = None,
+        event_id: int | Sequence[int] | None = None,
         title: str | None = None,
         sort_by: ClosedPositionSortBy | None = None,
         sort_direction: SortDirection | None = None,
@@ -363,8 +376,8 @@ class AsyncPublicClient:
         self,
         *,
         user: str,
-        market: Sequence[str] | None = None,
-        event_id: Sequence[int] | None = None,
+        market: str | Sequence[str] | None = None,
+        event_id: int | Sequence[int] | None = None,
         activity_types: Sequence[ActivityTypeFilter] | None = None,
         side: TradeSide | None = None,
         sort_by: ActivitySortBy | None = None,
@@ -417,3 +430,329 @@ class AsyncPublicClient:
             user_name=user_name,
         )
         return async_paginate_offset(self._ctx, spec, page_size=page_size)
+
+    def list_events(
+        self,
+        *,
+        ascending: bool | None = None,
+        closed: bool | None = None,
+        cyom: bool | None = None,
+        end_date_max: str | None = None,
+        end_date_min: str | None = None,
+        ended: bool | None = None,
+        event_date: str | None = None,
+        event_week: int | None = None,
+        exclude_tag_ids: int | Sequence[int] | None = None,
+        featured: bool | None = None,
+        featured_order: bool | None = None,
+        game_ids: int | Sequence[int] | None = None,
+        ids: int | Sequence[int] | None = None,
+        include_best_lines: bool | None = None,
+        include_chat: bool | None = None,
+        include_children: bool | None = None,
+        include_template: bool | None = None,
+        liquidity_max: float | None = None,
+        liquidity_min: float | None = None,
+        live: bool | None = None,
+        locale: str | None = None,
+        order: str | None = None,
+        parent_event_id: int | None = None,
+        partner_slug: str | None = None,
+        recurrence: Recurrence | None = None,
+        related_tags: bool | None = None,
+        series_ids: int | Sequence[int] | None = None,
+        slug: str | Sequence[str] | None = None,
+        start_date_max: str | None = None,
+        start_date_min: str | None = None,
+        start_time_max: str | None = None,
+        start_time_min: str | None = None,
+        tag_ids: int | Sequence[int] | None = None,
+        tag_match: TagMatch | None = None,
+        tag_slug: str | None = None,
+        title_search: str | None = None,
+        volume_max: float | None = None,
+        volume_min: float | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Event]:
+        spec = _gamma_actions.list_events_spec(
+            ascending=ascending,
+            closed=closed,
+            cyom=cyom,
+            end_date_max=end_date_max,
+            end_date_min=end_date_min,
+            ended=ended,
+            event_date=event_date,
+            event_week=event_week,
+            exclude_tag_ids=exclude_tag_ids,
+            featured=featured,
+            featured_order=featured_order,
+            game_ids=game_ids,
+            ids=ids,
+            include_best_lines=include_best_lines,
+            include_chat=include_chat,
+            include_children=include_children,
+            include_template=include_template,
+            liquidity_max=liquidity_max,
+            liquidity_min=liquidity_min,
+            live=live,
+            locale=locale,
+            order=order,
+            parent_event_id=parent_event_id,
+            partner_slug=partner_slug,
+            recurrence=recurrence,
+            related_tags=related_tags,
+            series_ids=series_ids,
+            slug=slug,
+            start_date_max=start_date_max,
+            start_date_min=start_date_min,
+            start_time_max=start_time_max,
+            start_time_min=start_time_min,
+            tag_ids=tag_ids,
+            tag_match=tag_match,
+            tag_slug=tag_slug,
+            title_search=title_search,
+            volume_max=volume_max,
+            volume_min=volume_min,
+        )
+        return async_paginate_keyset(self._ctx, spec, page_size=page_size)
+
+    def list_markets(
+        self,
+        *,
+        ascending: bool | None = None,
+        closed: bool | None = None,
+        clob_token_ids: str | Sequence[str] | None = None,
+        condition_ids: str | Sequence[str] | None = None,
+        cyom: bool | None = None,
+        decimalized: bool | None = None,
+        end_date_max: str | None = None,
+        end_date_min: str | None = None,
+        game_id: str | None = None,
+        ids: int | Sequence[int] | None = None,
+        include_tag: bool | None = None,
+        liquidity_num_max: float | None = None,
+        liquidity_num_min: float | None = None,
+        locale: str | None = None,
+        market_maker_addresses: str | Sequence[str] | None = None,
+        order: str | None = None,
+        question_ids: str | Sequence[str] | None = None,
+        related_tags: bool | None = None,
+        rfq_enabled: bool | None = None,
+        rewards_min_size: float | None = None,
+        slug: str | Sequence[str] | None = None,
+        sports_market_types: str | Sequence[str] | None = None,
+        start_date_max: str | None = None,
+        start_date_min: str | None = None,
+        tag_id: int | None = None,
+        tag_match: TagMatch | None = None,
+        uma_resolution_status: str | None = None,
+        volume_num_max: float | None = None,
+        volume_num_min: float | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Market]:
+        spec = _gamma_actions.list_markets_spec(
+            ascending=ascending,
+            closed=closed,
+            clob_token_ids=clob_token_ids,
+            condition_ids=condition_ids,
+            cyom=cyom,
+            decimalized=decimalized,
+            end_date_max=end_date_max,
+            end_date_min=end_date_min,
+            game_id=game_id,
+            ids=ids,
+            include_tag=include_tag,
+            liquidity_num_max=liquidity_num_max,
+            liquidity_num_min=liquidity_num_min,
+            locale=locale,
+            market_maker_addresses=market_maker_addresses,
+            order=order,
+            question_ids=question_ids,
+            related_tags=related_tags,
+            rfq_enabled=rfq_enabled,
+            rewards_min_size=rewards_min_size,
+            slug=slug,
+            sports_market_types=sports_market_types,
+            start_date_max=start_date_max,
+            start_date_min=start_date_min,
+            tag_id=tag_id,
+            tag_match=tag_match,
+            uma_resolution_status=uma_resolution_status,
+            volume_num_max=volume_num_max,
+            volume_num_min=volume_num_min,
+        )
+        return async_paginate_keyset(self._ctx, spec, page_size=page_size)
+
+    def list_series(
+        self,
+        *,
+        ascending: bool | None = None,
+        categories_ids: int | Sequence[int] | None = None,
+        categories_labels: str | Sequence[str] | None = None,
+        closed: bool | None = None,
+        exclude_events: bool | None = None,
+        include_chat: bool | None = None,
+        locale: str | None = None,
+        order: str | None = None,
+        recurrence: Recurrence | None = None,
+        slug: str | Sequence[str] | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Series]:
+        spec = _gamma_actions.list_series_spec(
+            ascending=ascending,
+            categories_ids=categories_ids,
+            categories_labels=categories_labels,
+            closed=closed,
+            exclude_events=exclude_events,
+            include_chat=include_chat,
+            locale=locale,
+            order=order,
+            recurrence=recurrence,
+            slug=slug,
+        )
+        return async_paginate_offset(self._ctx, spec, page_size=page_size)
+
+    def list_tags(
+        self,
+        *,
+        ascending: bool | None = None,
+        include_chat: bool | None = None,
+        include_template: bool | None = None,
+        is_carousel: bool | None = None,
+        locale: str | None = None,
+        order: str | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Tag]:
+        spec = _gamma_actions.list_tags_spec(
+            ascending=ascending,
+            include_chat=include_chat,
+            include_template=include_template,
+            is_carousel=is_carousel,
+            locale=locale,
+            order=order,
+        )
+        return async_paginate_offset(self._ctx, spec, page_size=page_size)
+
+    def list_teams(
+        self,
+        *,
+        abbreviation: str | Sequence[str] | None = None,
+        ascending: bool | None = None,
+        league: str | Sequence[str] | None = None,
+        name: str | Sequence[str] | None = None,
+        order: str | None = None,
+        provider_ids: int | Sequence[int] | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Team]:
+        spec = _gamma_actions.list_teams_spec(
+            abbreviation=abbreviation,
+            ascending=ascending,
+            league=league,
+            name=name,
+            order=order,
+            provider_ids=provider_ids,
+        )
+        return async_paginate_offset(self._ctx, spec, page_size=page_size)
+
+    def list_comments(
+        self,
+        *,
+        parent_entity_id: str,
+        parent_entity_type: CommentParentEntityType,
+        ascending: bool | None = None,
+        get_positions: bool | None = None,
+        holders_only: bool | None = None,
+        order: str | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Comment]:
+        spec = _gamma_actions.list_comments_spec(
+            parent_entity_id=parent_entity_id,
+            parent_entity_type=parent_entity_type,
+            ascending=ascending,
+            get_positions=get_positions,
+            holders_only=holders_only,
+            order=order,
+        )
+        return async_paginate_offset(self._ctx, spec, page_size=page_size)
+
+    def list_comments_by_user_address(
+        self,
+        *,
+        address: str,
+        ascending: bool | None = None,
+        order: str | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[Comment]:
+        spec = _gamma_actions.list_comments_by_user_address_spec(
+            address=address,
+            ascending=ascending,
+            order=order,
+        )
+        return async_paginate_offset(self._ctx, spec, page_size=page_size)
+
+    async def search(
+        self,
+        *,
+        q: str,
+        ascending: bool | None = None,
+        cache: bool | None = None,
+        events_status: str | None = None,
+        events_tag: str | Sequence[str] | None = None,
+        exclude_tag_ids: int | Sequence[int] | None = None,
+        keep_closed_markets: int | None = None,
+        optimized: bool | None = None,
+        presets: str | Sequence[str] | None = None,
+        recurrence: Recurrence | None = None,
+        search_profiles: bool | None = None,
+        search_tags: bool | None = None,
+        sort: str | None = None,
+        page: int = 1,
+        page_size: int = 10,
+        cursor: str | None = None,
+    ) -> SearchResults:
+        spec = _gamma_actions.search_spec(
+            q=q,
+            ascending=ascending,
+            cache=cache,
+            events_status=events_status,
+            events_tag=events_tag,
+            exclude_tag_ids=exclude_tag_ids,
+            keep_closed_markets=keep_closed_markets,
+            optimized=optimized,
+            presets=presets,
+            recurrence=recurrence,
+            search_profiles=search_profiles,
+            search_tags=search_tags,
+            sort=sort,
+        )
+
+        if cursor is not None:
+            page, page_size = decode_page_cursor(
+                cursor,
+                expected_service=spec.service,
+                expected_path=spec.path,
+                expected_base_params=spec.base_params,
+            )
+        if page < 1:
+            raise UserInputError("page must be a positive integer.")
+        if page_size < 1:
+            raise UserInputError("page_size must be a positive integer.")
+
+        params: dict[str, QueryParamValue] = {
+            **(spec.base_params or {}),
+            "page": page,
+            "limit_per_type": page_size,
+        }
+        payload = await self._ctx.gamma.get_json(spec.path, params=params)
+        results = spec.parse(payload)
+
+        if not results.has_more:
+            return results
+        next_cursor = encode_page_cursor(
+            service=spec.service,
+            path=spec.path,
+            base_params=spec.base_params,
+            page=page + 1,
+            page_size=page_size,
+        )
+        return results.model_copy(update={"next_cursor": next_cursor})

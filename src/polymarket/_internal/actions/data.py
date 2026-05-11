@@ -91,7 +91,7 @@ def get_event_live_volumes_spec(*, id: str) -> RequestSpec[tuple[LiveVolume, ...
 
 
 def get_open_interests_spec(
-    *, market: Sequence[str] | None = None
+    *, market: str | Sequence[str] | None = None
 ) -> RequestSpec[tuple[OpenInterest, ...]]:
     return RequestSpec(
         service="data",
@@ -126,7 +126,7 @@ def get_market_holders_spec(
 def get_portfolio_values_spec(
     *,
     user: str,
-    market: Sequence[str] | None = None,
+    market: str | Sequence[str] | None = None,
 ) -> RequestSpec[tuple[PortfolioValue, ...]]:
     if not user:
         raise UserInputError("user is required.")
@@ -170,8 +170,8 @@ def get_builder_volumes_spec(
 def list_positions_spec(
     *,
     user: str,
-    market: Sequence[str] | None = None,
-    event_id: Sequence[int] | None = None,
+    market: str | Sequence[str] | None = None,
+    event_id: int | Sequence[int] | None = None,
     size_threshold: float | None = None,
     redeemable: bool | None = None,
     mergeable: bool | None = None,
@@ -211,8 +211,8 @@ def list_positions_spec(
 def list_closed_positions_spec(
     *,
     user: str,
-    market: Sequence[str] | None = None,
-    event_id: Sequence[int] | None = None,
+    market: str | Sequence[str] | None = None,
+    event_id: int | Sequence[int] | None = None,
     title: str | None = None,
     sort_by: ClosedPositionSortBy | None = None,
     sort_direction: SortDirection | None = None,
@@ -278,8 +278,8 @@ def list_trades_spec(
     taker_only: bool | None = None,
     filter_type: TradeFilterType | None = None,
     filter_amount: float | None = None,
-    market: Sequence[str] | None = None,
-    event_id: Sequence[int] | None = None,
+    market: str | Sequence[str] | None = None,
+    event_id: int | Sequence[int] | None = None,
     user: str | None = None,
     side: TradeSide | None = None,
 ) -> OffsetPaginatedSpec[Trade]:
@@ -311,8 +311,8 @@ def list_trades_spec(
 def list_activity_spec(
     *,
     user: str,
-    market: Sequence[str] | None = None,
-    event_id: Sequence[int] | None = None,
+    market: str | Sequence[str] | None = None,
+    event_id: int | Sequence[int] | None = None,
     activity_types: Sequence[ActivityTypeFilter] | None = None,
     start: int | None = None,
     end: int | None = None,

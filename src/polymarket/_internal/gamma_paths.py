@@ -30,6 +30,10 @@ def build_comment_thread_path(id: str) -> str:
     return f"/comments/{quote(require_nonempty('id', id), safe='')}"
 
 
+def build_comments_by_user_address_path(address: str) -> str:
+    return f"/comments/user_address/{quote(require_nonempty('address', address), safe='')}"
+
+
 def build_tag_path(*, id: str | None, slug: str | None) -> str:
     if (id is None) == (slug is None):
         raise UserInputError("Provide exactly one of id or slug.")

@@ -5,9 +5,14 @@ import json
 import pytest
 
 from polymarket._internal.pagination import (
+    compute_keyset_page,
     compute_offset_page,
+    decode_keyset_cursor,
     decode_offset_cursor,
+    decode_page_cursor,
+    encode_keyset_cursor,
     encode_offset_cursor,
+    encode_page_cursor,
     fingerprint_query,
 )
 from polymarket.errors import UnexpectedResponseError, UserInputError
@@ -408,3 +413,215 @@ def test_async_paginator_from_cursor_none_yields_empty() -> None:
     assert page.items == ()
     assert page.has_more is False
     assert fetch_count[0] == 0
+
+
+def test_keyset_cursor_round_trip() -> None:
+    cursor = encode_keyset_cursor(
+        service="gamma",
+        path="/events/keyset",
+        base_params={"closed": False},
+        server_cursor="opaque-server-token",
+    )
+    assert (
+        decode_keyset_cursor(
+            cursor,
+            expected_service="gamma",
+            expected_path="/events/keyset",
+            expected_base_params={"closed": False},
+        )
+        == "opaque-server-token"
+    )
+
+
+def test_keyset_cursor_format_is_stable() -> None:
+    cursor = encode_keyset_cursor(
+        service="gamma",
+        path="/markets/keyset",
+        base_params={"closed": False},
+        server_cursor="ABC",
+    )
+    raw = base64.b64decode(cursor).decode("utf-8")
+    fp = fingerprint_query({"closed": False})
+    assert raw == f'{{"f":"{fp}","k":"ABC","p":"/markets/keyset","svc":"gamma","v":1}}'
+
+
+def test_keyset_decode_rejects_path_mismatch() -> None:
+    cursor = encode_keyset_cursor(
+        service="gamma",
+        path="/events/keyset",
+        base_params={"closed": False},
+        server_cursor="X",
+    )
+    with pytest.raises(UserInputError, match="does not belong to this endpoint"):
+        decode_keyset_cursor(
+            cursor,
+            expected_service="gamma",
+            expected_path="/markets/keyset",
+            expected_base_params={"closed": False},
+        )
+
+
+def test_keyset_decode_rejects_service_mismatch() -> None:
+    cursor = encode_keyset_cursor(
+        service="gamma",
+        path="/events/keyset",
+        base_params={"closed": False},
+        server_cursor="X",
+    )
+    with pytest.raises(UserInputError, match="does not belong to this service"):
+        decode_keyset_cursor(
+            cursor,
+            expected_service="data",
+            expected_path="/events/keyset",
+            expected_base_params={"closed": False},
+        )
+
+
+def test_keyset_decode_rejects_query_mismatch() -> None:
+    cursor = encode_keyset_cursor(
+        service="gamma",
+        path="/events/keyset",
+        base_params={"closed": False},
+        server_cursor="X",
+    )
+    with pytest.raises(UserInputError, match="different query parameters"):
+        decode_keyset_cursor(
+            cursor,
+            expected_service="gamma",
+            expected_path="/events/keyset",
+            expected_base_params={"closed": True},
+        )
+
+
+def test_keyset_decode_rejects_malformed() -> None:
+    with pytest.raises(UserInputError, match="Invalid pagination cursor"):
+        decode_keyset_cursor(
+            "not-base64!!",
+            expected_service="gamma",
+            expected_path="/events/keyset",
+            expected_base_params=None,
+        )
+
+
+def test_keyset_decode_rejects_empty_server_cursor() -> None:
+    payload = json.dumps(
+        {
+            "v": 1,
+            "svc": "gamma",
+            "p": "/events/keyset",
+            "f": fingerprint_query(None),
+            "k": "",
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    cursor = base64.b64encode(payload.encode("utf-8")).decode("ascii")
+    with pytest.raises(UserInputError, match="Invalid pagination cursor"):
+        decode_keyset_cursor(
+            cursor,
+            expected_service="gamma",
+            expected_path="/events/keyset",
+            expected_base_params=None,
+        )
+
+
+def test_encode_keyset_rejects_empty_inputs() -> None:
+    with pytest.raises(UserInputError, match="path"):
+        encode_keyset_cursor(service="gamma", path="", base_params=None, server_cursor="X")
+    with pytest.raises(UserInputError, match="server_cursor"):
+        encode_keyset_cursor(service="gamma", path="/x", base_params=None, server_cursor="")
+
+
+def test_compute_keyset_page_with_more() -> None:
+    page = compute_keyset_page(
+        service="gamma",
+        path="/events/keyset",
+        base_params={"closed": False},
+        items=(1, 2, 3),
+        server_next_cursor="next-token",
+    )
+    assert page.items == (1, 2, 3)
+    assert page.has_more is True
+    assert page.next_cursor is not None
+    assert (
+        decode_keyset_cursor(
+            page.next_cursor,
+            expected_service="gamma",
+            expected_path="/events/keyset",
+            expected_base_params={"closed": False},
+        )
+        == "next-token"
+    )
+
+
+def test_compute_keyset_page_terminal() -> None:
+    page = compute_keyset_page(
+        service="gamma",
+        path="/events/keyset",
+        base_params=None,
+        items=(1, 2),
+        server_next_cursor=None,
+    )
+    assert page.items == (1, 2)
+    assert page.has_more is False
+    assert page.next_cursor is None
+
+
+def test_page_cursor_round_trip() -> None:
+    cursor = encode_page_cursor(
+        service="gamma",
+        path="/public-search",
+        base_params={"q": "x"},
+        page=2,
+        page_size=10,
+    )
+    assert decode_page_cursor(
+        cursor,
+        expected_service="gamma",
+        expected_path="/public-search",
+        expected_base_params={"q": "x"},
+    ) == (2, 10)
+
+
+def test_page_cursor_rejects_invalid_page() -> None:
+    with pytest.raises(UserInputError, match="page must be a positive integer"):
+        encode_page_cursor(
+            service="gamma", path="/public-search", base_params=None, page=0, page_size=10
+        )
+
+
+def test_page_cursor_rejects_invalid_page_size() -> None:
+    with pytest.raises(UserInputError, match="page_size must be a positive integer"):
+        encode_page_cursor(
+            service="gamma", path="/public-search", base_params=None, page=1, page_size=0
+        )
+
+
+def test_page_decode_rejects_path_mismatch() -> None:
+    cursor = encode_page_cursor(
+        service="gamma", path="/public-search", base_params=None, page=1, page_size=10
+    )
+    with pytest.raises(UserInputError, match="does not belong to this endpoint"):
+        decode_page_cursor(
+            cursor,
+            expected_service="gamma",
+            expected_path="/other",
+            expected_base_params=None,
+        )
+
+
+def test_page_decode_rejects_query_mismatch() -> None:
+    cursor = encode_page_cursor(
+        service="gamma",
+        path="/public-search",
+        base_params={"q": "x"},
+        page=1,
+        page_size=10,
+    )
+    with pytest.raises(UserInputError, match="different query parameters"):
+        decode_page_cursor(
+            cursor,
+            expected_service="gamma",
+            expected_path="/public-search",
+            expected_base_params={"q": "y"},
+        )

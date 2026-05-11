@@ -2,6 +2,7 @@ import pytest
 
 from polymarket._internal.gamma_paths import (
     build_comment_thread_path,
+    build_comments_by_user_address_path,
     build_event_path,
     build_event_tags_path,
     build_market_path,
@@ -211,3 +212,16 @@ def test_build_comment_thread_path_builds_path() -> None:
 def test_build_comment_thread_path_rejects_empty_id() -> None:
     with pytest.raises(UserInputError, match="id is required"):
         build_comment_thread_path("")
+
+
+def test_build_comments_by_user_address_path_builds_path() -> None:
+    assert build_comments_by_user_address_path("0xUSER") == "/comments/user_address/0xUSER"
+
+
+def test_build_comments_by_user_address_path_url_encodes() -> None:
+    assert build_comments_by_user_address_path("a b") == "/comments/user_address/a%20b"
+
+
+def test_build_comments_by_user_address_path_rejects_empty_address() -> None:
+    with pytest.raises(UserInputError, match="address is required"):
+        build_comments_by_user_address_path("")

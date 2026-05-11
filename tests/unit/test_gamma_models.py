@@ -654,6 +654,170 @@ def test_sports_market_types_handles_missing_field() -> None:
     assert types.market_types is None
 
 
+def test_profile_renames_proxy_wallet() -> None:
+    from polymarket.models.gamma import Profile
+
+    profile = Profile.parse_response(
+        {
+            "id": "P-1",
+            "name": "Alice",
+            "proxyWallet": "0xABC",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "verifiedBadge": True,
+        }
+    )
+
+    assert profile.id == "P-1"
+    assert profile.name == "Alice"
+    assert profile.wallet == "0xABC"
+    assert profile.created_at == datetime(2026, 1, 1, tzinfo=UTC)
+    assert profile.verified_badge is True
+
+
+def test_profile_handles_missing_wallet() -> None:
+    from polymarket.models.gamma import Profile
+
+    profile = Profile.parse_response({"name": "Bob"})
+
+    assert profile.name == "Bob"
+    assert profile.wallet is None
+
+
+def test_search_tag_parses_event_count() -> None:
+    from polymarket.models.gamma import SearchTag
+
+    tag = SearchTag.parse_response(
+        {"id": "TAG-1", "label": "Politics", "slug": "politics", "event_count": 42}
+    )
+
+    assert tag.id == "TAG-1"
+    assert tag.label == "Politics"
+    assert tag.event_count == 42
+
+
+def test_search_results_flattens_pagination() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    results = SearchResults.parse_response(
+        {
+            "events": [{"id": "E-1"}],
+            "tags": [{"id": "T-1", "label": "T", "slug": "t", "event_count": 1}],
+            "profiles": [{"id": "P-1", "name": "Alice"}],
+            "pagination": {"hasMore": True, "totalResults": 100},
+        }
+    )
+
+    assert len(results.events) == 1
+    assert len(results.tags) == 1
+    assert len(results.profiles) == 1
+    assert results.has_more is True
+    assert results.total_count == 100
+    assert results.next_cursor is None
+
+
+def test_search_results_handles_missing_pagination() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    results = SearchResults.parse_response({"events": [], "tags": [], "profiles": []})
+
+    assert results.events == ()
+    assert results.tags == ()
+    assert results.profiles == ()
+    assert results.has_more is False
+    assert results.total_count is None
+    assert results.next_cursor is None
+
+
+def test_search_results_handles_completely_empty_response() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    results = SearchResults.parse_response({})
+
+    assert results.events == ()
+    assert results.tags == ()
+    assert results.profiles == ()
+    assert results.has_more is False
+
+
+def test_search_results_accepts_null_arrays_as_empty() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    results = SearchResults.parse_response(
+        {"events": None, "tags": None, "profiles": None, "pagination": None}
+    )
+
+    assert results.events == ()
+    assert results.tags == ()
+    assert results.profiles == ()
+    assert results.has_more is False
+    assert results.total_count is None
+
+
+def test_search_results_rejects_non_list_events() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    with pytest.raises(UnexpectedResponseError):
+        SearchResults.parse_response({"events": ""})
+
+
+def test_search_results_rejects_integer_events() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    with pytest.raises(UnexpectedResponseError):
+        SearchResults.parse_response({"events": 0})
+
+
+def test_search_results_rejects_non_object_pagination() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    with pytest.raises(UnexpectedResponseError):
+        SearchResults.parse_response({"pagination": "terminal"})
+
+
+def test_search_results_rejects_string_has_more() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    with pytest.raises(UnexpectedResponseError):
+        SearchResults.parse_response({"pagination": {"hasMore": "false"}})
+
+
+def test_search_results_rejects_int_has_more() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    with pytest.raises(UnexpectedResponseError):
+        SearchResults.parse_response({"pagination": {"hasMore": 1}})
+
+
+def test_search_results_accepts_null_has_more_as_false() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    results = SearchResults.parse_response({"pagination": {"hasMore": None}})
+
+    assert results.has_more is False
+
+
+def test_search_results_rejects_bool_total_results() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    with pytest.raises(UnexpectedResponseError):
+        SearchResults.parse_response({"pagination": {"totalResults": True}})
+
+
+def test_search_results_rejects_string_total_results() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    with pytest.raises(UnexpectedResponseError):
+        SearchResults.parse_response({"pagination": {"totalResults": "10"}})
+
+
+def test_search_results_ignores_server_next_cursor_field() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    results = SearchResults.parse_response({"events": [], "next_cursor": "should-be-ignored"})
+
+    assert results.next_cursor is None
+
+
 def test_tag_reference_parse_response_list_rejects_non_list() -> None:
     with pytest.raises(UnexpectedResponseError):
         TagReference.parse_response_list({"not": "a list"})

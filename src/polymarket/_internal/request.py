@@ -5,7 +5,8 @@ from typing import Generic, Literal, TypeVar
 Service = Literal["gamma", "data"]
 Method = Literal["GET"]
 
-QueryParamValue = str | int | float | bool
+QueryParamScalar = str | int | float | bool
+QueryParamValue = QueryParamScalar | tuple[QueryParamScalar, ...]
 
 T = TypeVar("T")
 
@@ -27,9 +28,48 @@ class OffsetPaginatedSpec(Generic[T]):
     base_params: Mapping[str, QueryParamValue] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class KeysetPaginatedSpec(Generic[T]):
+    """A spec for endpoints that paginate via a server-issued opaque cursor.
+
+    The server returns `next_cursor` (opaque string) which is sent back via the
+    `after_cursor` query param to fetch the next page. We wrap the server cursor
+    in our own envelope (path + query fingerprint) for replay protection.
+    """
+
+    service: Service
+    path: str
+    parse_page: Callable[[object], "KeysetPagePayload[T]"]
+    base_params: Mapping[str, QueryParamValue] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class KeysetPagePayload(Generic[T]):
+    items: tuple[T, ...]
+    server_next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PageBasedSpec(Generic[T]):
+    """A spec for endpoints that paginate via explicit 1-indexed page number.
+
+    Used for the `search` endpoint; not exposed as a Paginator, but kept here
+    for symmetry with the other paginated specs.
+    """
+
+    service: Service
+    path: str
+    parse: Callable[[object], T]
+    base_params: Mapping[str, QueryParamValue] | None = None
+
+
 __all__ = [
+    "KeysetPagePayload",
+    "KeysetPaginatedSpec",
     "Method",
     "OffsetPaginatedSpec",
+    "PageBasedSpec",
+    "QueryParamScalar",
     "QueryParamValue",
     "RequestSpec",
     "Service",

@@ -3,8 +3,19 @@ from __future__ import annotations
 from typing import TypeVar, assert_never
 
 from polymarket._internal.context import AsyncClientContext, SyncClientContext
-from polymarket._internal.pagination import compute_offset_page, decode_offset_cursor
-from polymarket._internal.request import OffsetPaginatedSpec, RequestSpec, Service
+from polymarket._internal.pagination import (
+    compute_keyset_page,
+    compute_offset_page,
+    decode_keyset_cursor,
+    decode_offset_cursor,
+)
+from polymarket._internal.request import (
+    KeysetPaginatedSpec,
+    OffsetPaginatedSpec,
+    QueryParamValue,
+    RequestSpec,
+    Service,
+)
 from polymarket.clients._transport import AsyncTransport, SyncTransport
 from polymarket.errors import UserInputError
 from polymarket.pagination import AsyncPaginator, Page, Paginator
@@ -74,7 +85,7 @@ def sync_paginate_offset(
             if cursor is not None
             else (0, page_size)
         )
-        params: dict[str, str | int | float | bool] = {
+        params: dict[str, QueryParamValue] = {
             **(spec.base_params or {}),
             "limit": effective_size + 1,
             "offset": offset,
@@ -115,7 +126,7 @@ def async_paginate_offset(
             if cursor is not None
             else (0, page_size)
         )
-        params: dict[str, str | int | float | bool] = {
+        params: dict[str, QueryParamValue] = {
             **(spec.base_params or {}),
             "limit": effective_size + 1,
             "offset": offset,
@@ -134,9 +145,93 @@ def async_paginate_offset(
     return AsyncPaginator(fetch=fetch, initial_cursor=initial_cursor)
 
 
+def sync_paginate_keyset(
+    ctx: SyncClientContext,
+    spec: KeysetPaginatedSpec[T],
+    *,
+    page_size: int,
+    initial_cursor: str | None = None,
+) -> Paginator[T]:
+    if page_size < 1:
+        raise UserInputError("page_size must be a positive integer.")
+    transport = _sync_transport_for(ctx, spec.service)
+
+    def fetch(cursor: str | None) -> Page[T]:
+        server_cursor = (
+            decode_keyset_cursor(
+                cursor,
+                expected_service=spec.service,
+                expected_path=spec.path,
+                expected_base_params=spec.base_params,
+            )
+            if cursor is not None
+            else None
+        )
+        params: dict[str, QueryParamValue] = {
+            **(spec.base_params or {}),
+            "limit": page_size,
+        }
+        if server_cursor is not None:
+            params["after_cursor"] = server_cursor
+        payload = transport.get_json(spec.path, params=params)
+        keyset_page = spec.parse_page(payload)
+        return compute_keyset_page(
+            service=spec.service,
+            path=spec.path,
+            base_params=spec.base_params,
+            items=keyset_page.items,
+            server_next_cursor=keyset_page.server_next_cursor,
+        )
+
+    return Paginator(fetch=fetch, initial_cursor=initial_cursor)
+
+
+def async_paginate_keyset(
+    ctx: AsyncClientContext,
+    spec: KeysetPaginatedSpec[T],
+    *,
+    page_size: int,
+    initial_cursor: str | None = None,
+) -> AsyncPaginator[T]:
+    if page_size < 1:
+        raise UserInputError("page_size must be a positive integer.")
+    transport = _async_transport_for(ctx, spec.service)
+
+    async def fetch(cursor: str | None) -> Page[T]:
+        server_cursor = (
+            decode_keyset_cursor(
+                cursor,
+                expected_service=spec.service,
+                expected_path=spec.path,
+                expected_base_params=spec.base_params,
+            )
+            if cursor is not None
+            else None
+        )
+        params: dict[str, QueryParamValue] = {
+            **(spec.base_params or {}),
+            "limit": page_size,
+        }
+        if server_cursor is not None:
+            params["after_cursor"] = server_cursor
+        payload = await transport.get_json(spec.path, params=params)
+        keyset_page = spec.parse_page(payload)
+        return compute_keyset_page(
+            service=spec.service,
+            path=spec.path,
+            base_params=spec.base_params,
+            items=keyset_page.items,
+            server_next_cursor=keyset_page.server_next_cursor,
+        )
+
+    return AsyncPaginator(fetch=fetch, initial_cursor=initial_cursor)
+
+
 __all__ = [
     "async_dispatch",
+    "async_paginate_keyset",
     "async_paginate_offset",
     "sync_dispatch",
+    "sync_paginate_keyset",
     "sync_paginate_offset",
 ]
