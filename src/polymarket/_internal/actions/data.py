@@ -181,7 +181,7 @@ def list_positions_spec(
 ) -> OffsetPaginatedSpec[Position]:
     if not user:
         raise UserInputError("user is required.")
-    if market and event_id:
+    if market is not None and event_id is not None:
         raise UserInputError("Provide market or event_id, not both.")
     _check_enum("sort_by", sort_by, _POSITION_SORT_BY)
     _check_enum("sort_direction", sort_direction, _SORT_DIRECTION)
@@ -219,7 +219,7 @@ def list_closed_positions_spec(
 ) -> OffsetPaginatedSpec[ClosedPosition]:
     if not user:
         raise UserInputError("user is required.")
-    if market and event_id:
+    if market is not None and event_id is not None:
         raise UserInputError("Provide market or event_id, not both.")
     _check_enum("sort_by", sort_by, _CLOSED_POSITION_SORT_BY)
     _check_enum("sort_direction", sort_direction, _SORT_DIRECTION)
@@ -283,7 +283,7 @@ def list_trades_spec(
     user: str | None = None,
     side: TradeSide | None = None,
 ) -> OffsetPaginatedSpec[Trade]:
-    if market and event_id:
+    if market is not None and event_id is not None:
         raise UserInputError("Provide market or event_id, not both.")
     if (filter_type is None) != (filter_amount is None):
         raise UserInputError("filter_type and filter_amount must be provided together.")
@@ -322,7 +322,7 @@ def list_activity_spec(
 ) -> OffsetPaginatedSpec[Activity]:
     if not user:
         raise UserInputError("user is required.")
-    if market and event_id:
+    if market is not None and event_id is not None:
         raise UserInputError("Provide market or event_id, not both.")
     _check_enum("sort_by", sort_by, _ACTIVITY_SORT_BY)
     _check_enum("sort_direction", sort_direction, _SORT_DIRECTION)
