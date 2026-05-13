@@ -26,7 +26,7 @@ from polymarket._internal.actions.gamma import (
     Recurrence,
     TagMatch,
 )
-from polymarket._internal.context import AsyncClientContext
+from polymarket._internal.context import AsyncSecureClientContext
 from polymarket._internal.dispatch import (
     async_dispatch,
     async_paginate_keyset,
@@ -93,13 +93,12 @@ class AsyncSecureClient:
         except (ValueError, TypeError) as error:
             raise UserInputError(f"Invalid private_key: {error}") from error
 
-        self._ctx = AsyncClientContext(
+        self._ctx = AsyncSecureClientContext(
             environment=environment,
             gamma=AsyncTransport(base_url=environment.gamma_url, logger=logger),
             data=AsyncTransport(base_url=environment.data_url, logger=logger),
             signer=signer,
         )
-        self._signer = signer
 
     @classmethod
     async def create(
@@ -130,7 +129,7 @@ class AsyncSecureClient:
 
     @property
     def wallet(self) -> str:
-        return self._signer.address
+        return self._ctx.signer.address
 
     async def __aenter__(self) -> Self:
         return self
@@ -150,7 +149,7 @@ class AsyncSecureClient:
             await self._ctx.data.close()
 
     def _user_or_signer(self, user: str | None) -> str:
-        return self._signer.address if user is None else user
+        return self._ctx.signer.address if user is None else user
 
     async def get_market(
         self,

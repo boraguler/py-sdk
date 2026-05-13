@@ -26,7 +26,7 @@ from polymarket._internal.actions.gamma import (
     Recurrence,
     TagMatch,
 )
-from polymarket._internal.context import SyncClientContext
+from polymarket._internal.context import SyncSecureClientContext
 from polymarket._internal.dispatch import (
     sync_dispatch,
     sync_paginate_keyset,
@@ -93,13 +93,12 @@ class SecureClient:
         except (ValueError, TypeError) as error:
             raise UserInputError(f"Invalid private_key: {error}") from error
 
-        self._ctx = SyncClientContext(
+        self._ctx = SyncSecureClientContext(
             environment=environment,
             gamma=SyncTransport(base_url=environment.gamma_url, logger=logger),
             data=SyncTransport(base_url=environment.data_url, logger=logger),
             signer=signer,
         )
-        self._signer = signer
 
     @classmethod
     def create(
@@ -130,7 +129,7 @@ class SecureClient:
 
     @property
     def wallet(self) -> str:
-        return self._signer.address
+        return self._ctx.signer.address
 
     def __enter__(self) -> Self:
         return self
@@ -151,7 +150,7 @@ class SecureClient:
             self._ctx.data.close()
 
     def _user_or_signer(self, user: str | None) -> str:
-        return self._signer.address if user is None else user
+        return self._ctx.signer.address if user is None else user
 
     def get_market(
         self,
