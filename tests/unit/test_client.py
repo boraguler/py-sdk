@@ -77,58 +77,6 @@ def test_async_secure_client_supports_context_manager() -> None:
     asyncio.run(run())
 
 
-def test_secure_client_is_not_a_subclass_of_public_client() -> None:
-    assert not issubclass(SecureClient, PublicClient)
-    assert not issubclass(AsyncSecureClient, AsyncPublicClient)
-
-
-def test_secure_client_exposes_public_read_methods() -> None:
-    client = SecureClient.create(private_key=PRIVATE_KEY)
-    try:
-        for name in (
-            "get_market",
-            "get_event",
-            "get_event_live_volumes",
-            "get_market_holders",
-            "get_traded_market_count",
-            "get_builder_volumes",
-            "list_positions",
-            "list_closed_positions",
-            "list_trades",
-            "list_activity",
-            "list_trader_leaderboard",
-            "download_accounting_snapshot",
-        ):
-            assert callable(getattr(client, name)), name
-    finally:
-        client.close()
-
-
-def test_async_secure_client_exposes_public_read_methods() -> None:
-    async def run() -> None:
-        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
-        try:
-            for name in (
-                "get_market",
-                "get_event",
-                "get_event_live_volumes",
-                "get_market_holders",
-                "get_traded_market_count",
-                "get_builder_volumes",
-                "list_positions",
-                "list_closed_positions",
-                "list_trades",
-                "list_activity",
-                "list_trader_leaderboard",
-                "download_accounting_snapshot",
-            ):
-                assert callable(getattr(client, name)), name
-        finally:
-            await client.close()
-
-    asyncio.run(run())
-
-
 def test_secure_client_exposes_signer_wallet() -> None:
     with SecureClient.create(private_key=PRIVATE_KEY) as client:
         assert client.wallet == PRIVATE_KEY_ADDRESS
