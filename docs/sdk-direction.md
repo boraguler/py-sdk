@@ -73,3 +73,12 @@ from polymarket.models import MarketId
 These types are implemented with `typing.NewType`, so returned SDK objects can show meaningful field types without adding runtime wrapper objects. A returned `MarketId` is still usable where a `str` is accepted.
 
 We intentionally do not mark every primitive value. Marked types should be reserved for key identifiers and domain concepts where the type name improves readability or reduces accidental mixups. Public method inputs should remain developer-friendly and may accept plain primitives, while returned models can use marked types to communicate domain meaning.
+
+## String-set enums: Literal for inputs, StrEnum for outputs
+
+The SDK uses two patterns for string-set enums depending on the direction:
+
+- **Inputs** use `typing.Literal`. Users pass plain strings (`time_period="DAY"`). The type drives autocomplete and static checking without forcing users to import an enum class. The type alias is exported (e.g., `BuilderVolumeTimePeriod`) so callers can annotate their own variables when they want to.
+- **Outputs** use `enum.StrEnum`. Returned model fields surface the enum so users can compare against named members (`if status is UmaResolutionStatus.DISPUTED`) without typo risk on the right-hand side.
+
+The split is principled: inputs are write-once at the call site and benefit from string ergonomics; outputs are read-many in user logic and benefit from named members.

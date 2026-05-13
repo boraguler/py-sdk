@@ -3,8 +3,10 @@ import asyncio
 import pytest
 
 from polymarket import AsyncPublicClient, AsyncSecureClient, PublicClient, SecureClient
+from polymarket.errors import UserInputError
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+PRIVATE_KEY_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 
 
 def test_client_uses_production_by_default() -> None:
@@ -71,5 +73,34 @@ def test_async_secure_client_supports_context_manager() -> None:
         client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
         async with client:
             assert client.environment.name == "production"
+
+    asyncio.run(run())
+
+
+def test_secure_client_exposes_signer_wallet() -> None:
+    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+        assert client.wallet == PRIVATE_KEY_ADDRESS
+
+
+def test_async_secure_client_exposes_signer_wallet() -> None:
+    async def run() -> None:
+        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
+        try:
+            assert client.wallet == PRIVATE_KEY_ADDRESS
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+
+def test_secure_client_invalid_key_raises_user_input_error() -> None:
+    with pytest.raises(UserInputError, match="Invalid private_key"):
+        SecureClient.create(private_key="not-a-valid-key")
+
+
+def test_async_secure_client_invalid_key_raises_user_input_error() -> None:
+    async def run() -> None:
+        with pytest.raises(UserInputError, match="Invalid private_key"):
+            await AsyncSecureClient.create(private_key="not-a-valid-key")
 
     asyncio.run(run())

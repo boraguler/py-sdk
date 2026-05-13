@@ -1,12 +1,14 @@
-"""Internal HTTP transport helpers."""
-
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 
+from polymarket._internal.request import QueryParamValue
 from polymarket.errors import (
     RateLimitError,
     RequestRejectedError,
@@ -14,20 +16,41 @@ from polymarket.errors import (
     UnexpectedResponseError,
 )
 
-QueryParamValue = str | int | float | bool
+_DEFAULT_LIMITS = httpx.Limits(
+    max_connections=100,
+    max_keepalive_connections=20,
+    keepalive_expiry=30,
+)
+_DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=2.0)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TransportOptions:
+    limits: httpx.Limits = field(default_factory=lambda: _DEFAULT_LIMITS)
+    timeout: httpx.Timeout = field(default_factory=lambda: _DEFAULT_TIMEOUT)
+    http2: bool = True
+    event_hooks: Mapping[str, list[Any]] | None = None
 
 
 class SyncTransport:
-    """Synchronous HTTP transport with SDK error mapping."""
-
     def __init__(
         self,
         *,
         base_url: str,
-        timeout: float = 10,
+        options: TransportOptions | None = None,
+        logger: logging.Logger | None = None,
         client: httpx.Client | None = None,
     ) -> None:
-        self._client = client or httpx.Client(base_url=base_url, timeout=timeout)
+        opts = options or TransportOptions()
+        self._owns_client = client is None
+        self._client = client or httpx.Client(
+            base_url=base_url,
+            timeout=opts.timeout,
+            limits=opts.limits,
+            http2=opts.http2,
+            event_hooks=dict(opts.event_hooks) if opts.event_hooks else None,
+        )
+        self._logger = logger
 
     def get_json(
         self,
@@ -35,13 +58,21 @@ class SyncTransport:
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
     ) -> Any:
-        """GET a JSON response body."""
         response = self._request("GET", path, params=params)
         return _read_json(response)
 
+    def get_bytes(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> bytes:
+        response = self._request("GET", path, params=params)
+        return response.content
+
     def close(self) -> None:
-        """Close the underlying HTTP client."""
-        self._client.close()
+        if self._owns_client:
+            self._client.close()
 
     def _request(
         self,
@@ -50,26 +81,37 @@ class SyncTransport:
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
     ) -> httpx.Response:
+        started = time.perf_counter()
         try:
             response = self._client.request(method, path, params=_clean_params(params))
         except httpx.HTTPError as error:
+            _log_failure(self._logger, method, path, error, started)
             raise TransportError(str(error) or "Request failed") from error
 
+        _log_response(self._logger, method, path, response, started)
         _raise_for_response_status(response)
         return response
 
 
 class AsyncTransport:
-    """Asynchronous HTTP transport with SDK error mapping."""
-
     def __init__(
         self,
         *,
         base_url: str,
-        timeout: float = 10,
+        options: TransportOptions | None = None,
+        logger: logging.Logger | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=timeout)
+        opts = options or TransportOptions()
+        self._owns_client = client is None
+        self._client = client or httpx.AsyncClient(
+            base_url=base_url,
+            timeout=opts.timeout,
+            limits=opts.limits,
+            http2=opts.http2,
+            event_hooks=dict(opts.event_hooks) if opts.event_hooks else None,
+        )
+        self._logger = logger
 
     async def get_json(
         self,
@@ -77,13 +119,21 @@ class AsyncTransport:
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
     ) -> Any:
-        """GET a JSON response body."""
         response = await self._request("GET", path, params=params)
         return _read_json(response)
 
+    async def get_bytes(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> bytes:
+        response = await self._request("GET", path, params=params)
+        return response.content
+
     async def close(self) -> None:
-        """Close the underlying HTTP client."""
-        await self._client.aclose()
+        if self._owns_client:
+            await self._client.aclose()
 
     async def _request(
         self,
@@ -92,13 +142,52 @@ class AsyncTransport:
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
     ) -> httpx.Response:
+        started = time.perf_counter()
         try:
             response = await self._client.request(method, path, params=_clean_params(params))
         except httpx.HTTPError as error:
+            _log_failure(self._logger, method, path, error, started)
             raise TransportError(str(error) or "Request failed") from error
 
+        _log_response(self._logger, method, path, response, started)
         _raise_for_response_status(response)
         return response
+
+
+def _log_response(
+    logger: logging.Logger | None,
+    method: str,
+    path: str,
+    response: httpx.Response,
+    started: float,
+) -> None:
+    if logger is None or not logger.isEnabledFor(logging.DEBUG):
+        return
+    logger.debug(
+        "polymarket http %s %s -> %d in %.1fms",
+        method,
+        path,
+        response.status_code,
+        (time.perf_counter() - started) * 1000,
+    )
+
+
+def _log_failure(
+    logger: logging.Logger | None,
+    method: str,
+    path: str,
+    error: Exception,
+    started: float,
+) -> None:
+    if logger is None:
+        return
+    logger.warning(
+        "polymarket http %s %s failed in %.1fms: %s",
+        method,
+        path,
+        (time.perf_counter() - started) * 1000,
+        error,
+    )
 
 
 def _raise_for_response_status(response: httpx.Response) -> None:
