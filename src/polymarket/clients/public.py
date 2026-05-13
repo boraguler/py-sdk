@@ -3,7 +3,7 @@
 import logging
 from collections.abc import Sequence
 from types import TracebackType
-from typing import Self, TypeVar, assert_never
+from typing import Self
 
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
@@ -18,16 +18,11 @@ from polymarket._internal.actions.data import (
     TradeFilterType,
     TradeSide,
 )
-from polymarket._internal.pagination import (
-    Page,
-    Paginator,
-    compute_offset_page,
-    decode_offset_cursor,
-)
-from polymarket._internal.request import OffsetPaginatedSpec, RequestSpec, Service
-from polymarket.clients._transport import SyncTransport, TransportOptions
+from polymarket._internal.context import SyncClientContext
+from polymarket._internal.dispatch import sync_dispatch, sync_paginate_offset
+from polymarket.clients._transport import SyncTransport
 from polymarket.environments import PRODUCTION, Environment
-from polymarket.errors import RequestRejectedError, UserInputError
+from polymarket.errors import RequestRejectedError
 from polymarket.models import (
     Comment,
     Event,
@@ -59,8 +54,7 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
-
-T = TypeVar("T")
+from polymarket.pagination import Paginator
 
 
 class PublicClient:
@@ -73,24 +67,17 @@ class PublicClient:
         self,
         environment: Environment = PRODUCTION,
         *,
-        transport_options: TransportOptions | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
-        self._environment = environment
-        self._gamma = SyncTransport(
-            base_url=environment.gamma_url,
-            options=transport_options,
-            logger=logger,
-        )
-        self._data = SyncTransport(
-            base_url=environment.data_url,
-            options=transport_options,
-            logger=logger,
+        self._ctx = SyncClientContext(
+            environment=environment,
+            gamma=SyncTransport(base_url=environment.gamma_url, logger=logger),
+            data=SyncTransport(base_url=environment.data_url, logger=logger),
         )
 
     @property
     def environment(self) -> Environment:
-        return self._environment
+        return self._ctx.environment
 
     def __enter__(self) -> Self:
         return self
@@ -106,65 +93,9 @@ class PublicClient:
     def close(self) -> None:
         """Close the underlying network transports."""
         try:
-            self._gamma.close()
+            self._ctx.gamma.close()
         finally:
-            self._data.close()
-
-    def _dispatch(self, spec: RequestSpec[T]) -> T:
-        transport = self._transport_for(spec.service)
-        match spec.method:
-            case "GET":
-                payload = transport.get_json(spec.path, params=spec.params)
-            case _ as unreachable:
-                assert_never(unreachable)
-        return spec.parse(payload)
-
-    def _paginate_offset(
-        self,
-        spec: OffsetPaginatedSpec[T],
-        *,
-        page_size: int,
-        initial_cursor: str | None = None,
-    ) -> Paginator[T]:
-        if page_size < 1:
-            raise UserInputError("page_size must be a positive integer.")
-        transport = self._transport_for(spec.service)
-
-        def fetch(cursor: str | None) -> Page[T]:
-            offset, effective_size = (
-                decode_offset_cursor(
-                    cursor,
-                    expected_path=spec.path,
-                    expected_base_params=spec.base_params,
-                )
-                if cursor is not None
-                else (0, page_size)
-            )
-            params: dict[str, str | int | float | bool] = {
-                **(spec.base_params or {}),
-                "limit": effective_size + 1,
-                "offset": offset,
-            }
-            payload = transport.get_json(spec.path, params=params)
-            items = spec.parse_items(payload)
-            return compute_offset_page(
-                path=spec.path,
-                base_params=spec.base_params,
-                offset=offset,
-                page_size=effective_size,
-                items=items,
-            )
-
-        return Paginator(fetch=fetch, initial_cursor=initial_cursor)
-
-    def _transport_for(self, service: Service) -> SyncTransport:
-        match service:
-            case "gamma":
-                return self._gamma
-            case "data":
-                return self._data
-            case _ as unreachable:
-                assert_never(unreachable)
+            self._ctx.data.close()
 
     def get_market(
         self,
@@ -176,15 +107,16 @@ class PublicClient:
         locale: str | None = None,
     ) -> Market:
         """Get a market."""
-        return self._dispatch(
+        return sync_dispatch(
+            self._ctx,
             _gamma_actions.get_market_spec(
                 id=id, slug=slug, url=url, include_tag=include_tag, locale=locale
-            )
+            ),
         )
 
     def get_market_tags(self, id: str) -> tuple[TagReference, ...]:
         """Get a market's tags."""
-        return self._dispatch(_gamma_actions.get_market_tags_spec(id))
+        return sync_dispatch(self._ctx, _gamma_actions.get_market_tags_spec(id))
 
     def get_event(
         self,
@@ -198,7 +130,8 @@ class PublicClient:
         locale: str | None = None,
     ) -> Event:
         """Get an event."""
-        return self._dispatch(
+        return sync_dispatch(
+            self._ctx,
             _gamma_actions.get_event_spec(
                 id=id,
                 slug=slug,
@@ -207,12 +140,12 @@ class PublicClient:
                 include_chat=include_chat,
                 include_template=include_template,
                 locale=locale,
-            )
+            ),
         )
 
     def get_event_tags(self, id: str) -> tuple[TagReference, ...]:
         """Get an event's tags."""
-        return self._dispatch(_gamma_actions.get_event_tags_spec(id))
+        return sync_dispatch(self._ctx, _gamma_actions.get_event_tags_spec(id))
 
     def get_series(
         self,
@@ -222,8 +155,9 @@ class PublicClient:
         locale: str | None = None,
     ) -> Series:
         """Get a series."""
-        return self._dispatch(
-            _gamma_actions.get_series_spec(id, include_chat=include_chat, locale=locale)
+        return sync_dispatch(
+            self._ctx,
+            _gamma_actions.get_series_spec(id, include_chat=include_chat, locale=locale),
         )
 
     def get_tag(
@@ -236,14 +170,15 @@ class PublicClient:
         locale: str | None = None,
     ) -> Tag:
         """Get a tag."""
-        return self._dispatch(
+        return sync_dispatch(
+            self._ctx,
             _gamma_actions.get_tag_spec(
                 id=id,
                 slug=slug,
                 include_chat=include_chat,
                 include_template=include_template,
                 locale=locale,
-            )
+            ),
         )
 
     def get_related_tags(
@@ -255,10 +190,11 @@ class PublicClient:
         status: str | None = None,
     ) -> tuple[RelatedTag, ...]:
         """Get related tag relationships."""
-        return self._dispatch(
+        return sync_dispatch(
+            self._ctx,
             _gamma_actions.get_related_tags_spec(
                 id=id, slug=slug, omit_empty=omit_empty, status=status
-            )
+            ),
         )
 
     def get_related_tag_resources(
@@ -271,24 +207,25 @@ class PublicClient:
         status: str | None = None,
     ) -> tuple[Tag, ...]:
         """Get tag resources linked from related tag relationships."""
-        return self._dispatch(
+        return sync_dispatch(
+            self._ctx,
             _gamma_actions.get_related_tag_resources_spec(
                 id=id, slug=slug, locale=locale, omit_empty=omit_empty, status=status
-            )
+            ),
         )
 
     def get_sports(self) -> tuple[SportsMetadata, ...]:
         """Get available sports metadata."""
-        return self._dispatch(_gamma_actions.get_sports_spec())
+        return sync_dispatch(self._ctx, _gamma_actions.get_sports_spec())
 
     def get_sports_market_types(self) -> SportsMarketTypes:
         """Get available sports market types."""
-        return self._dispatch(_gamma_actions.get_sports_market_types_spec())
+        return sync_dispatch(self._ctx, _gamma_actions.get_sports_market_types_spec())
 
     def get_public_profile(self, address: str) -> PublicProfile | None:
         """Get a public profile by wallet address. Returns None if no profile exists."""
         try:
-            return self._dispatch(_gamma_actions.get_public_profile_spec(address))
+            return sync_dispatch(self._ctx, _gamma_actions.get_public_profile_spec(address))
         except RequestRejectedError as error:
             if error.status == 404:
                 return None
@@ -298,17 +235,18 @@ class PublicClient:
         self, id: str, *, get_positions: bool | None = None
     ) -> tuple[Comment, ...]:
         """Get a comment thread by comment ID."""
-        return self._dispatch(
-            _gamma_actions.get_comment_thread_spec(id, get_positions=get_positions)
+        return sync_dispatch(
+            self._ctx,
+            _gamma_actions.get_comment_thread_spec(id, get_positions=get_positions),
         )
 
     def get_event_live_volumes(self, *, id: str) -> tuple[LiveVolume, ...]:
-        return self._dispatch(_data_actions.get_event_live_volumes_spec(id=id))
+        return sync_dispatch(self._ctx, _data_actions.get_event_live_volumes_spec(id=id))
 
     def get_open_interests(
         self, *, market: Sequence[str] | None = None
     ) -> tuple[OpenInterest, ...]:
-        return self._dispatch(_data_actions.get_open_interests_spec(market=market))
+        return sync_dispatch(self._ctx, _data_actions.get_open_interests_spec(market=market))
 
     def get_market_holders(
         self,
@@ -317,24 +255,29 @@ class PublicClient:
         limit: int | None = None,
         min_balance: int | None = None,
     ) -> tuple[MetaHolder, ...]:
-        return self._dispatch(
+        return sync_dispatch(
+            self._ctx,
             _data_actions.get_market_holders_spec(
                 market=market, limit=limit, min_balance=min_balance
-            )
+            ),
         )
 
     def get_portfolio_values(
         self, *, user: str, market: Sequence[str] | None = None
     ) -> tuple[PortfolioValue, ...]:
-        return self._dispatch(_data_actions.get_portfolio_values_spec(user=user, market=market))
+        return sync_dispatch(
+            self._ctx, _data_actions.get_portfolio_values_spec(user=user, market=market)
+        )
 
     def get_traded_market_count(self, *, user: str) -> TradedMarketCount:
-        return self._dispatch(_data_actions.get_traded_market_count_spec(user=user))
+        return sync_dispatch(self._ctx, _data_actions.get_traded_market_count_spec(user=user))
 
     def get_builder_volumes(
         self, *, time_period: BuilderVolumeTimePeriod | None = None
     ) -> tuple[BuilderVolumeEntry, ...]:
-        return self._dispatch(_data_actions.get_builder_volumes_spec(time_period=time_period))
+        return sync_dispatch(
+            self._ctx, _data_actions.get_builder_volumes_spec(time_period=time_period)
+        )
 
     def list_positions(
         self,
@@ -361,7 +304,7 @@ class PublicClient:
             sort_direction=sort_direction,
             title=title,
         )
-        return self._paginate_offset(spec, page_size=page_size)
+        return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
     def list_closed_positions(
         self,
@@ -382,7 +325,7 @@ class PublicClient:
             sort_by=sort_by,
             sort_direction=sort_direction,
         )
-        return self._paginate_offset(spec, page_size=page_size)
+        return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
     def list_market_positions(
         self,
@@ -401,30 +344,30 @@ class PublicClient:
             sort_by=sort_by,
             sort_direction=sort_direction,
         )
-        return self._paginate_offset(spec, page_size=page_size)
+        return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
     def list_trades(
         self,
         *,
+        user: str | None = None,
+        market: Sequence[str] | None = None,
+        event_id: Sequence[int] | None = None,
+        side: TradeSide | None = None,
         taker_only: bool | None = None,
         filter_type: TradeFilterType | None = None,
         filter_amount: float | None = None,
-        market: Sequence[str] | None = None,
-        event_id: Sequence[int] | None = None,
-        user: str | None = None,
-        side: TradeSide | None = None,
         page_size: int = 20,
     ) -> Paginator[Trade]:
         spec = _data_actions.list_trades_spec(
+            user=user,
+            market=market,
+            event_id=event_id,
+            side=side,
             taker_only=taker_only,
             filter_type=filter_type,
             filter_amount=filter_amount,
-            market=market,
-            event_id=event_id,
-            user=user,
-            side=side,
         )
-        return self._paginate_offset(spec, page_size=page_size)
+        return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
     def list_activity(
         self,
@@ -433,11 +376,11 @@ class PublicClient:
         market: Sequence[str] | None = None,
         event_id: Sequence[int] | None = None,
         activity_types: Sequence[ActivityTypeFilter] | None = None,
-        start: int | None = None,
-        end: int | None = None,
+        side: TradeSide | None = None,
         sort_by: ActivitySortBy | None = None,
         sort_direction: SortDirection | None = None,
-        side: TradeSide | None = None,
+        start: int | None = None,
+        end: int | None = None,
         page_size: int = 20,
     ) -> Paginator[Activity]:
         spec = _data_actions.list_activity_spec(
@@ -445,13 +388,13 @@ class PublicClient:
             market=market,
             event_id=event_id,
             activity_types=activity_types,
-            start=start,
-            end=end,
+            side=side,
             sort_by=sort_by,
             sort_direction=sort_direction,
-            side=side,
+            start=start,
+            end=end,
         )
-        return self._paginate_offset(spec, page_size=page_size)
+        return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
     def list_builder_leaderboard(
         self,
@@ -460,11 +403,11 @@ class PublicClient:
         page_size: int = 20,
     ) -> Paginator[LeaderboardEntry]:
         spec = _data_actions.list_builder_leaderboard_spec(time_period=time_period)
-        return self._paginate_offset(spec, page_size=page_size)
+        return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
     def download_accounting_snapshot(self, *, user: str) -> bytes:
         path, params = _data_actions.build_accounting_snapshot_request(user=user)
-        return self._data.get_bytes(path, params=params)
+        return self._ctx.data.get_bytes(path, params=params)
 
     def list_trader_leaderboard(
         self,
@@ -483,4 +426,4 @@ class PublicClient:
             user=user,
             user_name=user_name,
         )
-        return self._paginate_offset(spec, page_size=page_size)
+        return sync_paginate_offset(self._ctx, spec, page_size=page_size)

@@ -1,10 +1,12 @@
 # pyright: reportPrivateUsage=false
 import asyncio
+import dataclasses
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
 
+from polymarket._internal.dispatch import async_paginate_offset, sync_paginate_offset
 from polymarket._internal.pagination import decode_offset_cursor
 from polymarket._internal.request import OffsetPaginatedSpec
 from polymarket.clients._transport import AsyncTransport, SyncTransport
@@ -34,17 +36,19 @@ def _spec(path: str = "/positions", base_params: dict[str, str] | None = None):
 
 
 def _install_sync_data_transport(client: PublicClient, handler: httpx.MockTransport) -> None:
-    client._data = SyncTransport(
+    new_transport = SyncTransport(
         base_url="https://example.test",
         client=httpx.Client(base_url="https://example.test", transport=handler),
     )
+    client._ctx = dataclasses.replace(client._ctx, data=new_transport)
 
 
 def _install_async_data_transport(client: AsyncPublicClient, handler: httpx.MockTransport) -> None:
-    client._data = AsyncTransport(
+    new_transport = AsyncTransport(
         base_url="https://example.test",
         client=httpx.AsyncClient(base_url="https://example.test", transport=handler),
     )
+    client._ctx = dataclasses.replace(client._ctx, data=new_transport)
 
 
 def test_sync_paginate_offset_sends_limit_and_offset() -> None:
@@ -52,8 +56,8 @@ def test_sync_paginate_offset_sends_limit_and_offset() -> None:
     handler = _items_handler(captured, [list(range(0, 11))])
     with PublicClient() as client:
         _install_sync_data_transport(client, handler)
-        page = client._paginate_offset(
-            _spec(base_params={"user": "0xA"}), page_size=10
+        page = sync_paginate_offset(
+            client._ctx, _spec(base_params={"user": "0xA"}), page_size=10
         ).first_page()
 
     assert len(captured) == 1
@@ -71,7 +75,7 @@ def test_sync_paginate_offset_trims_to_page_size() -> None:
     handler = _items_handler(captured, [list(range(15))])
     with PublicClient() as client:
         _install_sync_data_transport(client, handler)
-        page = client._paginate_offset(_spec(), page_size=10).first_page()
+        page = sync_paginate_offset(client._ctx, _spec(), page_size=10).first_page()
 
     assert page.items == tuple(range(10))
     assert page.has_more is True
@@ -82,7 +86,7 @@ def test_sync_paginate_offset_no_more_when_partial() -> None:
     handler = _items_handler(captured, [list(range(3))])
     with PublicClient() as client:
         _install_sync_data_transport(client, handler)
-        page = client._paginate_offset(_spec(), page_size=10).first_page()
+        page = sync_paginate_offset(client._ctx, _spec(), page_size=10).first_page()
 
     assert page.items == (0, 1, 2)
     assert page.has_more is False
@@ -98,7 +102,7 @@ def test_sync_paginate_offset_round_trip_next_cursor() -> None:
     with PublicClient() as client:
         _install_sync_data_transport(client, handler)
         spec = _spec(base_params={"user": "0xA"})
-        paginator = client._paginate_offset(spec, page_size=10)
+        paginator = sync_paginate_offset(client._ctx, spec, page_size=10)
         all_items = list(paginator.items())
 
     assert all_items == list(range(13))
@@ -113,10 +117,12 @@ def test_sync_paginate_offset_cursor_rejects_different_endpoint() -> None:
     handler = _items_handler(captured, [list(range(11))])
     with PublicClient() as client:
         _install_sync_data_transport(client, handler)
-        paginator = client._paginate_offset(_spec(path="/positions"), page_size=10)
+        paginator = sync_paginate_offset(client._ctx, _spec(path="/positions"), page_size=10)
         first = paginator.first_page()
         assert first.next_cursor is not None
-        other_spec_paginator = client._paginate_offset(_spec(path="/trades"), page_size=10)
+        other_spec_paginator = sync_paginate_offset(
+            client._ctx, _spec(path="/trades"), page_size=10
+        )
         with pytest.raises(UserInputError, match="does not belong"):
             other_spec_paginator.from_cursor(first.next_cursor).first_page()
 
@@ -126,10 +132,14 @@ def test_sync_paginate_offset_cursor_rejects_different_query() -> None:
     handler = _items_handler(captured, [list(range(11))])
     with PublicClient() as client:
         _install_sync_data_transport(client, handler)
-        a_paginator = client._paginate_offset(_spec(base_params={"user": "0xA"}), page_size=10)
+        a_paginator = sync_paginate_offset(
+            client._ctx, _spec(base_params={"user": "0xA"}), page_size=10
+        )
         first = a_paginator.first_page()
         assert first.next_cursor is not None
-        b_paginator = client._paginate_offset(_spec(base_params={"user": "0xB"}), page_size=10)
+        b_paginator = sync_paginate_offset(
+            client._ctx, _spec(base_params={"user": "0xB"}), page_size=10
+        )
         with pytest.raises(UserInputError, match="different query parameters"):
             b_paginator.from_cursor(first.next_cursor).first_page()
 
@@ -140,11 +150,12 @@ def test_sync_paginate_offset_next_cursor_decodes_to_expected_offset() -> None:
     with PublicClient() as client:
         _install_sync_data_transport(client, handler)
         spec = _spec(base_params={"user": "0xA"})
-        page = client._paginate_offset(spec, page_size=10).first_page()
+        page = sync_paginate_offset(client._ctx, spec, page_size=10).first_page()
 
     assert page.next_cursor is not None
     assert decode_offset_cursor(
         page.next_cursor,
+        expected_service="data",
         expected_path="/positions",
         expected_base_params={"user": "0xA"},
     ) == (10, 10)
@@ -156,8 +167,8 @@ def test_async_paginate_offset_sends_limit_and_offset() -> None:
         handler = _items_handler(captured, [list(range(0, 11))])
         async with AsyncPublicClient() as client:
             _install_async_data_transport(client, handler)
-            page = await client._paginate_offset(
-                _spec(base_params={"user": "0xA"}), page_size=10
+            page = await async_paginate_offset(
+                client._ctx, _spec(base_params={"user": "0xA"}), page_size=10
             ).first_page()
 
         assert len(captured) == 1
@@ -180,7 +191,7 @@ def test_async_paginate_offset_round_trip_next_cursor() -> None:
         )
         async with AsyncPublicClient() as client:
             _install_async_data_transport(client, handler)
-            paginator = client._paginate_offset(_spec(), page_size=10)
+            paginator = async_paginate_offset(client._ctx, _spec(), page_size=10)
             collected: list[int] = []
             async for page in paginator:
                 collected.extend(page.items)
@@ -200,10 +211,10 @@ def test_async_paginate_offset_cursor_rejects_different_endpoint() -> None:
         handler = _items_handler(captured, [list(range(11))])
         async with AsyncPublicClient() as client:
             _install_async_data_transport(client, handler)
-            paginator = client._paginate_offset(_spec(path="/positions"), page_size=10)
+            paginator = async_paginate_offset(client._ctx, _spec(path="/positions"), page_size=10)
             first = await paginator.first_page()
             assert first.next_cursor is not None
-            other = client._paginate_offset(_spec(path="/trades"), page_size=10)
+            other = async_paginate_offset(client._ctx, _spec(path="/trades"), page_size=10)
             with pytest.raises(UserInputError, match="does not belong"):
                 await other.from_cursor(first.next_cursor).first_page()
 
@@ -216,10 +227,14 @@ def test_async_paginate_offset_cursor_rejects_different_query() -> None:
         handler = _items_handler(captured, [list(range(11))])
         async with AsyncPublicClient() as client:
             _install_async_data_transport(client, handler)
-            a_paginator = client._paginate_offset(_spec(base_params={"user": "0xA"}), page_size=10)
+            a_paginator = async_paginate_offset(
+                client._ctx, _spec(base_params={"user": "0xA"}), page_size=10
+            )
             first = await a_paginator.first_page()
             assert first.next_cursor is not None
-            b_paginator = client._paginate_offset(_spec(base_params={"user": "0xB"}), page_size=10)
+            b_paginator = async_paginate_offset(
+                client._ctx, _spec(base_params={"user": "0xB"}), page_size=10
+            )
             with pytest.raises(UserInputError, match="different query parameters"):
                 await b_paginator.from_cursor(first.next_cursor).first_page()
 

@@ -4,7 +4,7 @@ import logging
 import httpx
 import pytest
 
-from polymarket import PublicClient, TransportOptions
+from polymarket import PublicClient
 from polymarket.clients._transport import AsyncTransport, SyncTransport
 from polymarket.errors import (
     RateLimitError,
@@ -115,16 +115,6 @@ def test_async_transport_returns_json_payload() -> None:
         assert await transport.get_json("/markets/1") == {"ok": True}
 
     asyncio.run(run())
-
-
-def test_client_accepts_transport_options() -> None:
-    options = TransportOptions(
-        limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
-        timeout=httpx.Timeout(connect=1.0, read=2.0, write=2.0, pool=1.0),
-        http2=False,
-    )
-    with PublicClient(transport_options=options) as client:
-        assert client.environment.name == "production"
 
 
 def test_client_accepts_logger_and_logs_at_debug(

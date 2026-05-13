@@ -5,112 +5,194 @@ import json
 import pytest
 
 from polymarket._internal.pagination import (
-    AsyncPaginator,
-    Page,
-    Paginator,
     compute_offset_page,
     decode_offset_cursor,
     encode_offset_cursor,
     fingerprint_query,
 )
 from polymarket.errors import UnexpectedResponseError, UserInputError
+from polymarket.pagination import AsyncPaginator, Page, Paginator
 
 
 def test_offset_cursor_round_trip() -> None:
     cursor = encode_offset_cursor(
-        path="/positions", base_params={"user": "0xA"}, offset=20, page_size=10
+        service="data",
+        path="/positions",
+        base_params={"user": "0xA"},
+        offset=20,
+        page_size=10,
     )
     assert decode_offset_cursor(
-        cursor, expected_path="/positions", expected_base_params={"user": "0xA"}
+        cursor,
+        expected_service="data",
+        expected_path="/positions",
+        expected_base_params={"user": "0xA"},
     ) == (20, 10)
 
 
 def test_offset_cursor_format_is_stable() -> None:
     cursor = encode_offset_cursor(
-        path="/positions", base_params={"user": "0xA"}, offset=20, page_size=10
+        service="data",
+        path="/positions",
+        base_params={"user": "0xA"},
+        offset=20,
+        page_size=10,
     )
     raw = base64.b64decode(cursor).decode("utf-8")
     fp = fingerprint_query({"user": "0xA"})
-    assert raw == f'{{"f":"{fp}","o":20,"p":"/positions","s":10,"v":1}}'
+    assert raw == f'{{"f":"{fp}","o":20,"p":"/positions","s":10,"svc":"data","v":1}}'
 
 
 def test_decode_rejects_path_mismatch() -> None:
     cursor = encode_offset_cursor(
-        path="/positions", base_params={"user": "0xA"}, offset=20, page_size=10
+        service="data",
+        path="/positions",
+        base_params={"user": "0xA"},
+        offset=20,
+        page_size=10,
     )
     with pytest.raises(UserInputError, match="does not belong to this endpoint"):
-        decode_offset_cursor(cursor, expected_path="/trades", expected_base_params={"user": "0xA"})
+        decode_offset_cursor(
+            cursor,
+            expected_service="data",
+            expected_path="/trades",
+            expected_base_params={"user": "0xA"},
+        )
+
+
+def test_decode_rejects_service_mismatch() -> None:
+    cursor = encode_offset_cursor(
+        service="data",
+        path="/positions",
+        base_params={"user": "0xA"},
+        offset=20,
+        page_size=10,
+    )
+    with pytest.raises(UserInputError, match="does not belong to this service"):
+        decode_offset_cursor(
+            cursor,
+            expected_service="gamma",
+            expected_path="/positions",
+            expected_base_params={"user": "0xA"},
+        )
 
 
 def test_decode_rejects_query_mismatch() -> None:
     cursor = encode_offset_cursor(
-        path="/positions", base_params={"user": "0xA"}, offset=20, page_size=10
+        service="data",
+        path="/positions",
+        base_params={"user": "0xA"},
+        offset=20,
+        page_size=10,
     )
     with pytest.raises(UserInputError, match="different query parameters"):
         decode_offset_cursor(
-            cursor, expected_path="/positions", expected_base_params={"user": "0xB"}
+            cursor,
+            expected_service="data",
+            expected_path="/positions",
+            expected_base_params={"user": "0xB"},
         )
 
 
 def test_decode_rejects_invalid_base64() -> None:
     with pytest.raises(UserInputError, match="Invalid pagination cursor"):
-        decode_offset_cursor("not-base64!!!", expected_path="/positions", expected_base_params=None)
+        decode_offset_cursor(
+            "not-base64!!!",
+            expected_service="data",
+            expected_path="/positions",
+            expected_base_params=None,
+        )
 
 
 def test_decode_rejects_non_json_payload() -> None:
     bad = base64.b64encode(b"not json").decode("ascii")
     with pytest.raises(UserInputError, match="Invalid pagination cursor"):
-        decode_offset_cursor(bad, expected_path="/positions", expected_base_params=None)
+        decode_offset_cursor(
+            bad,
+            expected_service="data",
+            expected_path="/positions",
+            expected_base_params=None,
+        )
 
 
 def test_decode_rejects_missing_fields() -> None:
     fp = fingerprint_query(None)
     bad = base64.b64encode(
-        json.dumps({"v": 1, "p": "/positions", "f": fp, "o": 5}).encode("utf-8")
+        json.dumps({"v": 1, "svc": "data", "p": "/positions", "f": fp, "o": 5}).encode("utf-8")
     ).decode("ascii")
     with pytest.raises(UserInputError, match="Invalid pagination cursor"):
-        decode_offset_cursor(bad, expected_path="/positions", expected_base_params=None)
+        decode_offset_cursor(
+            bad,
+            expected_service="data",
+            expected_path="/positions",
+            expected_base_params=None,
+        )
 
 
 def test_decode_rejects_unsupported_version() -> None:
     bad = base64.b64encode(
-        json.dumps({"v": 999, "p": "/positions", "f": "deadbeef", "o": 0, "s": 10}).encode("utf-8")
+        json.dumps(
+            {"v": 999, "svc": "data", "p": "/positions", "f": "deadbeef", "o": 0, "s": 10}
+        ).encode("utf-8")
     ).decode("ascii")
     with pytest.raises(UserInputError, match="Unsupported pagination cursor version"):
-        decode_offset_cursor(bad, expected_path="/positions", expected_base_params=None)
+        decode_offset_cursor(
+            bad,
+            expected_service="data",
+            expected_path="/positions",
+            expected_base_params=None,
+        )
 
 
 def test_decode_rejects_negative_offset() -> None:
     fp = fingerprint_query({"user": "0xA"})
     bad = base64.b64encode(
-        json.dumps({"v": 1, "p": "/positions", "f": fp, "o": -1, "s": 10}).encode("utf-8")
+        json.dumps({"v": 1, "svc": "data", "p": "/positions", "f": fp, "o": -1, "s": 10}).encode(
+            "utf-8"
+        )
     ).decode("ascii")
     with pytest.raises(UserInputError, match="Invalid pagination cursor"):
-        decode_offset_cursor(bad, expected_path="/positions", expected_base_params={"user": "0xA"})
+        decode_offset_cursor(
+            bad,
+            expected_service="data",
+            expected_path="/positions",
+            expected_base_params={"user": "0xA"},
+        )
 
 
 def test_decode_rejects_zero_page_size() -> None:
     fp = fingerprint_query({"user": "0xA"})
     bad = base64.b64encode(
-        json.dumps({"v": 1, "p": "/positions", "f": fp, "o": 0, "s": 0}).encode("utf-8")
+        json.dumps({"v": 1, "svc": "data", "p": "/positions", "f": fp, "o": 0, "s": 0}).encode(
+            "utf-8"
+        )
     ).decode("ascii")
     with pytest.raises(UserInputError, match="Invalid pagination cursor"):
-        decode_offset_cursor(bad, expected_path="/positions", expected_base_params={"user": "0xA"})
+        decode_offset_cursor(
+            bad,
+            expected_service="data",
+            expected_path="/positions",
+            expected_base_params={"user": "0xA"},
+        )
 
 
 def test_encode_rejects_empty_path() -> None:
     with pytest.raises(UserInputError, match="path"):
-        encode_offset_cursor(path="", base_params=None, offset=0, page_size=10)
+        encode_offset_cursor(service="data", path="", base_params=None, offset=0, page_size=10)
 
 
 def test_encode_rejects_negative_offset() -> None:
     with pytest.raises(UserInputError, match="non-negative"):
-        encode_offset_cursor(path="/positions", base_params=None, offset=-1, page_size=10)
+        encode_offset_cursor(
+            service="data", path="/positions", base_params=None, offset=-1, page_size=10
+        )
 
 
 def test_encode_rejects_zero_page_size() -> None:
     with pytest.raises(UserInputError, match="positive"):
-        encode_offset_cursor(path="/positions", base_params=None, offset=0, page_size=0)
+        encode_offset_cursor(
+            service="data", path="/positions", base_params=None, offset=0, page_size=0
+        )
 
 
 def test_fingerprint_is_order_independent() -> None:
@@ -124,6 +206,7 @@ def test_fingerprint_differentiates_values() -> None:
 def test_compute_offset_page_emits_next_cursor_when_more() -> None:
     items = tuple(range(11))
     page = compute_offset_page(
+        service="data",
         path="/positions",
         base_params={"user": "0xA"},
         offset=0,
@@ -135,6 +218,7 @@ def test_compute_offset_page_emits_next_cursor_when_more() -> None:
     assert page.next_cursor is not None
     assert decode_offset_cursor(
         page.next_cursor,
+        expected_service="data",
         expected_path="/positions",
         expected_base_params={"user": "0xA"},
     ) == (10, 10)
@@ -142,6 +226,7 @@ def test_compute_offset_page_emits_next_cursor_when_more() -> None:
 
 def test_compute_offset_page_no_more_when_full() -> None:
     page = compute_offset_page(
+        service="data",
         path="/positions",
         base_params=None,
         offset=0,
@@ -155,6 +240,7 @@ def test_compute_offset_page_no_more_when_full() -> None:
 
 def test_compute_offset_page_no_more_when_partial() -> None:
     page = compute_offset_page(
+        service="data",
         path="/positions",
         base_params=None,
         offset=0,

@@ -4,146 +4,17 @@ import base64
 import binascii
 import hashlib
 import json
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
-from dataclasses import dataclass
-from typing import Generic, TypeVar, cast
+from collections.abc import Mapping
+from typing import TypeVar, cast
 
-from polymarket._internal.request import QueryParamValue
-from polymarket.errors import UnexpectedResponseError, UserInputError
+from polymarket._internal.request import QueryParamValue, Service
+from polymarket.errors import UserInputError
+from polymarket.pagination import Page
 
 T = TypeVar("T")
 
 _CURSOR_VERSION = 1
 _FINGERPRINT_LEN = 12
-
-
-@dataclass(frozen=True, slots=True)
-class Page(Generic[T]):
-    items: tuple[T, ...]
-    has_more: bool
-    next_cursor: str | None = None
-    total_count: int | None = None
-
-
-class Paginator(Generic[T]):
-    def __init__(
-        self,
-        fetch: Callable[[str | None], Page[T]],
-        initial_cursor: str | None = None,
-    ) -> None:
-        self._fetch = fetch
-        self._initial_cursor = initial_cursor
-
-    def first_page(self) -> Page[T]:
-        return self._fetch(self._initial_cursor)
-
-    def from_cursor(self, cursor: str | None) -> Paginator[T]:
-        if cursor is None:
-            return cast(Paginator[T], _EmptyPaginator())
-        return Paginator(self._fetch, initial_cursor=cursor)
-
-    def __iter__(self) -> Iterator[Page[T]]:
-        return self._iter_pages()
-
-    def items(self) -> Iterator[T]:
-        for page in self._iter_pages():
-            yield from page.items
-
-    def _iter_pages(self) -> Iterator[Page[T]]:
-        cursor = self._initial_cursor
-        while True:
-            page = self._fetch(cursor)
-            yield page
-            if not page.has_more:
-                return
-            if page.next_cursor is None:
-                raise UnexpectedResponseError(
-                    "Paginated response set has_more=True without a next cursor."
-                )
-            cursor = page.next_cursor
-
-
-class AsyncPaginator(Generic[T]):
-    def __init__(
-        self,
-        fetch: Callable[[str | None], Awaitable[Page[T]]],
-        initial_cursor: str | None = None,
-    ) -> None:
-        self._fetch = fetch
-        self._initial_cursor = initial_cursor
-
-    async def first_page(self) -> Page[T]:
-        return await self._fetch(self._initial_cursor)
-
-    def from_cursor(self, cursor: str | None) -> AsyncPaginator[T]:
-        if cursor is None:
-            return cast(AsyncPaginator[T], _EmptyAsyncPaginator())
-        return AsyncPaginator(self._fetch, initial_cursor=cursor)
-
-    def __aiter__(self) -> AsyncIterator[Page[T]]:
-        return self._iter_pages()
-
-    def items(self) -> AsyncIterator[T]:
-        return self._iter_items()
-
-    async def _iter_pages(self) -> AsyncIterator[Page[T]]:
-        cursor = self._initial_cursor
-        while True:
-            page = await self._fetch(cursor)
-            yield page
-            if not page.has_more:
-                return
-            if page.next_cursor is None:
-                raise UnexpectedResponseError(
-                    "Paginated response set has_more=True without a next cursor."
-                )
-            cursor = page.next_cursor
-
-    async def _iter_items(self) -> AsyncIterator[T]:
-        async for page in self._iter_pages():
-            for item in page.items:
-                yield item
-
-
-class _EmptyPaginator(Paginator[object]):
-    def __init__(self) -> None:
-        super().__init__(fetch=_empty_sync_fetch, initial_cursor=None)
-
-    def first_page(self) -> Page[object]:
-        return Page(items=(), has_more=False)
-
-    def from_cursor(self, cursor: str | None) -> Paginator[object]:
-        if cursor is None:
-            return self
-        return Paginator(self._fetch, initial_cursor=cursor)
-
-    def _iter_pages(self) -> Iterator[Page[object]]:
-        return iter(())
-
-
-class _EmptyAsyncPaginator(AsyncPaginator[object]):
-    def __init__(self) -> None:
-        super().__init__(fetch=_empty_async_fetch, initial_cursor=None)
-
-    async def first_page(self) -> Page[object]:
-        return Page(items=(), has_more=False)
-
-    def from_cursor(self, cursor: str | None) -> AsyncPaginator[object]:
-        if cursor is None:
-            return self
-        return AsyncPaginator(self._fetch, initial_cursor=cursor)
-
-    async def _iter_pages(self) -> AsyncIterator[Page[object]]:
-        return
-        yield  # pragma: no cover - keeps the method an async generator
-
-
-def _empty_sync_fetch(_cursor: str | None) -> Page[object]:
-    return Page(items=(), has_more=False)
-
-
-async def _empty_async_fetch(_cursor: str | None) -> Page[object]:
-    return Page(items=(), has_more=False)
 
 
 def fingerprint_query(base_params: Mapping[str, QueryParamValue] | None) -> str:
@@ -158,6 +29,7 @@ def fingerprint_query(base_params: Mapping[str, QueryParamValue] | None) -> str:
 
 def encode_offset_cursor(
     *,
+    service: Service,
     path: str,
     base_params: Mapping[str, QueryParamValue] | None,
     offset: int,
@@ -172,6 +44,7 @@ def encode_offset_cursor(
     payload = json.dumps(
         {
             "v": _CURSOR_VERSION,
+            "svc": service,
             "p": path,
             "f": fingerprint_query(base_params),
             "o": offset,
@@ -186,6 +59,7 @@ def encode_offset_cursor(
 def decode_offset_cursor(
     cursor: str,
     *,
+    expected_service: Service,
     expected_path: str,
     expected_base_params: Mapping[str, QueryParamValue] | None,
 ) -> tuple[int, int]:
@@ -204,6 +78,10 @@ def decode_offset_cursor(
         raise UserInputError(
             f"Unsupported pagination cursor version: {version!r}. Expected {_CURSOR_VERSION}."
         )
+
+    raw_service = payload.get("svc")
+    if not isinstance(raw_service, str) or raw_service != expected_service:
+        raise UserInputError("Pagination cursor does not belong to this service.")
 
     raw_path = payload.get("p")
     if not isinstance(raw_path, str) or raw_path != expected_path:
@@ -225,6 +103,7 @@ def decode_offset_cursor(
 
 def compute_offset_page(
     *,
+    service: Service,
     path: str,
     base_params: Mapping[str, QueryParamValue] | None,
     offset: int,
@@ -235,6 +114,7 @@ def compute_offset_page(
     trimmed = items[:page_size]
     next_cursor = (
         encode_offset_cursor(
+            service=service,
             path=path,
             base_params=base_params,
             offset=offset + page_size,
@@ -247,9 +127,6 @@ def compute_offset_page(
 
 
 __all__ = [
-    "AsyncPaginator",
-    "Page",
-    "Paginator",
     "compute_offset_page",
     "decode_offset_cursor",
     "encode_offset_cursor",

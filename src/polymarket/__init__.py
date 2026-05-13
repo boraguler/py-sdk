@@ -1,6 +1,4 @@
-from polymarket._internal.pagination import AsyncPaginator, Page, Paginator
 from polymarket.clients import AsyncPublicClient, AsyncSecureClient, PublicClient, SecureClient
-from polymarket.clients._transport import TransportOptions
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import (
     CancelledSigningError,
@@ -67,6 +65,7 @@ from polymarket.models import (
     UnknownActivity,
     YieldActivity,
 )
+from polymarket.pagination import AsyncPaginator, Page, Paginator
 from polymarket.types import EvmAddress, HexString, TransactionHash
 from polymarket.version import __version__
 
@@ -140,7 +139,6 @@ __all__ = [
     "TransactionFailedError",
     "TransactionHash",
     "TransportError",
-    "TransportOptions",
     "UnexpectedResponseError",
     "UnknownActivity",
     "UserInputError",
