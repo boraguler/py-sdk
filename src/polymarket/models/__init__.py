@@ -1,3 +1,12 @@
+from polymarket.models.clob import (
+    LastTradePrice,
+    LastTradePriceForToken,
+    OrderBook,
+    OrderBookLevel,
+    PriceHistoryInterval,
+    PriceHistoryPoint,
+    PriceRequest,
+)
 from polymarket.models.data import (
     Activity,
     ActivityType,
@@ -53,6 +62,7 @@ from polymarket.models.types import (
     EventId,
     MarketId,
     OrderId,
+    OrderSide,
     QuestionId,
     ResolutionRequestId,
     SeriesId,
@@ -63,6 +73,14 @@ from polymarket.models.types import (
 __all__ = [
     "Activity",
     "ActivityType",
+    "LastTradePrice",
+    "LastTradePriceForToken",
+    "OrderBook",
+    "OrderBookLevel",
+    "OrderSide",
+    "PriceHistoryInterval",
+    "PriceHistoryPoint",
+    "PriceRequest",
     "BuilderVolumeEntry",
     "BuilderVolumeTimePeriod",
     "ClosedPosition",

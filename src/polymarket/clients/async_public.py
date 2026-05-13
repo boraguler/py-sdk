@@ -38,7 +38,14 @@ from polymarket.errors import RequestRejectedError
 from polymarket.models import (
     Comment,
     Event,
+    LastTradePrice,
+    LastTradePriceForToken,
     Market,
+    OrderBook,
+    OrderSide,
+    PriceHistoryInterval,
+    PriceHistoryPoint,
+    PriceRequest,
     PublicProfile,
     RelatedTag,
     SearchResults,
@@ -733,3 +740,65 @@ class AsyncPublicClient:
     async def get_midpoint(self, *, token_id: str) -> Decimal:
         path, params = _clob_actions.build_midpoint_request(token_id=token_id)
         return _clob_actions.parse_midpoint(await self._ctx.clob.get_json(path, params=params))
+
+    async def get_midpoints(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        path, body = _clob_actions.build_midpoints_request(token_ids=token_ids)
+        return _clob_actions.parse_midpoints(await self._ctx.clob.post_json(path, json=body))
+
+    async def get_price(self, *, token_id: str, side: OrderSide) -> Decimal:
+        path, params = _clob_actions.build_price_request(token_id=token_id, side=side)
+        return _clob_actions.parse_price(await self._ctx.clob.get_json(path, params=params))
+
+    async def get_prices(
+        self, *, requests: Sequence[PriceRequest]
+    ) -> dict[str, dict[OrderSide, Decimal]]:
+        path, body = _clob_actions.build_prices_request(requests=requests)
+        return _clob_actions.parse_prices(await self._ctx.clob.post_json(path, json=body))
+
+    async def get_order_book(self, *, token_id: str) -> OrderBook:
+        path, params = _clob_actions.build_order_book_request(token_id=token_id)
+        return _clob_actions.parse_order_book(await self._ctx.clob.get_json(path, params=params))
+
+    async def get_order_books(self, *, token_ids: Sequence[str]) -> tuple[OrderBook, ...]:
+        path, body = _clob_actions.build_order_books_request(token_ids=token_ids)
+        return _clob_actions.parse_order_books(await self._ctx.clob.post_json(path, json=body))
+
+    async def get_spread(self, *, token_id: str) -> Decimal:
+        path, params = _clob_actions.build_spread_request(token_id=token_id)
+        return _clob_actions.parse_spread(await self._ctx.clob.get_json(path, params=params))
+
+    async def get_spreads(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        path, body = _clob_actions.build_spreads_request(token_ids=token_ids)
+        return _clob_actions.parse_spreads(await self._ctx.clob.post_json(path, json=body))
+
+    async def get_last_trade_price(self, *, token_id: str) -> LastTradePrice:
+        path, params = _clob_actions.build_last_trade_price_request(token_id=token_id)
+        return _clob_actions.parse_last_trade_price(
+            await self._ctx.clob.get_json(path, params=params)
+        )
+
+    async def get_last_trade_prices(
+        self, *, token_ids: Sequence[str]
+    ) -> tuple[LastTradePriceForToken, ...]:
+        path, body = _clob_actions.build_last_trade_prices_request(token_ids=token_ids)
+        return _clob_actions.parse_last_trade_prices(
+            await self._ctx.clob.post_json(path, json=body)
+        )
+
+    async def get_price_history(
+        self,
+        *,
+        token_id: str,
+        start_ts: int | None = None,
+        end_ts: int | None = None,
+        fidelity: int | None = None,
+        interval: PriceHistoryInterval | None = None,
+    ) -> tuple[PriceHistoryPoint, ...]:
+        path, params = _clob_actions.build_price_history_request(
+            token_id=token_id,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            fidelity=fidelity,
+            interval=interval,
+        )
+        return _clob_actions.parse_price_history(await self._ctx.clob.get_json(path, params=params))

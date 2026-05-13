@@ -3,40 +3,25 @@ from decimal import Decimal
 
 import pytest
 
-from polymarket import AsyncPublicClient, AsyncSecureClient
+from polymarket import (
+    AsyncPublicClient,
+    AsyncSecureClient,
+    LastTradePrice,
+    LastTradePriceForToken,
+    OrderBook,
+    OrderSide,
+    PriceHistoryPoint,
+    PriceRequest,
+)
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
-_PAGES_TO_SCAN = 5
-
-
-async def _find_active_clob_token() -> str:
-    async with AsyncPublicClient() as client:
-        paginator = client.list_markets(closed=False, page_size=20)
-        pages_seen = 0
-        async for page in paginator:
-            pages_seen += 1
-            for market in page.items:
-                if not market.state.enable_order_book:
-                    continue
-                if not market.state.accepting_orders:
-                    continue
-                token_id = market.outcomes.yes.token_id
-                if token_id is None:
-                    continue
-                return token_id
-            if pages_seen >= _PAGES_TO_SCAN:
-                break
-
-    pytest.skip("no CLOB-active market with a Yes-outcome token id found")
-
 
 @pytest.mark.integration
-def test_async_public_get_midpoint_returns_decimal_in_unit_range() -> None:
+def test_async_public_get_midpoint_returns_decimal_in_unit_range(active_clob_token: str) -> None:
     async def run() -> Decimal:
-        token_id = await _find_active_clob_token()
         async with AsyncPublicClient() as client:
-            return await client.get_midpoint(token_id=token_id)
+            return await client.get_midpoint(token_id=active_clob_token)
 
     midpoint = asyncio.run(run())
 
@@ -45,12 +30,11 @@ def test_async_public_get_midpoint_returns_decimal_in_unit_range() -> None:
 
 
 @pytest.mark.integration
-def test_async_secure_get_midpoint_returns_decimal_in_unit_range() -> None:
+def test_async_secure_get_midpoint_returns_decimal_in_unit_range(active_clob_token: str) -> None:
     async def run() -> Decimal:
-        token_id = await _find_active_clob_token()
         client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
         try:
-            return await client.get_midpoint(token_id=token_id)
+            return await client.get_midpoint(token_id=active_clob_token)
         finally:
             await client.close()
 
@@ -58,3 +42,134 @@ def test_async_secure_get_midpoint_returns_decimal_in_unit_range() -> None:
 
     assert isinstance(midpoint, Decimal)
     assert Decimal("0") <= midpoint <= Decimal("1")
+
+
+@pytest.mark.integration
+def test_async_get_midpoints_returns_decimal_per_token(active_clob_token: str) -> None:
+    async def run() -> dict[str, Decimal]:
+        async with AsyncPublicClient() as client:
+            return await client.get_midpoints(token_ids=[active_clob_token])
+
+    result = asyncio.run(run())
+
+    assert active_clob_token in result
+    assert isinstance(result[active_clob_token], Decimal)
+
+
+@pytest.mark.integration
+def test_async_get_price_returns_decimal_for_buy_side(active_clob_token: str) -> None:
+    async def run() -> Decimal:
+        async with AsyncPublicClient() as client:
+            return await client.get_price(token_id=active_clob_token, side="BUY")
+
+    price = asyncio.run(run())
+
+    assert isinstance(price, Decimal)
+    assert Decimal("0") <= price <= Decimal("1")
+
+
+@pytest.mark.integration
+def test_async_get_prices_returns_decimal_per_token_and_side(active_clob_token: str) -> None:
+    async def run() -> dict[str, dict[OrderSide, Decimal]]:
+        async with AsyncPublicClient() as client:
+            return await client.get_prices(
+                requests=[
+                    PriceRequest(active_clob_token, "BUY"),
+                    PriceRequest(active_clob_token, "SELL"),
+                ]
+            )
+
+    result = asyncio.run(run())
+
+    assert active_clob_token in result
+    sides = result[active_clob_token]
+    assert "BUY" in sides or "SELL" in sides
+
+
+@pytest.mark.integration
+def test_async_get_order_book_returns_book_with_levels(active_clob_token: str) -> None:
+    async def run() -> OrderBook:
+        async with AsyncPublicClient() as client:
+            return await client.get_order_book(token_id=active_clob_token)
+
+    book = asyncio.run(run())
+
+    assert isinstance(book, OrderBook)
+    assert book.token_id == active_clob_token
+    assert isinstance(book.min_order_size, Decimal)
+    assert isinstance(book.tick_size, Decimal)
+
+
+@pytest.mark.integration
+def test_async_get_order_books_returns_tuple_of_books(active_clob_token: str) -> None:
+    async def run() -> tuple[OrderBook, ...]:
+        async with AsyncPublicClient() as client:
+            return await client.get_order_books(token_ids=[active_clob_token])
+
+    books = asyncio.run(run())
+
+    assert len(books) >= 1
+    assert any(book.token_id == active_clob_token for book in books)
+
+
+@pytest.mark.integration
+def test_async_get_spread_returns_non_negative_decimal(active_clob_token: str) -> None:
+    async def run() -> Decimal:
+        async with AsyncPublicClient() as client:
+            return await client.get_spread(token_id=active_clob_token)
+
+    spread = asyncio.run(run())
+
+    assert isinstance(spread, Decimal)
+    assert spread >= Decimal("0")
+
+
+@pytest.mark.integration
+def test_async_get_spreads_returns_decimal_per_token(active_clob_token: str) -> None:
+    async def run() -> dict[str, Decimal]:
+        async with AsyncPublicClient() as client:
+            return await client.get_spreads(token_ids=[active_clob_token])
+
+    result = asyncio.run(run())
+
+    assert active_clob_token in result
+    assert isinstance(result[active_clob_token], Decimal)
+
+
+@pytest.mark.integration
+def test_async_get_last_trade_price_returns_model(active_clob_token: str) -> None:
+    async def run() -> LastTradePrice:
+        async with AsyncPublicClient() as client:
+            return await client.get_last_trade_price(token_id=active_clob_token)
+
+    last = asyncio.run(run())
+
+    assert isinstance(last, LastTradePrice)
+    assert isinstance(last.price, Decimal)
+    assert last.side in ("BUY", "SELL")
+
+
+@pytest.mark.integration
+def test_async_get_last_trade_prices_returns_tuple_of_models(active_clob_token: str) -> None:
+    async def run() -> tuple[LastTradePriceForToken, ...]:
+        async with AsyncPublicClient() as client:
+            return await client.get_last_trade_prices(token_ids=[active_clob_token])
+
+    result = asyncio.run(run())
+
+    assert len(result) >= 1
+    assert any(point.token_id == active_clob_token for point in result)
+
+
+@pytest.mark.integration
+def test_async_get_price_history_returns_points(active_clob_token: str) -> None:
+    async def run() -> tuple[PriceHistoryPoint, ...]:
+        async with AsyncPublicClient() as client:
+            return await client.get_price_history(token_id=active_clob_token, interval="1d")
+
+    points = asyncio.run(run())
+
+    assert isinstance(points, tuple)
+    for point in points:
+        assert isinstance(point.t, int)
+        assert isinstance(point.p, float)
