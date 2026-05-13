@@ -13,7 +13,11 @@ class SyncClientContext:
     environment: Environment
     gamma: SyncTransport
     data: SyncTransport
-    signer: LocalAccount | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SyncSecureClientContext(SyncClientContext):
+    signer: LocalAccount
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,7 +25,16 @@ class AsyncClientContext:
     environment: Environment
     gamma: AsyncTransport
     data: AsyncTransport
-    signer: LocalAccount | None = None
 
 
-__all__ = ["AsyncClientContext", "SyncClientContext"]
+@dataclass(frozen=True, slots=True)
+class AsyncSecureClientContext(AsyncClientContext):
+    signer: LocalAccount
+
+
+__all__ = [
+    "AsyncClientContext",
+    "AsyncSecureClientContext",
+    "SyncClientContext",
+    "SyncSecureClientContext",
+]

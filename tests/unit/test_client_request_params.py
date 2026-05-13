@@ -1,13 +1,14 @@
 # pyright: reportPrivateUsage=false
 import asyncio
 import dataclasses
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
 
 from polymarket import AsyncPublicClient, AsyncSecureClient, PublicClient, SecureClient
+from polymarket._internal.context import AsyncSecureClientContext, SyncSecureClientContext
 from polymarket.clients._transport import AsyncTransport, SyncTransport
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
@@ -22,22 +23,32 @@ def _capture(captured: list[httpx.Request], payload: Any = ()) -> httpx.MockTran
     return httpx.MockTransport(handler)
 
 
-def _install_sync(client: PublicClient | SecureClient, handler: httpx.MockTransport) -> None:
-    transport = SyncTransport(
+def _sync_data_transport(handler: httpx.MockTransport) -> SyncTransport:
+    return SyncTransport(
         base_url="https://example.test",
         client=httpx.Client(base_url="https://example.test", transport=handler),
     )
-    client._ctx = dataclasses.replace(client._ctx, data=transport)
+
+
+def _async_data_transport(handler: httpx.MockTransport) -> AsyncTransport:
+    return AsyncTransport(
+        base_url="https://example.test",
+        client=httpx.AsyncClient(base_url="https://example.test", transport=handler),
+    )
+
+
+def _install_sync(client: PublicClient | SecureClient, handler: httpx.MockTransport) -> None:
+    transport = _sync_data_transport(handler)
+    # pyright loses narrowing through the union; cast to the secure shape — both
+    # clients accept it via subtype substitution.
+    client._ctx = cast(SyncSecureClientContext, dataclasses.replace(client._ctx, data=transport))
 
 
 def _install_async(
     client: AsyncPublicClient | AsyncSecureClient, handler: httpx.MockTransport
 ) -> None:
-    transport = AsyncTransport(
-        base_url="https://example.test",
-        client=httpx.AsyncClient(base_url="https://example.test", transport=handler),
-    )
-    client._ctx = dataclasses.replace(client._ctx, data=transport)
+    transport = _async_data_transport(handler)
+    client._ctx = cast(AsyncSecureClientContext, dataclasses.replace(client._ctx, data=transport))
 
 
 def _qs(request: httpx.Request) -> dict[str, list[str]]:
