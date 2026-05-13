@@ -2,9 +2,11 @@
 
 import logging
 from collections.abc import Sequence
+from decimal import Decimal
 from types import TracebackType
 from typing import Self
 
+from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
 from polymarket._internal.actions.data import (
@@ -85,6 +87,7 @@ class AsyncPublicClient:
             environment=environment,
             gamma=AsyncTransport(base_url=environment.gamma_url, logger=logger),
             data=AsyncTransport(base_url=environment.data_url, logger=logger),
+            clob=AsyncTransport(base_url=environment.clob_url, logger=logger),
         )
 
     @property
@@ -107,7 +110,10 @@ class AsyncPublicClient:
         try:
             await self._ctx.gamma.close()
         finally:
-            await self._ctx.data.close()
+            try:
+                await self._ctx.data.close()
+            finally:
+                await self._ctx.clob.close()
 
     async def get_market(
         self,
@@ -723,3 +729,7 @@ class AsyncPublicClient:
             sort=sort,
         )
         return async_paginate_page_based(self._ctx, spec, page_size=page_size)
+
+    async def get_midpoint(self, *, token_id: str) -> Decimal:
+        path, params = _clob_actions.build_midpoint_request(token_id=token_id)
+        return _clob_actions.parse_midpoint(await self._ctx.clob.get_json(path, params=params))

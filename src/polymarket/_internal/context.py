@@ -13,6 +13,7 @@ class SyncClientContext:
     environment: Environment
     gamma: SyncTransport
     data: SyncTransport
+    clob: SyncTransport
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +26,7 @@ class AsyncClientContext:
     environment: Environment
     gamma: AsyncTransport
     data: AsyncTransport
+    clob: AsyncTransport
 
 
 @dataclass(frozen=True, slots=True)

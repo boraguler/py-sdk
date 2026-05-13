@@ -97,6 +97,7 @@ class SecureClient:
             environment=environment,
             gamma=SyncTransport(base_url=environment.gamma_url, logger=logger),
             data=SyncTransport(base_url=environment.data_url, logger=logger),
+            clob=SyncTransport(base_url=environment.clob_url, logger=logger),
             signer=signer,
         )
 
@@ -147,7 +148,10 @@ class SecureClient:
         try:
             self._ctx.gamma.close()
         finally:
-            self._ctx.data.close()
+            try:
+                self._ctx.data.close()
+            finally:
+                self._ctx.clob.close()
 
     def _user_or_signer(self, user: str | None) -> str:
         return self._ctx.signer.address if user is None else user
