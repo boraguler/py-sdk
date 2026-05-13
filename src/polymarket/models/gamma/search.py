@@ -7,6 +7,8 @@ from typing import Any, cast
 
 from pydantic import Field, field_validator, model_validator
 
+from polymarket._internal.request import PageBasedPagePayload
+from polymarket.errors import UnexpectedResponseError
 from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import ImageOptimization, parse_optional_datetime
 from polymarket.models.gamma.event import Event
@@ -92,9 +94,6 @@ class SearchResults(BaseModel):
     events: tuple[Event, ...] = ()
     tags: tuple[SearchTag, ...] = ()
     profiles: tuple[Profile, ...] = ()
-    has_more: bool = False
-    next_cursor: str | None = None
-    total_count: int | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -112,7 +111,19 @@ class SearchResults(BaseModel):
                 raise ValueError(msg)
             return tuple(cast(list[Any], raw))
 
-        raw_pagination = data.get("pagination")
+        return {
+            "events": _array("events"),
+            "tags": _array("tags"),
+            "profiles": _array("profiles"),
+        }
+
+    @classmethod
+    def parse_page_response(cls, data: object) -> PageBasedPagePayload[SearchResults]:
+        if not isinstance(data, dict):
+            raise UnexpectedResponseError("SearchResults response did not match expected shape")
+        payload = cast(dict[str, Any], data)
+
+        raw_pagination = payload.get("pagination")
         if raw_pagination is None:
             has_more = False
             total_count: int | None = None
@@ -124,39 +135,34 @@ class SearchResults(BaseModel):
             elif isinstance(raw_has_more, bool):
                 has_more = raw_has_more
             else:
-                msg = (
+                raise UnexpectedResponseError(
                     "'pagination.hasMore' must be a bool when present, "
                     f"got {type(raw_has_more).__name__}"
                 )
-                raise ValueError(msg)
             raw_total = pag.get("totalResults")
             if raw_total is None:
                 total_count = None
             elif isinstance(raw_total, bool):
-                msg = "'pagination.totalResults' must be an integer when present, got bool"
-                raise ValueError(msg)
+                raise UnexpectedResponseError(
+                    "'pagination.totalResults' must be an integer when present, got bool"
+                )
             elif isinstance(raw_total, int):
                 total_count = raw_total
             else:
-                msg = (
+                raise UnexpectedResponseError(
                     "'pagination.totalResults' must be an integer when present, "
                     f"got {type(raw_total).__name__}"
                 )
-                raise ValueError(msg)
         else:
-            msg = (
+            raise UnexpectedResponseError(
                 f"'pagination' must be an object when present, got {type(raw_pagination).__name__}"
             )
-            raise ValueError(msg)
 
-        return {
-            "events": _array("events"),
-            "tags": _array("tags"),
-            "profiles": _array("profiles"),
-            "has_more": has_more,
-            "next_cursor": None,
-            "total_count": total_count,
-        }
+        return PageBasedPagePayload(
+            items=cls.parse_response(payload),
+            has_more=has_more,
+            total_count=total_count,
+        )
 
 
 __all__ = ["Profile", "SearchResults", "SearchTag"]

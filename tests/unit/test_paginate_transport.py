@@ -1,14 +1,20 @@
 # pyright: reportPrivateUsage=false
 import asyncio
 import dataclasses
+import typing
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
 
-from polymarket._internal.dispatch import async_paginate_offset, sync_paginate_offset
-from polymarket._internal.pagination import decode_offset_cursor
-from polymarket._internal.request import OffsetPaginatedSpec
+from polymarket._internal.dispatch import (
+    async_paginate_offset,
+    async_paginate_page_based,
+    sync_paginate_offset,
+    sync_paginate_page_based,
+)
+from polymarket._internal.pagination import decode_offset_cursor, decode_page_cursor
+from polymarket._internal.request import OffsetPaginatedSpec, PageBasedPagePayload, PageBasedSpec
 from polymarket.clients._transport import AsyncTransport, SyncTransport
 from polymarket.clients.async_public import AsyncPublicClient
 from polymarket.clients.public import PublicClient
@@ -49,6 +55,61 @@ def _install_async_data_transport(client: AsyncPublicClient, handler: httpx.Mock
         client=httpx.AsyncClient(base_url="https://example.test", transport=handler),
     )
     client._ctx = dataclasses.replace(client._ctx, data=new_transport)
+
+
+def _install_sync_gamma_transport(client: PublicClient, handler: httpx.MockTransport) -> None:
+    new_transport = SyncTransport(
+        base_url="https://example.test",
+        client=httpx.Client(base_url="https://example.test", transport=handler),
+    )
+    client._ctx = dataclasses.replace(client._ctx, gamma=new_transport)
+
+
+def _install_async_gamma_transport(client: AsyncPublicClient, handler: httpx.MockTransport) -> None:
+    new_transport = AsyncTransport(
+        base_url="https://example.test",
+        client=httpx.AsyncClient(base_url="https://example.test", transport=handler),
+    )
+    client._ctx = dataclasses.replace(client._ctx, gamma=new_transport)
+
+
+def _page_handler(
+    captured: list[httpx.Request],
+    pages: dict[int, tuple[list[int], bool]],
+) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        page = int(parse_qs(urlparse(str(request.url)).query)["page"][0])
+        items, has_more = pages.get(page, ([], False))
+        return httpx.Response(
+            200,
+            json={"items": items, "pagination": {"hasMore": has_more, "totalResults": 42}},
+            request=request,
+        )
+
+    return httpx.MockTransport(handler)
+
+
+def _page_spec(
+    path: str = "/public-search",
+    base_params: dict[str, str] | None = None,
+) -> PageBasedSpec[tuple[int, ...]]:
+    def parse_page(data: object) -> PageBasedPagePayload[tuple[int, ...]]:
+        assert isinstance(data, dict)
+        body = typing.cast(dict[str, typing.Any], data)
+        pagination = typing.cast(dict[str, typing.Any], body["pagination"])
+        return PageBasedPagePayload(
+            items=tuple(typing.cast(list[int], body["items"])),
+            has_more=bool(pagination["hasMore"]),
+            total_count=int(pagination["totalResults"]),
+        )
+
+    return PageBasedSpec[tuple[int, ...]](
+        service="gamma",
+        path=path,
+        parse_page=parse_page,
+        base_params=base_params,
+    )
 
 
 def test_sync_paginate_offset_sends_limit_and_offset() -> None:
@@ -237,5 +298,109 @@ def test_async_paginate_offset_cursor_rejects_different_query() -> None:
             )
             with pytest.raises(UserInputError, match="different query parameters"):
                 await b_paginator.from_cursor(first.next_cursor).first_page()
+
+    asyncio.run(run())
+
+
+def test_sync_paginate_page_based_sends_page_and_limit_per_type() -> None:
+    captured: list[httpx.Request] = []
+    handler = _page_handler(captured, {1: ([1, 2, 3], True)})
+    with PublicClient() as client:
+        _install_sync_gamma_transport(client, handler)
+        page = sync_paginate_page_based(
+            client._ctx, _page_spec(base_params={"q": "x"}), page_size=10
+        ).first_page()
+
+    assert len(captured) == 1
+    qs = parse_qs(urlparse(str(captured[0].url)).query)
+    assert qs["page"] == ["1"]
+    assert qs["limit_per_type"] == ["10"]
+    assert qs["q"] == ["x"]
+    assert page.items == ((1, 2, 3),)
+    assert page.has_more is True
+    assert page.total_count == 42
+    assert page.next_cursor is not None
+
+
+def test_sync_paginate_page_based_terminal_page_has_no_cursor() -> None:
+    captured: list[httpx.Request] = []
+    handler = _page_handler(captured, {1: ([1, 2], False)})
+    with PublicClient() as client:
+        _install_sync_gamma_transport(client, handler)
+        page = sync_paginate_page_based(client._ctx, _page_spec(), page_size=10).first_page()
+
+    assert page.has_more is False
+    assert page.next_cursor is None
+
+
+def test_sync_paginate_page_based_round_trip_next_cursor() -> None:
+    captured: list[httpx.Request] = []
+    handler = _page_handler(
+        captured,
+        {1: ([1, 2], True), 2: ([3, 4], False)},
+    )
+    with PublicClient() as client:
+        _install_sync_gamma_transport(client, handler)
+        paginator = sync_paginate_page_based(
+            client._ctx, _page_spec(base_params={"q": "x"}), page_size=10
+        )
+        collected: list[tuple[int, ...]] = []
+        for page in paginator:
+            collected.extend(page.items)
+
+    assert collected == [(1, 2), (3, 4)]
+    assert len(captured) == 2
+    qs2 = parse_qs(urlparse(str(captured[1].url)).query)
+    assert qs2["page"] == ["2"]
+
+
+def test_sync_paginate_page_based_next_cursor_decodes_to_next_page() -> None:
+    captured: list[httpx.Request] = []
+    handler = _page_handler(captured, {1: ([1], True)})
+    with PublicClient() as client:
+        _install_sync_gamma_transport(client, handler)
+        spec = _page_spec(base_params={"q": "x"})
+        page = sync_paginate_page_based(client._ctx, spec, page_size=10).first_page()
+
+    assert page.next_cursor is not None
+    assert decode_page_cursor(
+        page.next_cursor,
+        expected_service="gamma",
+        expected_path="/public-search",
+        expected_base_params={"q": "x"},
+    ) == (2, 10)
+
+
+def test_sync_paginate_page_based_cursor_rejects_different_endpoint() -> None:
+    captured: list[httpx.Request] = []
+    handler = _page_handler(captured, {1: ([1], True)})
+    with PublicClient() as client:
+        _install_sync_gamma_transport(client, handler)
+        a = sync_paginate_page_based(client._ctx, _page_spec(path="/public-search"), page_size=10)
+        first = a.first_page()
+        assert first.next_cursor is not None
+        b = sync_paginate_page_based(client._ctx, _page_spec(path="/other"), page_size=10)
+        with pytest.raises(UserInputError, match="does not belong"):
+            b.from_cursor(first.next_cursor).first_page()
+
+
+def test_async_paginate_page_based_round_trip_next_cursor() -> None:
+    async def run() -> None:
+        captured: list[httpx.Request] = []
+        handler = _page_handler(
+            captured,
+            {1: ([1, 2], True), 2: ([3], False)},
+        )
+        async with AsyncPublicClient() as client:
+            _install_async_gamma_transport(client, handler)
+            paginator = async_paginate_page_based(client._ctx, _page_spec(), page_size=10)
+            collected: list[tuple[int, ...]] = []
+            async for page in paginator:
+                collected.extend(page.items)
+
+        assert collected == [(1, 2), (3,)]
+        assert len(captured) == 2
+        qs2 = parse_qs(urlparse(str(captured[1].url)).query)
+        assert qs2["page"] == ["2"]
 
     asyncio.run(run())

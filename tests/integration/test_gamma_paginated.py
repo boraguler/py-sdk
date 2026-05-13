@@ -203,20 +203,22 @@ def test_async_list_comments_by_user_address_returns_paginator() -> None:
 @pytest.mark.integration
 def test_search_returns_search_results() -> None:
     with PublicClient() as client:
-        results = client.search(q="election")
+        first_page = client.search(q="election").first_page()
+        bundle = first_page.items[0]
 
-        assert isinstance(results, SearchResults)
-        assert results.events or results.tags or results.profiles
+        assert isinstance(bundle, SearchResults)
+        assert bundle.events or bundle.tags or bundle.profiles
 
 
 @pytest.mark.integration
 def test_async_search_returns_search_results() -> None:
     async def run() -> None:
         async with AsyncPublicClient() as client:
-            results = await client.search(q="election")
+            first_page = await client.search(q="election").first_page()
+            bundle = first_page.items[0]
 
-            assert isinstance(results, SearchResults)
-            assert results.events or results.tags or results.profiles
+            assert isinstance(bundle, SearchResults)
+            assert bundle.events or bundle.tags or bundle.profiles
 
     asyncio.run(run())
 
@@ -224,15 +226,18 @@ def test_async_search_returns_search_results() -> None:
 @pytest.mark.integration
 def test_search_cursor_advances_to_next_page() -> None:
     with PublicClient() as client:
-        page_one = client.search(q="election", page_size=2)
+        paginator = client.search(q="election", page_size=2)
+        page_one = paginator.first_page()
 
         if not page_one.has_more:
             pytest.skip("search returned only one page; cannot verify cursor advance")
 
         assert page_one.next_cursor is not None
-        page_two = client.search(q="election", page_size=2, cursor=page_one.next_cursor)
+        page_two = paginator.from_cursor(page_one.next_cursor).first_page()
 
-        assert isinstance(page_two, SearchResults)
-        page_one_ids = {event.id for event in page_one.events}
-        page_two_ids = {event.id for event in page_two.events}
-        assert page_one_ids != page_two_ids or not page_one.events
+        bundle_one = page_one.items[0]
+        bundle_two = page_two.items[0]
+        assert isinstance(bundle_two, SearchResults)
+        page_one_ids = {event.id for event in bundle_one.events}
+        page_two_ids = {event.id for event in bundle_two.events}
+        assert page_one_ids != page_two_ids or not bundle_one.events

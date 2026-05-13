@@ -53,14 +53,22 @@ class KeysetPagePayload(Generic[T]):
 class PageBasedSpec(Generic[T]):
     """A spec for endpoints that paginate via explicit 1-indexed page number.
 
-    Used for the `search` endpoint; not exposed as a Paginator, but kept here
-    for symmetry with the other paginated specs.
+    Each response carries one payload value of type T (e.g. a SearchResults bundle).
+    The dispatcher wraps the payload in a `Page` so callers get the standard
+    `Paginator` shape used by every other paginated endpoint.
     """
 
     service: Service
     path: str
-    parse: Callable[[object], T]
+    parse_page: Callable[[object], "PageBasedPagePayload[T]"]
     base_params: Mapping[str, QueryParamValue] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PageBasedPagePayload(Generic[T]):
+    items: T
+    has_more: bool
+    total_count: int | None = None
 
 
 __all__ = [
@@ -68,6 +76,7 @@ __all__ = [
     "KeysetPaginatedSpec",
     "Method",
     "OffsetPaginatedSpec",
+    "PageBasedPagePayload",
     "PageBasedSpec",
     "QueryParamScalar",
     "QueryParamValue",

@@ -28,12 +28,11 @@ from polymarket._internal.dispatch import (
     sync_dispatch,
     sync_paginate_keyset,
     sync_paginate_offset,
+    sync_paginate_page_based,
 )
-from polymarket._internal.pagination import decode_page_cursor, encode_page_cursor
-from polymarket._internal.request import QueryParamValue
 from polymarket.clients._transport import SyncTransport
 from polymarket.environments import PRODUCTION, Environment
-from polymarket.errors import RequestRejectedError, UserInputError
+from polymarket.errors import RequestRejectedError
 from polymarket.models import (
     Comment,
     Event,
@@ -716,10 +715,8 @@ class PublicClient:
         search_profiles: bool | None = None,
         search_tags: bool | None = None,
         sort: str | None = None,
-        page: int = 1,
         page_size: int = 10,
-        cursor: str | None = None,
-    ) -> SearchResults:
+    ) -> Paginator[SearchResults]:
         spec = _gamma_actions.search_spec(
             q=q,
             ascending=ascending,
@@ -735,34 +732,4 @@ class PublicClient:
             search_tags=search_tags,
             sort=sort,
         )
-
-        if cursor is not None:
-            page, page_size = decode_page_cursor(
-                cursor,
-                expected_service=spec.service,
-                expected_path=spec.path,
-                expected_base_params=spec.base_params,
-            )
-        if page < 1:
-            raise UserInputError("page must be a positive integer.")
-        if page_size < 1:
-            raise UserInputError("page_size must be a positive integer.")
-
-        params: dict[str, QueryParamValue] = {
-            **(spec.base_params or {}),
-            "page": page,
-            "limit_per_type": page_size,
-        }
-        payload = self._ctx.gamma.get_json(spec.path, params=params)
-        results = spec.parse(payload)
-
-        if not results.has_more:
-            return results
-        next_cursor = encode_page_cursor(
-            service=spec.service,
-            path=spec.path,
-            base_params=spec.base_params,
-            page=page + 1,
-            page_size=page_size,
-        )
-        return results.model_copy(update={"next_cursor": next_cursor})
+        return sync_paginate_page_based(self._ctx, spec, page_size=page_size)

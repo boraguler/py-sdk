@@ -695,7 +695,7 @@ def test_search_tag_parses_event_count() -> None:
     assert tag.event_count == 42
 
 
-def test_search_results_flattens_pagination() -> None:
+def test_search_results_parses_bundle_payload() -> None:
     from polymarket.models.gamma import SearchResults
 
     results = SearchResults.parse_response(
@@ -710,25 +710,9 @@ def test_search_results_flattens_pagination() -> None:
     assert len(results.events) == 1
     assert len(results.tags) == 1
     assert len(results.profiles) == 1
-    assert results.has_more is True
-    assert results.total_count == 100
-    assert results.next_cursor is None
 
 
-def test_search_results_handles_missing_pagination() -> None:
-    from polymarket.models.gamma import SearchResults
-
-    results = SearchResults.parse_response({"events": [], "tags": [], "profiles": []})
-
-    assert results.events == ()
-    assert results.tags == ()
-    assert results.profiles == ()
-    assert results.has_more is False
-    assert results.total_count is None
-    assert results.next_cursor is None
-
-
-def test_search_results_handles_completely_empty_response() -> None:
+def test_search_results_handles_empty_response() -> None:
     from polymarket.models.gamma import SearchResults
 
     results = SearchResults.parse_response({})
@@ -736,7 +720,6 @@ def test_search_results_handles_completely_empty_response() -> None:
     assert results.events == ()
     assert results.tags == ()
     assert results.profiles == ()
-    assert results.has_more is False
 
 
 def test_search_results_accepts_null_arrays_as_empty() -> None:
@@ -749,8 +732,6 @@ def test_search_results_accepts_null_arrays_as_empty() -> None:
     assert results.events == ()
     assert results.tags == ()
     assert results.profiles == ()
-    assert results.has_more is False
-    assert results.total_count is None
 
 
 def test_search_results_rejects_non_list_events() -> None:
@@ -767,55 +748,82 @@ def test_search_results_rejects_integer_events() -> None:
         SearchResults.parse_response({"events": 0})
 
 
-def test_search_results_rejects_non_object_pagination() -> None:
+def test_search_page_response_extracts_pagination_metadata() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    page_payload = SearchResults.parse_page_response(
+        {
+            "events": [{"id": "E-1"}],
+            "tags": [],
+            "profiles": [],
+            "pagination": {"hasMore": True, "totalResults": 100},
+        }
+    )
+
+    assert page_payload.has_more is True
+    assert page_payload.total_count == 100
+    assert len(page_payload.items.events) == 1
+
+
+def test_search_page_response_handles_missing_pagination() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    page_payload = SearchResults.parse_page_response({"events": [], "tags": [], "profiles": []})
+
+    assert page_payload.has_more is False
+    assert page_payload.total_count is None
+
+
+def test_search_page_response_handles_null_pagination() -> None:
+    from polymarket.models.gamma import SearchResults
+
+    page_payload = SearchResults.parse_page_response({"pagination": None})
+
+    assert page_payload.has_more is False
+    assert page_payload.total_count is None
+
+
+def test_search_page_response_rejects_non_object_pagination() -> None:
     from polymarket.models.gamma import SearchResults
 
     with pytest.raises(UnexpectedResponseError):
-        SearchResults.parse_response({"pagination": "terminal"})
+        SearchResults.parse_page_response({"pagination": "terminal"})
 
 
-def test_search_results_rejects_string_has_more() -> None:
+def test_search_page_response_rejects_string_has_more() -> None:
     from polymarket.models.gamma import SearchResults
 
     with pytest.raises(UnexpectedResponseError):
-        SearchResults.parse_response({"pagination": {"hasMore": "false"}})
+        SearchResults.parse_page_response({"pagination": {"hasMore": "false"}})
 
 
-def test_search_results_rejects_int_has_more() -> None:
+def test_search_page_response_rejects_int_has_more() -> None:
     from polymarket.models.gamma import SearchResults
 
     with pytest.raises(UnexpectedResponseError):
-        SearchResults.parse_response({"pagination": {"hasMore": 1}})
+        SearchResults.parse_page_response({"pagination": {"hasMore": 1}})
 
 
-def test_search_results_accepts_null_has_more_as_false() -> None:
+def test_search_page_response_accepts_null_has_more_as_false() -> None:
     from polymarket.models.gamma import SearchResults
 
-    results = SearchResults.parse_response({"pagination": {"hasMore": None}})
+    page_payload = SearchResults.parse_page_response({"pagination": {"hasMore": None}})
 
-    assert results.has_more is False
-
-
-def test_search_results_rejects_bool_total_results() -> None:
-    from polymarket.models.gamma import SearchResults
-
-    with pytest.raises(UnexpectedResponseError):
-        SearchResults.parse_response({"pagination": {"totalResults": True}})
+    assert page_payload.has_more is False
 
 
-def test_search_results_rejects_string_total_results() -> None:
+def test_search_page_response_rejects_bool_total_results() -> None:
     from polymarket.models.gamma import SearchResults
 
     with pytest.raises(UnexpectedResponseError):
-        SearchResults.parse_response({"pagination": {"totalResults": "10"}})
+        SearchResults.parse_page_response({"pagination": {"totalResults": True}})
 
 
-def test_search_results_ignores_server_next_cursor_field() -> None:
+def test_search_page_response_rejects_string_total_results() -> None:
     from polymarket.models.gamma import SearchResults
 
-    results = SearchResults.parse_response({"events": [], "next_cursor": "should-be-ignored"})
-
-    assert results.next_cursor is None
+    with pytest.raises(UnexpectedResponseError):
+        SearchResults.parse_page_response({"pagination": {"totalResults": "10"}})
 
 
 def test_tag_reference_parse_response_list_rejects_non_list() -> None:

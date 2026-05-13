@@ -669,6 +669,6 @@ def search_spec(
     return PageBasedSpec(
         service="gamma",
         path="/public-search",
-        parse=SearchResults.parse_response,
+        parse_page=SearchResults.parse_page_response,
         base_params=params,
     )

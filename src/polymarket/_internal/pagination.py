@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping
 from typing import TypeVar, cast
 
-from polymarket._internal.request import QueryParamValue, Service
+from polymarket._internal.request import PageBasedPagePayload, QueryParamValue, Service
 from polymarket.errors import UserInputError
 from polymarket.pagination import Page
 
@@ -288,9 +288,38 @@ def decode_page_cursor(
     return raw_page, raw_page_size
 
 
+def compute_page_based_page(
+    *,
+    service: Service,
+    path: str,
+    base_params: Mapping[str, QueryParamValue] | None,
+    page: int,
+    page_size: int,
+    payload: PageBasedPagePayload[T],
+) -> Page[T]:
+    next_cursor = (
+        encode_page_cursor(
+            service=service,
+            path=path,
+            base_params=base_params,
+            page=page + 1,
+            page_size=page_size,
+        )
+        if payload.has_more
+        else None
+    )
+    return Page(
+        items=(payload.items,),
+        has_more=payload.has_more,
+        next_cursor=next_cursor,
+        total_count=payload.total_count,
+    )
+
+
 __all__ = [
     "compute_keyset_page",
     "compute_offset_page",
+    "compute_page_based_page",
     "decode_keyset_cursor",
     "decode_offset_cursor",
     "decode_page_cursor",
