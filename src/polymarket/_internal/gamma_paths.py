@@ -2,6 +2,7 @@
 
 from urllib.parse import quote, urlparse
 
+from polymarket._internal.validation import require_nonempty
 from polymarket.errors import UserInputError
 
 
@@ -11,6 +12,26 @@ def build_market_path(*, id: str | None, slug: str | None, url: str | None) -> s
 
 def build_event_path(*, id: str | None, slug: str | None, url: str | None) -> str:
     return _build_entity_path("event", id=id, slug=slug, url=url)
+
+
+def build_market_tags_path(id: str) -> str:
+    return f"/markets/{quote(require_nonempty('id', id), safe='')}/tags"
+
+
+def build_event_tags_path(id: str) -> str:
+    return f"/events/{quote(require_nonempty('id', id), safe='')}/tags"
+
+
+def build_series_path(id: str) -> str:
+    return f"/series/{quote(require_nonempty('id', id), safe='')}"
+
+
+def build_comment_thread_path(id: str) -> str:
+    return f"/comments/{quote(require_nonempty('id', id), safe='')}"
+
+
+def build_comments_by_user_address_path(address: str) -> str:
+    return f"/comments/user_address/{quote(require_nonempty('address', address), safe='')}"
 
 
 def build_tag_path(*, id: str | None, slug: str | None) -> str:

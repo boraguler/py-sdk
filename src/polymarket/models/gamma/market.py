@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -11,7 +10,16 @@ from typing import Any, cast
 from pydantic import AliasChoices, Field, field_validator, model_validator
 
 from polymarket.models.base import BaseModel
-from polymarket.models.gamma.common import parse_optional_datetime
+from polymarket.models.gamma.common import (
+    coerce_string_id,
+    empty_string_to_none,
+    parse_decimal,
+    parse_dicts,
+    parse_optional_datetime,
+    parse_optional_decimal,
+    parse_sequence,
+    parse_string_sequence,
+)
 from polymarket.models.types import (
     ClobRewardId,
     ConditionId,
@@ -79,7 +87,7 @@ class MarketOutcome(BaseModel):
     @field_validator("price", mode="before")
     @classmethod
     def _parse_price(cls, value: object) -> Decimal | None:
-        return _parse_optional_decimal(value)
+        return parse_optional_decimal(value)
 
 
 class MarketOutcomes(BaseModel):
@@ -130,7 +138,7 @@ class MarketMetrics(BaseModel):
     @field_validator("*", mode="before")
     @classmethod
     def _parse_metric(cls, value: object) -> Decimal | None:
-        return _parse_optional_decimal(value)
+        return parse_optional_decimal(value)
 
 
 class MarketPrices(BaseModel):
@@ -171,7 +179,7 @@ class MarketPrices(BaseModel):
     @field_validator("*", mode="before")
     @classmethod
     def _parse_price(cls, value: object) -> Decimal | None:
-        return _parse_optional_decimal(value)
+        return parse_optional_decimal(value)
 
 
 class FeeSchedule(BaseModel):
@@ -183,7 +191,7 @@ class FeeSchedule(BaseModel):
     @field_validator("rate", "rebate_rate", mode="before")
     @classmethod
     def _parse_decimal(cls, value: object) -> Decimal:
-        return _parse_decimal(value)
+        return parse_decimal(value)
 
 
 class MarketTrading(BaseModel):
@@ -215,7 +223,7 @@ class MarketTrading(BaseModel):
     @field_validator("minimum_order_size", "minimum_tick_size", mode="before")
     @classmethod
     def _parse_optional_decimal(cls, value: object) -> Decimal | None:
-        return _parse_optional_decimal(value)
+        return parse_optional_decimal(value)
 
 
 class MarketResolution(BaseModel):
@@ -239,7 +247,7 @@ class MarketResolution(BaseModel):
 
     @field_validator("question_id", "neg_risk_request_id", "resolved_by", mode="before")
     @classmethod
-    def _empty_string_to_none(cls, value: object) -> object | None:
+    def empty_string_to_none(cls, value: object) -> object | None:
         return None if value == "" else value
 
     @field_validator("uma_resolution_status", mode="before")
@@ -263,7 +271,7 @@ class ClobReward(BaseModel):
     @field_validator("rewards_amount", "rewards_daily_rate", mode="before")
     @classmethod
     def _parse_decimal(cls, value: object) -> Decimal:
-        return _parse_decimal(value)
+        return parse_decimal(value)
 
 
 class MarketRewards(BaseModel):
@@ -287,7 +295,7 @@ class MarketRewards(BaseModel):
     @field_validator("rewards_min_size", mode="before")
     @classmethod
     def _parse_optional_decimal(cls, value: object) -> Decimal | None:
-        return _parse_optional_decimal(value)
+        return parse_optional_decimal(value)
 
 
 class MarketSportsMetadata(BaseModel):
@@ -315,6 +323,11 @@ class MarketEvent(BaseModel):
     id: EventId
     slug: str | None = None
     title: str | None = None
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _coerce_id(cls, value: object) -> object:
+        return coerce_string_id(value)
 
 
 class MarketTag(BaseModel):
@@ -358,11 +371,11 @@ class Market(BaseModel):
         if "state" in data:
             return data
 
-        outcomes = _parse_string_sequence(data.get("outcomes"))
+        outcomes = parse_string_sequence(data.get("outcomes"))
         outcome_prices = tuple(
-            _parse_decimal(item) for item in _parse_sequence(data.get("outcomePrices"))
+            parse_decimal(item) for item in parse_sequence(data.get("outcomePrices"))
         )
-        token_ids = tuple(str(item) for item in _parse_sequence(data.get("clobTokenIds")))
+        token_ids = parse_string_sequence(data.get("clobTokenIds"))
 
         if len(outcomes) != 2:
             msg = f"Expected binary market outcomes, received {len(outcomes)}"
@@ -371,7 +384,7 @@ class Market(BaseModel):
         return {
             "id": data.get("id"),
             "slug": data.get("slug"),
-            "condition_id": _empty_string_to_none(data.get("conditionId")),
+            "condition_id": empty_string_to_none(data.get("conditionId")),
             "question": data.get("question"),
             "description": data.get("description"),
             "category": data.get("category"),
@@ -433,11 +446,11 @@ class Market(BaseModel):
                 "fee_schedule": data.get("feeSchedule"),
             },
             "resolution": {
-                "question_id": _empty_string_to_none(data.get("questionID")),
-                "neg_risk_request_id": _empty_string_to_none(data.get("negRiskRequestID")),
-                "uma_resolution_status": _empty_string_to_none(data.get("umaResolutionStatus")),
+                "question_id": empty_string_to_none(data.get("questionID")),
+                "neg_risk_request_id": empty_string_to_none(data.get("negRiskRequestID")),
+                "uma_resolution_status": empty_string_to_none(data.get("umaResolutionStatus")),
                 "source": data.get("resolutionSource"),
-                "resolved_by": _empty_string_to_none(data.get("resolvedBy")),
+                "resolved_by": empty_string_to_none(data.get("resolvedBy")),
             },
             "rewards": {
                 "clob_rewards": data.get("clobRewards"),
@@ -457,7 +470,7 @@ class Market(BaseModel):
                     "slug": event.get("slug"),
                     "title": event.get("title"),
                 }
-                for event in _parse_dicts(data.get("events"))
+                for event in parse_dicts(data.get("events"))
             ],
             "tags": [
                 {
@@ -465,60 +478,9 @@ class Market(BaseModel):
                     "slug": tag.get("slug"),
                     "label": tag.get("label"),
                 }
-                for tag in _parse_dicts(data.get("tags"))
+                for tag in parse_dicts(data.get("tags"))
             ],
         }
-
-
-def _parse_sequence(value: object) -> tuple[Any, ...]:
-    if value is None:
-        return ()
-
-    if isinstance(value, str):
-        parsed = json.loads(value)
-        if not isinstance(parsed, list):
-            msg = "expected a JSON array"
-            raise ValueError(msg)
-
-        return tuple(cast(list[Any], parsed))
-
-    if isinstance(value, list | tuple):
-        return tuple(cast(list[Any] | tuple[Any, ...], value))
-
-    msg = "expected a sequence"
-    raise ValueError(msg)
-
-
-def _parse_string_sequence(value: object) -> tuple[str, ...]:
-    return tuple(str(item) for item in _parse_sequence(value))
-
-
-def _parse_dicts(value: object) -> tuple[dict[str, Any], ...]:
-    items = _parse_sequence(value)
-    dicts: list[dict[str, Any]] = []
-    for item in items:
-        if not isinstance(item, dict):
-            msg = "expected an object"
-            raise ValueError(msg)
-
-        dicts.append(cast(dict[str, Any], item))
-
-    return tuple(dicts)
-
-
-def _empty_string_to_none(value: object) -> object | None:
-    return None if value == "" else value
-
-
-def _parse_optional_decimal(value: object) -> Decimal | None:
-    if value in (None, ""):
-        return None
-
-    return _parse_decimal(value)
-
-
-def _parse_decimal(value: object) -> Decimal:
-    return Decimal(str(value))
 
 
 __all__ = [

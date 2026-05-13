@@ -9,7 +9,7 @@ from pydantic import Field, field_validator, model_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import ImageOptimization, parse_optional_datetime
-from polymarket.models.types import TokenId
+from polymarket.models.types import CommentId, EventId, SeriesId, TokenId
 from polymarket.types import EvmAddress
 
 
@@ -81,11 +81,14 @@ class CommentMedia(BaseModel):
 
 
 class Comment(BaseModel):
-    id: str
+    id: CommentId
     body: str | None = None
     parent_entity_type: str | None = Field(default=None, validation_alias="parentEntityType")
-    parent_entity_id: str | None = Field(default=None, validation_alias="parentEntityID")
-    parent_comment_id: str | None = Field(default=None, validation_alias="parentCommentID")
+    parent_entity_id: EventId | SeriesId | None = Field(
+        default=None,
+        validation_alias="parentEntityID",
+    )
+    parent_comment_id: CommentId | None = Field(default=None, validation_alias="parentCommentID")
     user_address: EvmAddress | None = Field(default=None, validation_alias="userAddress")
     reply_address: EvmAddress | None = Field(default=None, validation_alias="replyAddress")
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")

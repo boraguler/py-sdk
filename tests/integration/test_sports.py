@@ -12,6 +12,9 @@ def test_get_sports_returns_sports_metadata() -> None:
 
         assert sports
         assert all(isinstance(sport, SportsMetadata) for sport in sports)
+        first = sports[0]
+        assert first.sport
+        assert isinstance(first.id, int)
 
 
 @pytest.mark.integration

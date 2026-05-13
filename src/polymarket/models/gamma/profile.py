@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, cast
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import parse_optional_datetime
@@ -43,8 +43,12 @@ class PublicProfile(BaseModel):
         data = dict(cast(dict[str, Any], value))
         if "wallet" not in data:
             data["wallet"] = data.get("proxyWallet")
-        data["createdAt"] = parse_optional_datetime(data.get("createdAt"))
         return data
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 __all__ = ["PublicProfile", "PublicProfileUser"]

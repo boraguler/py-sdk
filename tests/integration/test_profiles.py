@@ -14,6 +14,7 @@ def test_get_public_profile_returns_profile() -> None:
 
         assert isinstance(profile, PublicProfile)
         assert profile.wallet == PROFILE_ADDRESS
+        assert profile.wallet is not None and profile.wallet.startswith("0x")
 
 
 @pytest.mark.integration
