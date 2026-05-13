@@ -85,6 +85,7 @@ class PublicClient:
             environment=environment,
             gamma=SyncTransport(base_url=environment.gamma_url, logger=logger),
             data=SyncTransport(base_url=environment.data_url, logger=logger),
+            clob=SyncTransport(base_url=environment.clob_url, logger=logger),
         )
 
     @property
@@ -107,7 +108,10 @@ class PublicClient:
         try:
             self._ctx.gamma.close()
         finally:
-            self._ctx.data.close()
+            try:
+                self._ctx.data.close()
+            finally:
+                self._ctx.clob.close()
 
     def get_market(
         self,
