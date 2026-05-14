@@ -133,9 +133,10 @@ def test_parse_open_orders_page_rejects_non_dict() -> None:
         parse_open_orders_page([])
 
 
-def test_parse_open_orders_page_rejects_missing_count() -> None:
-    with pytest.raises(UnexpectedResponseError, match="count"):
-        parse_open_orders_page({"data": [], "next_cursor": END_CURSOR})
+def test_parse_open_orders_page_returns_none_total_count_when_missing() -> None:
+    page = parse_open_orders_page({"data": [], "next_cursor": END_CURSOR})
+    assert page.total_count is None
+    assert page.next_cursor is None
 
 
 def test_build_get_order_request_includes_order_id_in_path() -> None:

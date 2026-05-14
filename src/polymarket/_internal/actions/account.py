@@ -47,12 +47,10 @@ def _next_cursor_or_none(raw: object) -> str | None:
     return None if raw == END_CURSOR else raw
 
 
-def _require_int(payload: dict[str, object], key: str) -> int:
+def _optional_int(payload: dict[str, object], key: str) -> int | None:
     value = payload.get(key)
     if isinstance(value, bool) or not isinstance(value, int):
-        raise UnexpectedResponseError(
-            f"expected cursor page '{key}' to be an int, got {type(value).__name__}"
-        )
+        return None
     return value
 
 
@@ -103,7 +101,7 @@ def parse_open_orders_page(data: object) -> Page[OpenOrder]:
         items=items,
         has_more=next_cursor is not None,
         next_cursor=next_cursor,
-        total_count=_require_int(payload, "count"),
+        total_count=_optional_int(payload, "count"),
     )
 
 
@@ -157,7 +155,7 @@ def parse_account_trades_page(data: object) -> Page[ClobTrade]:
         items=items,
         has_more=next_cursor is not None,
         next_cursor=next_cursor,
-        total_count=_require_int(payload, "count"),
+        total_count=_optional_int(payload, "count"),
     )
 
 
