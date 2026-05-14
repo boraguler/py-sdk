@@ -364,6 +364,35 @@ def test_secure_client_classifies_eoa_when_wallet_equals_signer() -> None:
         asyncio.run(client.close())
 
 
+def test_secure_client_normalizes_wallet_to_checksum() -> None:
+    async def run() -> str:
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS.lower(),
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
+        )
+        try:
+            return client.wallet
+        finally:
+            await client.close()
+
+    assert asyncio.run(run()) == SIGNER_ADDRESS
+
+
+def test_secure_client_rejects_invalid_wallet_address() -> None:
+    async def run() -> None:
+        await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY,
+            wallet="not-an-address",
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
+        )
+
+    with pytest.raises(UserInputError, match="Invalid wallet address"):
+        asyncio.run(run())
+
+
 def test_secure_client_rejects_missing_wallet() -> None:
     async def run() -> None:
         await AsyncSecureClient.create(

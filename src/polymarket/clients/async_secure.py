@@ -7,6 +7,7 @@ from typing import Self, TypeAlias, cast
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
+from eth_utils.address import to_checksum_address
 
 from polymarket._internal.actions import account as _account_actions
 from polymarket._internal.actions import auth as _auth_actions
@@ -148,12 +149,16 @@ class AsyncSecureClient:
         except (ValueError, TypeError) as error:
             raise UserInputError(f"Invalid private_key: {error}") from error
 
+        try:
+            wallet_checksum = to_checksum_address(wallet)
+        except ValueError as error:
+            raise UserInputError(f"Invalid wallet address: {error}") from error
         wallet_type = classify_wallet_type(
             signer=signer.address,
-            wallet=wallet,
+            wallet=wallet_checksum,
             config=environment.wallet_derivation,
         )
-        branded_wallet = cast(EvmAddress, wallet)
+        branded_wallet = cast(EvmAddress, wallet_checksum)
 
         gamma = AsyncTransport(base_url=environment.gamma_url, logger=logger)
         data = AsyncTransport(base_url=environment.data_url, logger=logger)
