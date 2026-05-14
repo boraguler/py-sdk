@@ -40,6 +40,8 @@ def _add_optional(params: dict[str, QueryParamValue], key: str, value: object) -
 
 
 def _next_cursor_or_none(raw: object) -> str | None:
+    if raw is None:
+        return None
     if not isinstance(raw, str):
         raise UnexpectedResponseError(
             f"expected next_cursor to be a string, got {type(raw).__name__}"

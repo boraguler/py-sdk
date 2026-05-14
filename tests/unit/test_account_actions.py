@@ -138,6 +138,17 @@ def test_parse_open_orders_page_returns_none_total_count_when_missing() -> None:
     assert page.next_cursor is None
 
 
+def test_parse_open_orders_page_treats_missing_next_cursor_as_terminal() -> None:
+    page = parse_open_orders_page({"data": [], "count": 0})
+    assert page.next_cursor is None
+    assert page.has_more is False
+
+
+def test_parse_open_orders_page_rejects_non_string_next_cursor() -> None:
+    with pytest.raises(UnexpectedResponseError, match="next_cursor"):
+        parse_open_orders_page({"data": [], "next_cursor": 42})
+
+
 def test_build_get_order_request_includes_order_id_in_path() -> None:
     path, params = build_get_order_request(order_id="order-1")
     assert path == "/data/order/order-1"
