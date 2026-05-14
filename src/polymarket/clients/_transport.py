@@ -70,6 +70,16 @@ class SyncTransport:
         response = self._request("GET", path, params=params)
         return response.content
 
+    def post_json(
+        self,
+        path: str,
+        *,
+        json: object,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> Any:
+        response = self._request("POST", path, params=params, json=json)
+        return _read_json(response)
+
     def close(self) -> None:
         if self._owns_client:
             self._client.close()
@@ -80,10 +90,11 @@ class SyncTransport:
         path: str,
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
+        json: object | None = None,
     ) -> httpx.Response:
         started = time.perf_counter()
         try:
-            response = self._client.request(method, path, params=_clean_params(params))
+            response = self._client.request(method, path, params=_clean_params(params), json=json)
         except httpx.HTTPError as error:
             _log_failure(self._logger, method, path, error, started)
             raise TransportError(str(error) or "Request failed") from error
@@ -131,6 +142,16 @@ class AsyncTransport:
         response = await self._request("GET", path, params=params)
         return response.content
 
+    async def post_json(
+        self,
+        path: str,
+        *,
+        json: object,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+    ) -> Any:
+        response = await self._request("POST", path, params=params, json=json)
+        return _read_json(response)
+
     async def close(self) -> None:
         if self._owns_client:
             await self._client.aclose()
@@ -141,10 +162,13 @@ class AsyncTransport:
         path: str,
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
+        json: object | None = None,
     ) -> httpx.Response:
         started = time.perf_counter()
         try:
-            response = await self._client.request(method, path, params=_clean_params(params))
+            response = await self._client.request(
+                method, path, params=_clean_params(params), json=json
+            )
         except httpx.HTTPError as error:
             _log_failure(self._logger, method, path, error, started)
             raise TransportError(str(error) or "Request failed") from error

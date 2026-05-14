@@ -1,6 +1,8 @@
 """Model-specific Polymarket domain types."""
 
-from typing import NewType
+from typing import Literal, NewType, TypeAlias
+
+OrderSide: TypeAlias = Literal["BUY", "SELL"]
 
 BestLineId = NewType("BestLineId", str)
 CategoryId = NewType("CategoryId", str)
@@ -41,6 +43,7 @@ __all__ = [
     "InternalUserId",
     "MarketId",
     "OrderId",
+    "OrderSide",
     "PartnerId",
     "QuestionId",
     "ResolutionRequestId",

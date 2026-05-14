@@ -1,3 +1,4 @@
+import asyncio
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -5,9 +6,13 @@ from pathlib import Path
 import pytest
 from dotenv import load_dotenv
 
+from polymarket import AsyncPublicClient
+
 _DOTENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 _METERED_ENV_VAR = "POLYMARKET_RUN_METERED_TESTS"
 _METERED_SKIP_REASON = f"set {_METERED_ENV_VAR}=1 to run metered integration tests"
+
+_PAGES_TO_SCAN = 5
 
 
 def _load_dotenv() -> None:
@@ -39,3 +44,27 @@ def require_env() -> Callable[[str], str]:
         return value
 
     return get
+
+
+@pytest.fixture(scope="session")
+def active_clob_token() -> str:
+    async def find() -> str:
+        async with AsyncPublicClient() as client:
+            paginator = client.list_markets(closed=False, page_size=20)
+            pages_seen = 0
+            async for page in paginator:
+                pages_seen += 1
+                for market in page.items:
+                    if not market.state.enable_order_book:
+                        continue
+                    if not market.state.accepting_orders:
+                        continue
+                    token_id = market.outcomes.yes.token_id
+                    if token_id is None:
+                        continue
+                    return token_id
+                if pages_seen >= _PAGES_TO_SCAN:
+                    break
+        pytest.skip("no CLOB-active market with a Yes-outcome token id found")
+
+    return asyncio.run(find())
