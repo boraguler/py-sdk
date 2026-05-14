@@ -25,6 +25,7 @@ from polymarket.clients._transport import AsyncTransport
 from polymarket.errors import UnexpectedResponseError
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
 
 
@@ -73,7 +74,10 @@ def test_async_secure_get_midpoint_uses_same_clob_endpoint() -> None:
 
     async def run() -> Decimal:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_async_clob(client, _clob_handler(captured, {"mid": "0.42"}))

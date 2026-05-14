@@ -130,7 +130,10 @@ def test_async_secure_list_trades_passes_event_id() -> None:
 
     async def run() -> None:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_async(client, _capture(captured))
@@ -184,7 +187,10 @@ def test_async_secure_list_activity_passes_event_id() -> None:
 
     async def run() -> None:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_async(client, _capture(captured))

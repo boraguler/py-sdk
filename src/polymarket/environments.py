@@ -9,6 +9,8 @@ class WalletDerivation:
     proxy_implementation: str
     safe_factory: str
     safe_init_code_hash: str
+    deposit_wallet_factory: str
+    deposit_wallet_implementation: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -43,6 +45,8 @@ PRODUCTION = Environment(
         proxy_implementation="0x44e999d5c2F66Ef0861317f9A4805AC2e90aEB4f",
         safe_factory="0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b",
         safe_init_code_hash="0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf",
+        deposit_wallet_factory="0x00000000000Fb5C9ADea0298D729A0CB3823Cc07",
+        deposit_wallet_implementation="0x58CA52ebe0DadfdF531Cde7062e76746de4Db1eB",
     ),
     collateral_token="0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
     conditional_tokens="0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
