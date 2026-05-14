@@ -1,6 +1,5 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Generic, TypeVar, cast
+from typing import cast
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -14,6 +13,7 @@ from polymarket.models.clob import (
     Notification,
     OpenOrder,
 )
+from polymarket.pagination import Page
 
 _OpenOrdersAdapter = TypeAdapter(tuple[OpenOrder, ...])
 _ClobTradesAdapter = TypeAdapter(tuple[ClobTrade, ...])
@@ -22,16 +22,6 @@ _NotificationsAdapter = TypeAdapter(tuple[Notification, ...])
 _VALID_ASSET_TYPES: frozenset[str] = frozenset({"COLLATERAL", "CONDITIONAL"})
 
 END_CURSOR = "LTE="
-
-
-_T = TypeVar("_T")
-
-
-@dataclass(frozen=True, slots=True)
-class CursorPage(Generic[_T]):
-    items: tuple[_T, ...]
-    next_cursor: str | None
-    total_count: int
 
 
 def _validate_asset_type(asset_type: object) -> None:
@@ -100,7 +90,7 @@ def build_list_open_orders_request(
     return "/data/orders", params
 
 
-def parse_open_orders_page(data: object) -> CursorPage[OpenOrder]:
+def parse_open_orders_page(data: object) -> Page[OpenOrder]:
     if not isinstance(data, dict):
         raise UnexpectedResponseError("open orders response did not match expected shape")
     payload = cast(dict[str, object], data)
@@ -108,9 +98,11 @@ def parse_open_orders_page(data: object) -> CursorPage[OpenOrder]:
         items = _OpenOrdersAdapter.validate_python(payload.get("data"))
     except ValidationError as error:
         raise UnexpectedResponseError("open orders response items malformed") from error
-    return CursorPage(
+    next_cursor = _next_cursor_or_none(payload.get("next_cursor"))
+    return Page(
         items=items,
-        next_cursor=_next_cursor_or_none(payload.get("next_cursor")),
+        has_more=next_cursor is not None,
+        next_cursor=next_cursor,
         total_count=_require_int(payload, "count"),
     )
 
@@ -152,7 +144,7 @@ def build_list_account_trades_request(
     return "/data/trades", params
 
 
-def parse_account_trades_page(data: object) -> CursorPage[ClobTrade]:
+def parse_account_trades_page(data: object) -> Page[ClobTrade]:
     if not isinstance(data, dict):
         raise UnexpectedResponseError("account trades response did not match expected shape")
     payload = cast(dict[str, object], data)
@@ -160,9 +152,11 @@ def parse_account_trades_page(data: object) -> CursorPage[ClobTrade]:
         items = _ClobTradesAdapter.validate_python(payload.get("data"))
     except ValidationError as error:
         raise UnexpectedResponseError("account trades response items malformed") from error
-    return CursorPage(
+    next_cursor = _next_cursor_or_none(payload.get("next_cursor"))
+    return Page(
         items=items,
-        next_cursor=_next_cursor_or_none(payload.get("next_cursor")),
+        has_more=next_cursor is not None,
+        next_cursor=next_cursor,
         total_count=_require_int(payload, "count"),
     )
 
@@ -239,7 +233,6 @@ def parse_balance_allowance(data: object) -> BalanceAllowance:
 
 __all__ = [
     "END_CURSOR",
-    "CursorPage",
     "build_balance_allowance_request",
     "build_balance_allowance_update_request",
     "build_closed_only_mode_request",

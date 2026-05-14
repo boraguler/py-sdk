@@ -962,13 +962,7 @@ class AsyncSecureClient:
                 token_id=token_id, id=id, market=market, cursor=cursor
             )
             payload = await self._ctx.secure_clob.get_json(path, params=params)
-            page = _account_actions.parse_open_orders_page(payload)
-            return Page(
-                items=page.items,
-                has_more=page.next_cursor is not None,
-                next_cursor=page.next_cursor,
-                total_count=page.total_count,
-            )
+            return _account_actions.parse_open_orders_page(payload)
 
         return AsyncPaginator(fetch=fetch)
 
@@ -999,13 +993,7 @@ class AsyncSecureClient:
                 cursor=cursor,
             )
             payload = await self._ctx.secure_clob.get_json(path, params=params)
-            page = _account_actions.parse_account_trades_page(payload)
-            return Page(
-                items=page.items,
-                has_more=page.next_cursor is not None,
-                next_cursor=page.next_cursor,
-                total_count=page.total_count,
-            )
+            return _account_actions.parse_account_trades_page(payload)
 
         return AsyncPaginator(fetch=fetch)
 
