@@ -1,5 +1,3 @@
-"""Asynchronous secure Polymarket client."""
-
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -40,6 +38,7 @@ from polymarket._internal.dispatch import (
 from polymarket._internal.hmac import build_hmac_signature
 from polymarket._internal.l1_auth import sign_api_key_auth
 from polymarket.clients._transport import AsyncTransport
+from polymarket.clients.async_public import AsyncPublicClient
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import RequestRejectedError, UserInputError
 from polymarket.models import (
@@ -99,7 +98,21 @@ class AsyncSecureClient:
     ) -> None:
         if _create_token is not _CREATE_TOKEN:
             raise RuntimeError("Use AsyncSecureClient.create(...) to create a secure client")
-        self._ctx = ctx
+        self._ended = False
+        self._ctx_inner = ctx
+
+    @property
+    def _ctx(self) -> AsyncSecureClientContext:
+        if self._ended:
+            raise RuntimeError(
+                "AsyncSecureClient has ended authentication; use the returned "
+                "AsyncPublicClient or create a new SecureClient."
+            )
+        return self._ctx_inner
+
+    @_ctx.setter
+    def _ctx(self, value: AsyncSecureClientContext) -> None:
+        self._ctx_inner = value
 
     @classmethod
     async def create(
@@ -182,16 +195,17 @@ class AsyncSecureClient:
         await self.close()
 
     async def close(self) -> None:
+        ctx = self._ctx_inner
         try:
-            await self._ctx.gamma.close()
+            await ctx.gamma.close()
         finally:
             try:
-                await self._ctx.data.close()
+                await ctx.data.close()
             finally:
                 try:
-                    await self._ctx.clob.close()
+                    await ctx.clob.close()
                 finally:
-                    await self._ctx.secure_clob.close()
+                    await ctx.secure_clob.close()
 
     def _user_or_signer(self, user: str | None) -> str:
         return self._ctx.signer.address if user is None else user
@@ -888,10 +902,19 @@ class AsyncSecureClient:
         return await _auth_actions.fetch_api_keys(self._ctx.secure_clob)
 
     async def delete_api_key(self) -> None:
-        # NOTE: leaves the client alive with revoked credentials; the next
-        # authenticated call will surface a 401. A proper end_authentication()
-        # lifecycle lands in a follow-up PR.
         await _auth_actions.delete_api_key(self._ctx.secure_clob)
+
+    async def end_authentication(self) -> "AsyncPublicClient":
+        environment = self._ctx.environment
+        try:
+            await self.delete_api_key()
+        except RequestRejectedError as error:
+            if error.status not in (401, 404):
+                raise
+        finally:
+            await self.close()
+            self._ended = True
+        return AsyncPublicClient(environment=environment)
 
 
 def _validate_nonce(nonce: object) -> None:

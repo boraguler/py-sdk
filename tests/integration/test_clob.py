@@ -16,8 +16,6 @@ from polymarket import (
 )
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-# Fake creds — the AsyncSecureClient under test is only used for public CLOB
-# reads (no L2 headers sent), so the credentials never leave the client.
 FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
 
 
