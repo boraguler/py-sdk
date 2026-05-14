@@ -172,6 +172,16 @@ class AsyncTransport:
         response = await self._request("DELETE", path, params=params, json=json, headers=headers)
         return _read_json(response)
 
+    async def delete(
+        self,
+        path: str,
+        *,
+        json: object | None = None,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
+        await self._request("DELETE", path, params=params, json=json, headers=headers)
+
     async def close(self) -> None:
         if self._owns_client:
             await self._client.aclose()

@@ -1,5 +1,6 @@
 # pyright: reportPrivateUsage=false
 import asyncio
+import dataclasses
 import json
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -8,11 +9,11 @@ import httpx
 import pytest
 
 from polymarket import ApiKeyCreds, AsyncSecureClient
-from polymarket._internal.context import AsyncSecureClientContext
 from polymarket.clients._transport import AsyncTransport
 from polymarket.errors import RequestRejectedError, UnexpectedResponseError
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
 
 
@@ -31,29 +32,13 @@ def _install_clob(client: AsyncSecureClient, handler: httpx.MockTransport, *, se
             client=httpx.AsyncClient(base_url="https://clob.test", transport=handler),
             header_resolver=client._ctx.secure_clob._header_resolver,
         )
-        client._ctx = AsyncSecureClientContext(
-            environment=client._ctx.environment,
-            gamma=client._ctx.gamma,
-            data=client._ctx.data,
-            clob=client._ctx.clob,
-            signer=client._ctx.signer,
-            credentials=client._ctx.credentials,
-            secure_clob=transport,
-        )
+        client._ctx = dataclasses.replace(client._ctx, secure_clob=transport)
     else:
         transport = AsyncTransport(
             base_url="https://clob.test",
             client=httpx.AsyncClient(base_url="https://clob.test", transport=handler),
         )
-        client._ctx = AsyncSecureClientContext(
-            environment=client._ctx.environment,
-            gamma=client._ctx.gamma,
-            data=client._ctx.data,
-            clob=transport,
-            signer=client._ctx.signer,
-            credentials=client._ctx.credentials,
-            secure_clob=client._ctx.secure_clob,
-        )
+        client._ctx = dataclasses.replace(client._ctx, clob=transport)
 
 
 def test_create_or_derive_api_key_posts_l1_headers_on_first_attempt() -> None:
@@ -142,7 +127,10 @@ def test_async_secure_create_falls_back_to_derive_on_400() -> None:
 def test_async_secure_create_with_credentials_skips_auth_flow() -> None:
     async def run() -> None:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             assert client.credentials is FAKE_CREDS
@@ -157,7 +145,10 @@ def test_fetch_api_keys_sends_l2_headers() -> None:
 
     async def run() -> tuple[str, ...]:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_clob(client, _capture(captured, 200, {"apiKeys": ["k1", "k2"]}), secure=True)
@@ -183,7 +174,10 @@ def test_delete_api_key_succeeds_on_ok_response() -> None:
 
     async def run() -> None:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_clob(client, _capture(captured, 200, "OK"), secure=True)
@@ -200,7 +194,10 @@ def test_delete_api_key_succeeds_on_ok_response() -> None:
 def test_delete_api_key_raises_unexpected_response_on_non_ok_payload() -> None:
     async def run() -> None:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_clob(client, _capture([], 200, "FAIL"), secure=True)
@@ -215,7 +212,10 @@ def test_delete_api_key_raises_unexpected_response_on_non_ok_payload() -> None:
 def test_fetch_api_keys_propagates_401_as_request_rejected() -> None:
     async def run() -> tuple[str, ...]:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_clob(client, _capture([], 401, {"error": "invalid"}), secure=True)
@@ -232,7 +232,9 @@ def test_async_secure_create_rejects_credentials_with_nonzero_nonce() -> None:
     from polymarket.errors import UserInputError
 
     async def run() -> None:
-        await AsyncSecureClient.create(private_key=PRIVATE_KEY, credentials=FAKE_CREDS, nonce=1)
+        await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY, wallet=SIGNER_ADDRESS, credentials=FAKE_CREDS, nonce=1
+        )
 
     with pytest.raises(UserInputError, match="nonce cannot be combined"):
         asyncio.run(run())
@@ -242,7 +244,7 @@ def test_async_secure_create_rejects_negative_nonce() -> None:
     from polymarket.errors import UserInputError
 
     async def run() -> None:
-        await AsyncSecureClient.create(private_key=PRIVATE_KEY, nonce=-1)
+        await AsyncSecureClient.create(private_key=PRIVATE_KEY, wallet=SIGNER_ADDRESS, nonce=-1)
 
     with pytest.raises(UserInputError, match="non-negative integer"):
         asyncio.run(run())
@@ -252,7 +254,7 @@ def test_async_secure_create_rejects_bool_nonce() -> None:
     from polymarket.errors import UserInputError
 
     async def run() -> None:
-        await AsyncSecureClient.create(private_key=PRIVATE_KEY, nonce=True)  # type: ignore[arg-type]
+        await AsyncSecureClient.create(private_key=PRIVATE_KEY, wallet=SIGNER_ADDRESS, nonce=True)  # type: ignore[arg-type]
 
     with pytest.raises(UserInputError, match="non-negative integer"):
         asyncio.run(run())
@@ -297,7 +299,10 @@ def test_l2_signature_includes_canonical_body_for_authenticated_post() -> None:
 
     async def run() -> None:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             transport = AsyncTransport(

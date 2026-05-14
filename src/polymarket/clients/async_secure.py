@@ -8,6 +8,7 @@ from typing import Self, TypeAlias, cast
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 
+from polymarket._internal.actions import account as _account_actions
 from polymarket._internal.actions import auth as _auth_actions
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
@@ -37,17 +38,23 @@ from polymarket._internal.dispatch import (
 )
 from polymarket._internal.hmac import build_hmac_signature
 from polymarket._internal.l1_auth import sign_api_key_auth
+from polymarket._internal.wallet import WalletType, classify_wallet_type, signature_type_for
 from polymarket.clients._transport import AsyncTransport
 from polymarket.clients.async_public import AsyncPublicClient
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import RequestRejectedError, UserInputError
 from polymarket.models import (
     ApiKeyCreds,
+    AssetType,
+    BalanceAllowance,
+    ClobTrade,
     Comment,
     Event,
     LastTradePrice,
     LastTradePriceForToken,
     Market,
+    Notification,
+    OpenOrder,
     OrderBook,
     OrderSide,
     PriceHistoryInterval,
@@ -82,7 +89,7 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
-from polymarket.pagination import AsyncPaginator
+from polymarket.pagination import AsyncPaginator, Page
 
 _CREATE_TOKEN = object()
 
@@ -119,6 +126,7 @@ class AsyncSecureClient:
         cls,
         *,
         private_key: str,
+        wallet: str,
         environment: Environment = PRODUCTION,
         credentials: ApiKeyCreds | None = None,
         nonce: int = 0,
@@ -127,6 +135,10 @@ class AsyncSecureClient:
     ) -> Self:
         if not private_key:
             raise UserInputError("private_key is required")
+        if not wallet:
+            raise UserInputError(
+                "wallet is required. Pass the signer address itself to authenticate as an EOA."
+            )
         _validate_nonce(nonce)
         if credentials is not None and nonce != 0:
             raise UserInputError("nonce cannot be combined with credentials.")
@@ -134,6 +146,12 @@ class AsyncSecureClient:
             signer = cast(LocalAccount, Account.from_key(private_key))
         except (ValueError, TypeError) as error:
             raise UserInputError(f"Invalid private_key: {error}") from error
+
+        wallet_type = classify_wallet_type(
+            signer=signer.address,
+            wallet=wallet,
+            config=environment.wallet_derivation,
+        )
 
         gamma = AsyncTransport(base_url=environment.gamma_url, logger=logger)
         data = AsyncTransport(base_url=environment.data_url, logger=logger)
@@ -168,6 +186,8 @@ class AsyncSecureClient:
             signer=signer,
             credentials=resolved_credentials,
             secure_clob=secure_clob,
+            wallet=wallet,
+            wallet_type=wallet_type,
         )
         return cls(ctx=ctx, _create_token=_CREATE_TOKEN)
 
@@ -177,7 +197,15 @@ class AsyncSecureClient:
 
     @property
     def wallet(self) -> str:
+        return self._ctx.wallet
+
+    @property
+    def signer_address(self) -> str:
         return self._ctx.signer.address
+
+    @property
+    def wallet_type(self) -> WalletType:
+        return self._ctx.wallet_type
 
     @property
     def credentials(self) -> ApiKeyCreds:
@@ -207,8 +235,8 @@ class AsyncSecureClient:
                 finally:
                     await ctx.secure_clob.close()
 
-    def _user_or_signer(self, user: str | None) -> str:
-        return self._ctx.signer.address if user is None else user
+    def _user_or_wallet(self, user: str | None) -> str:
+        return self._ctx.wallet if user is None else user
 
     async def get_market(
         self,
@@ -371,13 +399,13 @@ class AsyncSecureClient:
     ) -> tuple[PortfolioValue, ...]:
         return await async_dispatch(
             self._ctx,
-            _data_actions.get_portfolio_values_spec(user=self._user_or_signer(user), market=market),
+            _data_actions.get_portfolio_values_spec(user=self._user_or_wallet(user), market=market),
         )
 
     async def get_traded_market_count(self, *, user: str | None = None) -> TradedMarketCount:
         return await async_dispatch(
             self._ctx,
-            _data_actions.get_traded_market_count_spec(user=self._user_or_signer(user)),
+            _data_actions.get_traded_market_count_spec(user=self._user_or_wallet(user)),
         )
 
     async def get_builder_volumes(
@@ -402,7 +430,7 @@ class AsyncSecureClient:
         page_size: int = 20,
     ) -> AsyncPaginator[Position]:
         spec = _data_actions.list_positions_spec(
-            user=self._user_or_signer(user),
+            user=self._user_or_wallet(user),
             market=market,
             event_id=event_id,
             size_threshold=size_threshold,
@@ -426,7 +454,7 @@ class AsyncSecureClient:
         page_size: int = 20,
     ) -> AsyncPaginator[ClosedPosition]:
         spec = _data_actions.list_closed_positions_spec(
-            user=self._user_or_signer(user),
+            user=self._user_or_wallet(user),
             market=market,
             event_id=event_id,
             title=title,
@@ -467,7 +495,7 @@ class AsyncSecureClient:
         page_size: int = 20,
     ) -> AsyncPaginator[Trade]:
         spec = _data_actions.list_trades_spec(
-            user=self._user_or_signer(user),
+            user=self._user_or_wallet(user),
             market=market,
             event_id=event_id,
             side=side,
@@ -492,7 +520,7 @@ class AsyncSecureClient:
         page_size: int = 20,
     ) -> AsyncPaginator[Activity]:
         spec = _data_actions.list_activity_spec(
-            user=self._user_or_signer(user),
+            user=self._user_or_wallet(user),
             market=market,
             event_id=event_id,
             activity_types=activity_types,
@@ -515,7 +543,7 @@ class AsyncSecureClient:
 
     async def download_accounting_snapshot(self, *, user: str | None = None) -> bytes:
         path, params = _data_actions.build_accounting_snapshot_request(
-            user=self._user_or_signer(user)
+            user=self._user_or_wallet(user)
         )
         return await self._ctx.data.get_bytes(path, params=params)
 
@@ -915,6 +943,108 @@ class AsyncSecureClient:
             await self.close()
             self._ended = True
         return AsyncPublicClient(environment=environment)
+
+    async def get_closed_only_mode(self) -> bool:
+        path, params = _account_actions.build_closed_only_mode_request()
+        return _account_actions.parse_closed_only_mode(
+            await self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    def list_open_orders(
+        self,
+        *,
+        token_id: str | None = None,
+        id: str | None = None,
+        market: str | None = None,
+    ) -> AsyncPaginator[OpenOrder]:
+        async def fetch(cursor: str | None) -> Page[OpenOrder]:
+            path, params = _account_actions.build_list_open_orders_request(
+                token_id=token_id, id=id, market=market, cursor=cursor
+            )
+            payload = await self._ctx.secure_clob.get_json(path, params=params)
+            page = _account_actions.parse_open_orders_page(payload)
+            return Page(
+                items=page.items,
+                has_more=page.next_cursor is not None,
+                next_cursor=page.next_cursor,
+                total_count=page.total_count,
+            )
+
+        return AsyncPaginator(fetch=fetch)
+
+    async def get_order(self, *, order_id: str) -> OpenOrder:
+        path, params = _account_actions.build_get_order_request(order_id=order_id)
+        return _account_actions.parse_open_order(
+            await self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    def list_account_trades(
+        self,
+        *,
+        token_id: str | None = None,
+        id: str | None = None,
+        market: str | None = None,
+        maker_address: str | None = None,
+        after: str | None = None,
+        before: str | None = None,
+    ) -> AsyncPaginator[ClobTrade]:
+        async def fetch(cursor: str | None) -> Page[ClobTrade]:
+            path, params = _account_actions.build_list_account_trades_request(
+                token_id=token_id,
+                id=id,
+                market=market,
+                maker_address=maker_address,
+                after=after,
+                before=before,
+                cursor=cursor,
+            )
+            payload = await self._ctx.secure_clob.get_json(path, params=params)
+            page = _account_actions.parse_account_trades_page(payload)
+            return Page(
+                items=page.items,
+                has_more=page.next_cursor is not None,
+                next_cursor=page.next_cursor,
+                total_count=page.total_count,
+            )
+
+        return AsyncPaginator(fetch=fetch)
+
+    async def get_notifications(self) -> tuple[Notification, ...]:
+        path, params = _account_actions.build_notifications_request(
+            signature_type=signature_type_for(self._ctx.wallet_type)
+        )
+        return _account_actions.parse_notifications(
+            await self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    async def drop_notifications(self, *, ids: Sequence[int | str]) -> None:
+        path, params = _account_actions.build_drop_notifications_request(
+            ids=ids, signature_type=signature_type_for(self._ctx.wallet_type)
+        )
+        await self._ctx.secure_clob.delete(path, params=params)
+
+    async def get_balance_allowance(
+        self, *, asset_type: AssetType, token_id: str | None = None
+    ) -> BalanceAllowance:
+        path, params = _account_actions.build_balance_allowance_request(
+            asset_type=asset_type,
+            token_id=token_id,
+            signature_type=signature_type_for(self._ctx.wallet_type),
+        )
+        return _account_actions.parse_balance_allowance(
+            await self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    async def update_balance_allowance(
+        self, *, asset_type: AssetType, token_id: str | None = None
+    ) -> BalanceAllowance:
+        update_path, update_params = _account_actions.build_balance_allowance_update_request(
+            asset_type=asset_type,
+            token_id=token_id,
+            signature_type=signature_type_for(self._ctx.wallet_type),
+        )
+        await self._ctx.secure_clob.get_json(update_path, params=update_params)
+        return await self.get_balance_allowance(asset_type=asset_type, token_id=token_id)
 
 
 def _validate_nonce(nonce: object) -> None:

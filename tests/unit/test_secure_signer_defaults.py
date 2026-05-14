@@ -188,7 +188,10 @@ def test_async_secure_list_positions_defaults_to_signer() -> None:
 
     async def run() -> None:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_async_data(client, _capturing_handler(captured, []))
@@ -205,7 +208,10 @@ def test_async_secure_list_positions_respects_explicit_user() -> None:
 
     async def run() -> None:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_async_data(client, _capturing_handler(captured, []))
@@ -217,6 +223,31 @@ def test_async_secure_list_positions_respects_explicit_user() -> None:
     assert _qs_user(captured[0]) == OTHER_WALLET
 
 
+def test_async_secure_list_positions_defaults_to_wallet_when_proxy() -> None:
+    from polymarket._internal.wallet import derive_proxy_wallet_address
+    from polymarket.environments import PRODUCTION
+
+    proxy_wallet = derive_proxy_wallet_address(SIGNER_ADDRESS, PRODUCTION.wallet_derivation)
+    captured: list[httpx.Request] = []
+
+    async def run() -> None:
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY,
+            wallet=proxy_wallet,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
+        )
+        try:
+            _install_async_data(client, _capturing_handler(captured, []))
+            await client.list_positions().first_page()
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+    assert _qs_user(captured[0]).lower() == proxy_wallet.lower()
+    assert _qs_user(captured[0]).lower() != SIGNER_ADDRESS.lower()
+
+
 def test_async_secure_download_accounting_snapshot_defaults_to_signer() -> None:
     captured: list[httpx.Request] = []
 
@@ -226,7 +257,10 @@ def test_async_secure_download_accounting_snapshot_defaults_to_signer() -> None:
 
     async def run() -> None:
         client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
         )
         try:
             _install_async_data(client, httpx.MockTransport(handler))

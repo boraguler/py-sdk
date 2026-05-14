@@ -1,6 +1,7 @@
 # pyright: reportPrivateUsage=false
 import asyncio
 import contextlib
+import dataclasses
 from typing import Any
 from urllib.parse import urlparse
 
@@ -8,11 +9,11 @@ import httpx
 import pytest
 
 from polymarket import ApiKeyCreds, AsyncPublicClient, AsyncSecureClient
-from polymarket._internal.context import AsyncSecureClientContext
 from polymarket.clients._transport import AsyncTransport
 from polymarket.errors import RequestRejectedError
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
 
 
@@ -30,20 +31,15 @@ def _install_secure_clob(client: AsyncSecureClient, handler: httpx.MockTransport
         client=httpx.AsyncClient(base_url="https://clob.test", transport=handler),
         header_resolver=client._ctx.secure_clob._header_resolver,
     )
-    client._ctx = AsyncSecureClientContext(
-        environment=client._ctx.environment,
-        gamma=client._ctx.gamma,
-        data=client._ctx.data,
-        clob=client._ctx.clob,
-        signer=client._ctx.signer,
-        credentials=client._ctx.credentials,
-        secure_clob=transport,
-    )
+    client._ctx = dataclasses.replace(client._ctx, secure_clob=transport)
 
 
 async def _build_client() -> AsyncSecureClient:
     return await AsyncSecureClient.create(
-        private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
     )
 
 
