@@ -16,6 +16,7 @@ from polymarket.errors import (
 from polymarket.models import (
     Activity,
     ActivityType,
+    ApiKeyCreds,
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
     ClosedPosition,
@@ -86,6 +87,7 @@ __all__ = [
     "PRODUCTION",
     "Activity",
     "ActivityType",
+    "ApiKeyCreds",
     "AsyncPaginator",
     "AsyncPublicClient",
     "AsyncSecureClient",

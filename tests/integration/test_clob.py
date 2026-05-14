@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from polymarket import (
+    ApiKeyCreds,
     AsyncPublicClient,
     AsyncSecureClient,
     LastTradePrice,
@@ -15,6 +16,7 @@ from polymarket import (
 )
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
 
 
 @pytest.mark.integration
@@ -32,7 +34,9 @@ def test_async_public_get_midpoint_returns_decimal_in_unit_range(active_clob_tok
 @pytest.mark.integration
 def test_async_secure_get_midpoint_returns_decimal_in_unit_range(active_clob_token: str) -> None:
     async def run() -> Decimal:
-        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+        )
         try:
             return await client.get_midpoint(token_id=active_clob_token)
         finally:

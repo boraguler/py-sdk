@@ -7,12 +7,19 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from polymarket import AsyncPublicClient, AsyncSecureClient, PublicClient, SecureClient
+from polymarket import (
+    ApiKeyCreds,
+    AsyncPublicClient,
+    AsyncSecureClient,
+    PublicClient,
+    SecureClient,
+)
 from polymarket._internal.context import AsyncSecureClientContext, SyncSecureClientContext
 from polymarket.clients._transport import AsyncTransport, SyncTransport
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
 
 
 def _capture(captured: list[httpx.Request], payload: Any = ()) -> httpx.MockTransport:
@@ -122,7 +129,9 @@ def test_async_secure_list_trades_passes_event_id() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+        )
         try:
             _install_async(client, _capture(captured))
             await client.list_trades(event_id=[7]).first_page()
@@ -174,7 +183,9 @@ def test_async_secure_list_activity_passes_event_id() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+        )
         try:
             _install_async(client, _capture(captured))
             await client.list_activity(event_id=[12]).first_page()

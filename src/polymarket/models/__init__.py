@@ -1,4 +1,5 @@
 from polymarket.models.clob import (
+    ApiKeyCreds,
     LastTradePrice,
     LastTradePriceForToken,
     OrderBook,
@@ -73,6 +74,7 @@ from polymarket.models.types import (
 __all__ = [
     "Activity",
     "ActivityType",
+    "ApiKeyCreds",
     "LastTradePrice",
     "LastTradePriceForToken",
     "OrderBook",

@@ -6,6 +6,7 @@ from eth_account.signers.local import LocalAccount
 
 from polymarket.clients._transport import AsyncTransport, SyncTransport
 from polymarket.environments import Environment
+from polymarket.models.clob import ApiKeyCreds
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,8 @@ class AsyncClientContext:
 @dataclass(frozen=True, slots=True)
 class AsyncSecureClientContext(AsyncClientContext):
     signer: LocalAccount
+    credentials: ApiKeyCreds
+    secure_clob: AsyncTransport
 
 
 __all__ = [
