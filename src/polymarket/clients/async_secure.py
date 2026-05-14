@@ -90,6 +90,7 @@ from polymarket.models.data import (
     TraderLeaderboardEntry,
 )
 from polymarket.pagination import AsyncPaginator, Page
+from polymarket.types import EvmAddress
 
 _CREATE_TOKEN = object()
 
@@ -152,6 +153,7 @@ class AsyncSecureClient:
             wallet=wallet,
             config=environment.wallet_derivation,
         )
+        branded_wallet = cast(EvmAddress, wallet)
 
         gamma = AsyncTransport(base_url=environment.gamma_url, logger=logger)
         data = AsyncTransport(base_url=environment.data_url, logger=logger)
@@ -186,7 +188,7 @@ class AsyncSecureClient:
             signer=signer,
             credentials=resolved_credentials,
             secure_clob=secure_clob,
-            wallet=wallet,
+            wallet=branded_wallet,
             wallet_type=wallet_type,
         )
         return cls(ctx=ctx, _create_token=_CREATE_TOKEN)
@@ -196,12 +198,12 @@ class AsyncSecureClient:
         return self._ctx.environment
 
     @property
-    def wallet(self) -> str:
+    def wallet(self) -> EvmAddress:
         return self._ctx.wallet
 
     @property
-    def signer_address(self) -> str:
-        return self._ctx.signer.address
+    def signer(self) -> EvmAddress:
+        return cast(EvmAddress, self._ctx.signer.address)
 
     @property
     def wallet_type(self) -> WalletType:
@@ -1022,17 +1024,6 @@ class AsyncSecureClient:
         return _account_actions.parse_balance_allowance(
             await self._ctx.secure_clob.get_json(path, params=params)
         )
-
-    async def update_balance_allowance(
-        self, *, asset_type: AssetType, token_id: str | None = None
-    ) -> BalanceAllowance:
-        update_path, update_params = _account_actions.build_balance_allowance_update_request(
-            asset_type=asset_type,
-            token_id=token_id,
-            signature_type=signature_type_for(self._ctx.wallet_type),
-        )
-        await self._ctx.secure_clob.get_json(update_path, params=update_params)
-        return await self.get_balance_allowance(asset_type=asset_type, token_id=token_id)
 
 
 def _validate_nonce(nonce: object) -> None:

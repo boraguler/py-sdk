@@ -8,6 +8,7 @@ from polymarket._internal.wallet import WalletType
 from polymarket.clients._transport import AsyncTransport, SyncTransport
 from polymarket.environments import Environment
 from polymarket.models.clob import ApiKeyCreds
+from polymarket.types import EvmAddress
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +37,7 @@ class AsyncSecureClientContext(AsyncClientContext):
     signer: LocalAccount
     credentials: ApiKeyCreds
     secure_clob: AsyncTransport
-    wallet: str
+    wallet: EvmAddress
     wallet_type: WalletType
 
 

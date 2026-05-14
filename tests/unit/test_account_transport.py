@@ -1,7 +1,6 @@
 # pyright: reportPrivateUsage=false
 import asyncio
 import dataclasses
-from decimal import Decimal
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -67,21 +66,6 @@ _CLOB_TRADE_PAYLOAD: dict[str, Any] = {
     "trader_side": "TAKER",
     "transaction_hash": "0xTX",
 }
-
-
-def _capture_router(
-    captured: list[httpx.Request],
-    routes: list[tuple[str, str, int, Any]],
-) -> httpx.MockTransport:
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        path = urlparse(str(request.url)).path
-        for r_method, r_path, status, payload in routes:
-            if request.method == r_method and path == r_path:
-                return httpx.Response(status, json=payload, request=request)
-        return httpx.Response(404, json={"error": "not mocked"}, request=request)
-
-    return httpx.MockTransport(handler)
 
 
 def _capture(captured: list[httpx.Request], status: int, payload: Any) -> httpx.MockTransport:
@@ -371,40 +355,11 @@ def test_get_balance_allowance_for_conditional_includes_token_id() -> None:
     assert qs.get("token_id") == ["8501497"]
 
 
-def test_update_balance_allowance_calls_update_then_query() -> None:
-    captured: list[httpx.Request] = []
-
-    routes: list[tuple[str, str, int, Any]] = [
-        ("GET", "/balance-allowance/update", 200, {"ok": True}),
-        ("GET", "/balance-allowance", 200, {"balance": "999", "allowances": {}}),
-    ]
-
-    async def run() -> Decimal:
-        client = await AsyncSecureClient.create(
-            private_key=PRIVATE_KEY,
-            wallet=SIGNER_ADDRESS,
-            credentials=FAKE_CREDS,
-            validate_credentials=False,
-        )
-        try:
-            _install_secure_clob(client, _capture_router(captured, routes))
-            result = await client.update_balance_allowance(asset_type="COLLATERAL")
-            return Decimal(result.balance)
-        finally:
-            await client.close()
-
-    balance = asyncio.run(run())
-    assert balance == Decimal(999)
-    assert len(captured) == 2
-    assert urlparse(str(captured[0].url)).path == "/balance-allowance/update"
-    assert urlparse(str(captured[1].url)).path == "/balance-allowance"
-
-
 def test_secure_client_classifies_eoa_when_wallet_equals_signer() -> None:
     client = _make_client()
     try:
         assert client.wallet_type == "EOA"
-        assert client.wallet == client.signer_address
+        assert client.wallet == client.signer
     finally:
         asyncio.run(client.close())
 

@@ -5,7 +5,6 @@ import pytest
 from polymarket._internal.actions.account import (
     END_CURSOR,
     build_balance_allowance_request,
-    build_balance_allowance_update_request,
     build_closed_only_mode_request,
     build_drop_notifications_request,
     build_get_order_request,
@@ -280,14 +279,6 @@ def test_build_balance_allowance_request_rejects_invalid_asset_type() -> None:
             token_id=None,
             signature_type=0,
         )
-
-
-def test_build_balance_allowance_update_request_targets_update_path() -> None:
-    path, params = build_balance_allowance_update_request(
-        asset_type="COLLATERAL", token_id=None, signature_type=0
-    )
-    assert path == "/balance-allowance/update"
-    assert params == {"asset_type": "COLLATERAL", "signature_type": 0}
 
 
 def test_parse_balance_allowance_returns_model() -> None:

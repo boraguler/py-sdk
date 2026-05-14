@@ -209,22 +209,6 @@ def build_balance_allowance_request(
     return "/balance-allowance", params
 
 
-def build_balance_allowance_update_request(
-    *,
-    asset_type: AssetType,
-    token_id: str | None,
-    signature_type: int,
-) -> tuple[str, dict[str, QueryParamValue]]:
-    _validate_asset_type(asset_type)
-    params: dict[str, QueryParamValue] = {
-        "asset_type": asset_type,
-        "signature_type": signature_type,
-    }
-    if token_id is not None:
-        params["token_id"] = require_nonempty("token_id", token_id)
-    return "/balance-allowance/update", params
-
-
 def parse_balance_allowance(data: object) -> BalanceAllowance:
     return BalanceAllowance.parse_response(data)
 
@@ -232,7 +216,6 @@ def parse_balance_allowance(data: object) -> BalanceAllowance:
 __all__ = [
     "END_CURSOR",
     "build_balance_allowance_request",
-    "build_balance_allowance_update_request",
     "build_closed_only_mode_request",
     "build_drop_notifications_request",
     "build_get_order_request",
