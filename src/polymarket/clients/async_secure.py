@@ -1,14 +1,16 @@
 """Asynchronous secure Polymarket client."""
 
 import logging
-from collections.abc import Sequence
+import time
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import Self, cast
+from typing import Self, TypeAlias, cast
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 
+from polymarket._internal.actions import auth as _auth_actions
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
@@ -35,10 +37,13 @@ from polymarket._internal.dispatch import (
     async_paginate_offset,
     async_paginate_page_based,
 )
+from polymarket._internal.hmac import build_hmac_signature
+from polymarket._internal.l1_auth import sign_api_key_auth
 from polymarket.clients._transport import AsyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import RequestRejectedError, UserInputError
 from polymarket.models import (
+    ApiKeyCreds,
     Comment,
     Event,
     LastTradePrice,
@@ -82,33 +87,19 @@ from polymarket.pagination import AsyncPaginator
 
 _CREATE_TOKEN = object()
 
+_L2HeaderResolver: TypeAlias = Callable[[str, str, str | None], Awaitable[Mapping[str, str]]]
+
 
 class AsyncSecureClient:
     def __init__(
         self,
         *,
-        private_key: str,
-        environment: Environment = PRODUCTION,
-        logger: logging.Logger | None = None,
+        ctx: AsyncSecureClientContext,
         _create_token: object | None = None,
     ) -> None:
         if _create_token is not _CREATE_TOKEN:
             raise RuntimeError("Use AsyncSecureClient.create(...) to create a secure client")
-        if not private_key:
-            raise UserInputError("private_key is required")
-
-        try:
-            signer = cast(LocalAccount, Account.from_key(private_key))
-        except (ValueError, TypeError) as error:
-            raise UserInputError(f"Invalid private_key: {error}") from error
-
-        self._ctx = AsyncSecureClientContext(
-            environment=environment,
-            gamma=AsyncTransport(base_url=environment.gamma_url, logger=logger),
-            data=AsyncTransport(base_url=environment.data_url, logger=logger),
-            clob=AsyncTransport(base_url=environment.clob_url, logger=logger),
-            signer=signer,
-        )
+        self._ctx = ctx
 
     @classmethod
     async def create(
@@ -116,22 +107,56 @@ class AsyncSecureClient:
         *,
         private_key: str,
         environment: Environment = PRODUCTION,
+        credentials: ApiKeyCreds | None = None,
+        nonce: int = 0,
+        validate_credentials: bool = True,
         logger: logging.Logger | None = None,
     ) -> Self:
-        client = cls(
-            private_key=private_key,
-            environment=environment,
-            logger=logger,
-            _create_token=_CREATE_TOKEN,
-        )
+        if not private_key:
+            raise UserInputError("private_key is required")
+        _validate_nonce(nonce)
+        if credentials is not None and nonce != 0:
+            raise UserInputError("nonce cannot be combined with credentials.")
         try:
-            return await client._login()
+            signer = cast(LocalAccount, Account.from_key(private_key))
+        except (ValueError, TypeError) as error:
+            raise UserInputError(f"Invalid private_key: {error}") from error
+
+        gamma = AsyncTransport(base_url=environment.gamma_url, logger=logger)
+        data = AsyncTransport(base_url=environment.data_url, logger=logger)
+        clob = AsyncTransport(base_url=environment.clob_url, logger=logger)
+
+        try:
+            resolved_credentials = await _bootstrap_credentials(
+                environment=environment,
+                signer=signer,
+                clob=clob,
+                provided=credentials,
+                nonce=nonce,
+                validate=validate_credentials,
+                logger=logger,
+            )
+            secure_clob = AsyncTransport(
+                base_url=environment.clob_url,
+                logger=logger,
+                header_resolver=_make_l2_header_resolver(signer, resolved_credentials),
+            )
         except BaseException:
-            await client.close()
+            await gamma.close()
+            await data.close()
+            await clob.close()
             raise
 
-    async def _login(self) -> Self:
-        return self
+        ctx = AsyncSecureClientContext(
+            environment=environment,
+            gamma=gamma,
+            data=data,
+            clob=clob,
+            signer=signer,
+            credentials=resolved_credentials,
+            secure_clob=secure_clob,
+        )
+        return cls(ctx=ctx, _create_token=_CREATE_TOKEN)
 
     @property
     def environment(self) -> Environment:
@@ -140,6 +165,10 @@ class AsyncSecureClient:
     @property
     def wallet(self) -> str:
         return self._ctx.signer.address
+
+    @property
+    def credentials(self) -> ApiKeyCreds:
+        return self._ctx.credentials
 
     async def __aenter__(self) -> Self:
         return self
@@ -159,7 +188,10 @@ class AsyncSecureClient:
             try:
                 await self._ctx.data.close()
             finally:
-                await self._ctx.clob.close()
+                try:
+                    await self._ctx.clob.close()
+                finally:
+                    await self._ctx.secure_clob.close()
 
     def _user_or_signer(self, user: str | None) -> str:
         return self._ctx.signer.address if user is None else user
@@ -851,3 +883,90 @@ class AsyncSecureClient:
             interval=interval,
         )
         return _clob_actions.parse_price_history(await self._ctx.clob.get_json(path, params=params))
+
+    async def fetch_api_keys(self) -> tuple[str, ...]:
+        return await _auth_actions.fetch_api_keys(self._ctx.secure_clob)
+
+    async def delete_api_key(self) -> None:
+        # NOTE: leaves the client alive with revoked credentials; the next
+        # authenticated call will surface a 401. A proper end_authentication()
+        # lifecycle lands in a follow-up PR.
+        await _auth_actions.delete_api_key(self._ctx.secure_clob)
+
+
+def _validate_nonce(nonce: object) -> None:
+    if isinstance(nonce, bool) or not isinstance(nonce, int):
+        raise UserInputError("nonce must be a non-negative integer.")
+    if nonce < 0:
+        raise UserInputError("nonce must be a non-negative integer.")
+
+
+async def _bootstrap_credentials(
+    *,
+    environment: Environment,
+    signer: LocalAccount,
+    clob: AsyncTransport,
+    provided: ApiKeyCreds | None,
+    nonce: int,
+    validate: bool,
+    logger: logging.Logger | None,
+) -> ApiKeyCreds:
+    if provided is not None and (
+        not validate
+        or await _credentials_are_active(
+            environment=environment,
+            signer=signer,
+            credentials=provided,
+            logger=logger,
+        )
+    ):
+        return provided
+
+    signature = sign_api_key_auth(
+        signer, chain_id=environment.chain_id, timestamp=int(time.time()), nonce=nonce
+    )
+    return await _auth_actions.create_or_derive_api_key(clob, signature)
+
+
+async def _credentials_are_active(
+    *,
+    environment: Environment,
+    signer: LocalAccount,
+    credentials: ApiKeyCreds,
+    logger: logging.Logger | None,
+) -> bool:
+    probe = AsyncTransport(
+        base_url=environment.clob_url,
+        logger=logger,
+        header_resolver=_make_l2_header_resolver(signer, credentials),
+    )
+    try:
+        keys = await _auth_actions.fetch_api_keys(probe)
+    except RequestRejectedError as error:
+        if error.status == 401:
+            return False
+        raise
+    finally:
+        await probe.close()
+    return credentials.key in keys
+
+
+def _make_l2_header_resolver(signer: LocalAccount, credentials: ApiKeyCreds) -> _L2HeaderResolver:
+    async def resolver(method: str, path: str, body: str | None) -> Mapping[str, str]:
+        timestamp = int(time.time())
+        signature = build_hmac_signature(
+            secret=credentials.secret,
+            timestamp=timestamp,
+            method=method,
+            path=path,
+            body=body,
+        )
+        return {
+            "POLY_ADDRESS": signer.address,
+            "POLY_API_KEY": credentials.key,
+            "POLY_PASSPHRASE": credentials.passphrase,
+            "POLY_SIGNATURE": signature,
+            "POLY_TIMESTAMP": str(timestamp),
+        }
+
+    return resolver

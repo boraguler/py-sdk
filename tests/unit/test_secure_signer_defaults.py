@@ -7,12 +7,13 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from polymarket import AsyncSecureClient, SecureClient
+from polymarket import ApiKeyCreds, AsyncSecureClient, SecureClient
 from polymarket.clients._transport import AsyncTransport, SyncTransport
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 OTHER_WALLET = "0x000000000000000000000000000000000000dEaD"
+FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
 
 
 def _capturing_handler(captured: list[httpx.Request], payload: Any) -> httpx.MockTransport:
@@ -186,7 +187,9 @@ def test_async_secure_list_positions_defaults_to_signer() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+        )
         try:
             _install_async_data(client, _capturing_handler(captured, []))
             await client.list_positions().first_page()
@@ -201,7 +204,9 @@ def test_async_secure_list_positions_respects_explicit_user() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+        )
         try:
             _install_async_data(client, _capturing_handler(captured, []))
             await client.list_positions(user=OTHER_WALLET).first_page()
@@ -220,7 +225,9 @@ def test_async_secure_download_accounting_snapshot_defaults_to_signer() -> None:
         return httpx.Response(200, content=b"PK\x03\x04", request=request)
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+        )
         try:
             _install_async_data(client, httpx.MockTransport(handler))
             await client.download_accounting_snapshot()

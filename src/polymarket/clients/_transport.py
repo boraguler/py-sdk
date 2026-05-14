@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json as _json
 import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -104,6 +105,9 @@ class SyncTransport:
         return response
 
 
+HeaderResolver = Callable[[str, str, str | None], Awaitable[Mapping[str, str]]]
+
+
 class AsyncTransport:
     def __init__(
         self,
@@ -112,6 +116,7 @@ class AsyncTransport:
         options: TransportOptions | None = None,
         logger: logging.Logger | None = None,
         client: httpx.AsyncClient | None = None,
+        header_resolver: HeaderResolver | None = None,
     ) -> None:
         opts = options or TransportOptions()
         self._owns_client = client is None
@@ -123,14 +128,16 @@ class AsyncTransport:
             event_hooks=dict(opts.event_hooks) if opts.event_hooks else None,
         )
         self._logger = logger
+        self._header_resolver = header_resolver
 
     async def get_json(
         self,
         path: str,
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
-        response = await self._request("GET", path, params=params)
+        response = await self._request("GET", path, params=params, headers=headers)
         return _read_json(response)
 
     async def get_bytes(
@@ -138,18 +145,31 @@ class AsyncTransport:
         path: str,
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> bytes:
-        response = await self._request("GET", path, params=params)
+        response = await self._request("GET", path, params=params, headers=headers)
         return response.content
 
     async def post_json(
         self,
         path: str,
         *,
-        json: object,
+        json: object | None = None,
         params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
-        response = await self._request("POST", path, params=params, json=json)
+        response = await self._request("POST", path, params=params, json=json, headers=headers)
+        return _read_json(response)
+
+    async def delete_json(
+        self,
+        path: str,
+        *,
+        json: object | None = None,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> Any:
+        response = await self._request("DELETE", path, params=params, json=json, headers=headers)
         return _read_json(response)
 
     async def close(self) -> None:
@@ -163,11 +183,29 @@ class AsyncTransport:
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
         json: object | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> httpx.Response:
+        body_str: str | None = None
+        content: bytes | None = None
+        merged_headers: dict[str, str] = dict(headers) if headers else {}
+
+        if json is not None:
+            body_str = _json.dumps(json, separators=(",", ":"))
+            content = body_str.encode("utf-8")
+            merged_headers.setdefault("Content-Type", "application/json")
+
+        if self._header_resolver is not None:
+            resolved = await self._header_resolver(method, path, body_str)
+            merged_headers.update(resolved)
+
         started = time.perf_counter()
         try:
             response = await self._client.request(
-                method, path, params=_clean_params(params), json=json
+                method,
+                path,
+                params=_clean_params(params),
+                content=content,
+                headers=merged_headers or None,
             )
         except httpx.HTTPError as error:
             _log_failure(self._logger, method, path, error, started)

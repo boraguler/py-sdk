@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from polymarket import (
+    ApiKeyCreds,
     AsyncPublicClient,
     AsyncSecureClient,
     LastTradePrice,
@@ -24,6 +25,7 @@ from polymarket.clients._transport import AsyncTransport
 from polymarket.errors import UnexpectedResponseError
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
 
 
 def _clob_handler(captured: list[httpx.Request], payload: object) -> httpx.MockTransport:
@@ -70,7 +72,9 @@ def test_async_secure_get_midpoint_uses_same_clob_endpoint() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> Decimal:
-        client = await AsyncSecureClient.create(private_key=PRIVATE_KEY)
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY, credentials=FAKE_CREDS, validate_credentials=False
+        )
         try:
             _install_async_clob(client, _clob_handler(captured, {"mid": "0.42"}))
             return await client.get_midpoint(token_id="99")
