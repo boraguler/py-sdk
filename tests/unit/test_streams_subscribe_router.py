@@ -184,7 +184,7 @@ def test_invalid_spec_construction_raises_before_any_socket_opens() -> None:
                 with pytest.raises(UserInputError, match="non-empty"):
                     MarketSpec(token_ids=[])
                 await asyncio.sleep(0.05)
-                return accepts, client._streams_router is None  # pyright: ignore[reportPrivateUsage]
+                return accepts, client._market_manager is None  # pyright: ignore[reportPrivateUsage]
             finally:
                 await client.close()
 
@@ -205,17 +205,15 @@ def test_failed_mid_subscribe_rolls_back_prior_handles() -> None:
         async with ws_server(handler) as url:
             client = AsyncPublicClient(environment=_env_with_market_ws(url))
             try:
-                # First spec is valid; we use a mock manager-level failure on the
-                # second by passing too-many subscribes against a manager that
-                # we then close out-of-band. Simpler approach: validate that the
-                # router invokes our rollback path when manager.subscribe raises.
-                router = client._get_streams_router()  # pyright: ignore[reportPrivateUsage]
-                manager = router._get_market_manager()  # pyright: ignore[reportPrivateUsage]
-                # Open one successful sub, then close the manager to force the
-                # second subscribe to raise.
+                # Open one valid subscribe to instantiate the manager, then
+                # patch subscribe to fail on a later call so rollback runs.
                 spec1 = MarketSpec(token_ids=["a"])
                 spec2 = MarketSpec(token_ids=["b"])
+                first_handle = await client.subscribe(spec1)
+                await first_handle.close()
 
+                manager = client._market_manager  # pyright: ignore[reportPrivateUsage]
+                assert manager is not None
                 original_subscribe = manager.subscribe
                 call_count = 0
 
@@ -229,7 +227,6 @@ def test_failed_mid_subscribe_rolls_back_prior_handles() -> None:
                 manager.subscribe = failing_subscribe  # type: ignore[method-assign]
                 with pytest.raises(RuntimeError, match="simulated"):
                     await client.subscribe([spec1, spec2])
-                # After rollback, registry should be empty and socket dropped.
                 await asyncio.sleep(0.1)
                 return not manager.is_open
             finally:

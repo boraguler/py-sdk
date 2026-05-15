@@ -1,10 +1,11 @@
 """Asynchronous public Polymarket client."""
 
+import contextlib
 import logging
 from collections.abc import Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
@@ -37,7 +38,7 @@ from polymarket._internal.dispatch import (
     async_paginate_offset,
     async_paginate_page_based,
 )
-from polymarket._internal.streams.handle import SubscriptionHandle
+from polymarket._internal.streams.handle import AsyncSubscriptionHandle, SubscriptionHandle
 from polymarket.clients._transport import AsyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import RequestRejectedError
@@ -85,8 +86,16 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
-from polymarket.streams._router import _StreamsRouter
-from polymarket.streams._specs import Subscription
+from polymarket.streams._specs import Subscription, _normalize_market_specs
+
+if TYPE_CHECKING:
+    from polymarket._internal.streams.clob.market import ClobMarketStreamManager
+
+
+_WEBSOCKET_EXTRA_HINT = (
+    "Polymarket streams require the optional websocket dependency. "
+    'Install with: pip install "polymarket-sdk[websocket]"'
+)
 
 
 class AsyncPublicClient:
@@ -107,25 +116,48 @@ class AsyncPublicClient:
             data=AsyncTransport(base_url=environment.data_url, logger=logger),
             clob=AsyncTransport(base_url=environment.clob_url, logger=logger),
         )
-        self._streams_router: _StreamsRouter | None = None
+        self._market_manager: ClobMarketStreamManager | None = None
         self._streams_logger = logger
 
     @property
     def environment(self) -> Environment:
         return self._ctx.environment
 
-    def _get_streams_router(self) -> _StreamsRouter:
-        if self._streams_router is None:
-            self._streams_router = _StreamsRouter(
-                environment=self._ctx.environment, logger=self._streams_logger
-            )
-        return self._streams_router
-
     async def subscribe(
         self,
         specs: Subscription | Sequence[Subscription],
     ) -> SubscriptionHandle[MarketEvent]:
-        return await self._get_streams_router().subscribe(specs)
+        market_specs = _normalize_market_specs(specs)
+        if self._market_manager is None:
+            try:
+                from polymarket._internal.streams.clob.market import (
+                    ClobMarketStreamManager,
+                )
+            except ImportError as exc:
+                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            self._market_manager = ClobMarketStreamManager(
+                url=self._ctx.environment.clob_market_ws_url,
+                logger=self._streams_logger,
+            )
+        handles: list[AsyncSubscriptionHandle[MarketEvent]] = []
+        try:
+            for spec in market_specs:
+                handles.append(
+                    await self._market_manager.subscribe(
+                        token_ids=spec.token_ids,
+                        custom_feature_enabled=spec.custom_feature_enabled,
+                    )
+                )
+        except BaseException:
+            for handle in handles:
+                with contextlib.suppress(Exception):
+                    await handle.close()
+            raise
+        if len(handles) == 1:
+            return handles[0]
+        from polymarket._internal.streams.merged_handle import MergedSubscriptionHandle
+
+        return MergedSubscriptionHandle(handles)
 
     async def __aenter__(self) -> Self:
         return self
@@ -141,8 +173,8 @@ class AsyncPublicClient:
     async def close(self) -> None:
         """Close the underlying network transports and any open streams."""
         try:
-            if self._streams_router is not None:
-                await self._streams_router.close()
+            if self._market_manager is not None:
+                await self._market_manager.close()
         finally:
             try:
                 await self._ctx.gamma.close()

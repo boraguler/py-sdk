@@ -1,3 +1,4 @@
+# pyright: reportUnnecessaryIsInstance=false
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
@@ -33,4 +34,20 @@ class MarketSpec:
 Subscription = MarketSpec
 
 
-__all__ = ["MarketSpec", "Subscription"]
+def _normalize_market_specs(
+    specs: Subscription | Sequence[Subscription],
+) -> list[MarketSpec]:
+    if isinstance(specs, MarketSpec):
+        return [specs]
+    if not isinstance(specs, Sequence) or isinstance(specs, str | bytes):
+        raise UserInputError("subscribe() expects a Subscription or a sequence of Subscriptions")
+    items = list(specs)
+    if not items:
+        raise UserInputError("subscribe() requires at least one subscription")
+    for spec in items:
+        if not isinstance(spec, MarketSpec):
+            raise UserInputError(f"unsupported subscription type: {type(spec).__name__}")
+    return items
+
+
+__all__ = ["MarketSpec", "Subscription", "_normalize_market_specs"]
