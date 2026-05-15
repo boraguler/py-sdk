@@ -105,13 +105,13 @@ def test_order_seconds_fields_parsed_from_wire() -> None:
     )
     assert isinstance(event, UserOrderEvent)
     assert event.payload.created_at == datetime.fromtimestamp(1710000000, tz=UTC)
-    assert event.payload.expiration == datetime.fromtimestamp(1730000000, tz=UTC)
+    assert event.payload.expires_at == datetime.fromtimestamp(1730000000, tz=UTC)
 
 
-def test_order_expiration_zero_becomes_none() -> None:
+def test_order_expires_at_zero_becomes_none() -> None:
     event = parse_user_event({**_ORDER_PLACEMENT, "expiration": "0"})
     assert isinstance(event, UserOrderEvent)
-    assert event.payload.expiration is None
+    assert event.payload.expires_at is None
 
 
 def test_trade_timestamp_accepts_epoch_seconds() -> None:
@@ -135,26 +135,26 @@ def test_trade_seconds_fields_parsed_from_wire() -> None:
 
     event = parse_user_event({**_TRADE, "match_time": "1710000000", "last_update": "1710000050"})
     assert isinstance(event, UserTradeEvent)
-    assert event.payload.match_time == datetime.fromtimestamp(1710000000, tz=UTC)
-    assert event.payload.last_update == datetime.fromtimestamp(1710000050, tz=UTC)
+    assert event.payload.matched_at == datetime.fromtimestamp(1710000000, tz=UTC)
+    assert event.payload.updated_at == datetime.fromtimestamp(1710000050, tz=UTC)
 
 
-def test_trade_accepts_matchtime_alias() -> None:
+def test_trade_matched_at_accepts_matchtime_alias() -> None:
     from datetime import UTC, datetime
 
     wire = {k: v for k, v in _TRADE.items() if k != "match_time"}
     wire["matchtime"] = "1710000000"
     event = parse_user_event(wire)
     assert isinstance(event, UserTradeEvent)
-    assert event.payload.match_time == datetime.fromtimestamp(1710000000, tz=UTC)
+    assert event.payload.matched_at == datetime.fromtimestamp(1710000000, tz=UTC)
 
 
-def test_trade_match_time_wins_when_both_aliases_present() -> None:
+def test_trade_matched_at_prefers_match_time_when_both_aliases_present() -> None:
     from datetime import UTC, datetime
 
     event = parse_user_event({**_TRADE, "match_time": "1710000000", "matchtime": "9999999999"})
     assert isinstance(event, UserTradeEvent)
-    assert event.payload.match_time == datetime.fromtimestamp(1710000000, tz=UTC)
+    assert event.payload.matched_at == datetime.fromtimestamp(1710000000, tz=UTC)
 
 
 def test_trade_parses_with_maker_orders() -> None:

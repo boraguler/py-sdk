@@ -62,7 +62,7 @@ class UserOrderPayload(BaseModel):
     order_event_type: _OrderEventType = Field(validation_alias="type")
     timestamp: EpochSecondsOrMsTimestamp = None
     created_at: EpochSecondsTimestamp = None
-    expiration: ExpirationTimestamp = None
+    expires_at: ExpirationTimestamp = Field(default=None, validation_alias="expiration")
     order_type: _OrderType | None = None
     status: _OrderStatus | None = None
     maker_address: str | None = None
@@ -96,10 +96,10 @@ class UserTradePayload(BaseModel):
     owner: str
     timestamp: EpochSecondsOrMsTimestamp = None
     fee_rate_bps: DecimalishString | None = None
-    match_time: EpochSecondsTimestamp = Field(
+    matched_at: EpochSecondsTimestamp = Field(
         default=None, validation_alias=AliasChoices("match_time", "matchtime")
     )
-    last_update: EpochSecondsTimestamp = None
+    updated_at: EpochSecondsTimestamp = Field(default=None, validation_alias="last_update")
     trade_owner: str | None = None
     maker_address: str | None = None
     transaction_hash: str | None = None
