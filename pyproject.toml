@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-websocket = ["websockets>=12,<16"]
+websocket = ["websockets>=13,<16"]
 
 [project.urls]
 Homepage = "https://polymarket.com"
@@ -53,6 +53,7 @@ dev = [
   "pyright>=1.1,<2",
   "pytest-watcher>=0.6.3",
   "python-dotenv>=1.2.2",
+  "websockets>=13,<16",
 ]
 
 [tool.hatch.build]
