@@ -121,6 +121,11 @@ def test_maker_order_validates_required_fields() -> None:
     assert maker.matched_amount == Decimal("5")
 
 
+def test_clob_trade_rejects_out_of_range_epoch_for_match_time() -> None:
+    with pytest.raises(UnexpectedResponseError):
+        ClobTrade.parse_response(_clob_trade_payload(match_time=10**18))
+
+
 def test_clob_trade_parses_match_and_last_update() -> None:
     trade = ClobTrade.parse_response(_clob_trade_payload())
     assert trade.matched_at == datetime.fromtimestamp(1700000000, tz=UTC)

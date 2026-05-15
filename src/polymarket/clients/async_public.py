@@ -9,6 +9,7 @@ from typing import Self
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
+from polymarket._internal.actions import rewards as _rewards_actions
 from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
@@ -56,6 +57,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
+from polymarket.models.clob.rewards import CurrentReward, MarketReward
 from polymarket.models.data import (
     Activity,
     BuilderVolumeEntry,
@@ -75,7 +77,8 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
-from polymarket.pagination import AsyncPaginator
+from polymarket.models.types import ConditionId
+from polymarket.pagination import AsyncPaginator, Page
 
 
 class AsyncPublicClient:
@@ -802,3 +805,29 @@ class AsyncPublicClient:
             interval=interval,
         )
         return _clob_actions.parse_price_history(await self._ctx.clob.get_json(path, params=params))
+
+    def list_current_rewards(
+        self, *, sponsored: bool | None = None
+    ) -> AsyncPaginator[CurrentReward]:
+        async def fetch(cursor: str | None) -> Page[CurrentReward]:
+            path, params = _rewards_actions.build_list_current_rewards_request(
+                sponsored=sponsored, cursor=cursor
+            )
+            return _rewards_actions.parse_current_rewards_page(
+                await self._ctx.clob.get_json(path, params=params)
+            )
+
+        return AsyncPaginator(fetch=fetch)
+
+    def list_market_rewards(
+        self, *, condition_id: str, sponsored: bool | None = None
+    ) -> AsyncPaginator[MarketReward]:
+        async def fetch(cursor: str | None) -> Page[MarketReward]:
+            path, params = _rewards_actions.build_list_market_rewards_request(
+                condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor
+            )
+            return _rewards_actions.parse_market_rewards_page(
+                await self._ctx.clob.get_json(path, params=params)
+            )
+
+        return AsyncPaginator(fetch=fetch)
