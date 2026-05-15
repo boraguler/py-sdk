@@ -24,8 +24,8 @@ def test_noop_heartbeat_never_reports_stale() -> None:
 def test_noop_heartbeat_start_and_stop_are_safe() -> None:
     heartbeat = NoopHeartbeat()
 
-    async def noop_send(_: str) -> None:
-        return None
+    async def noop_send(_: str) -> bool:
+        return True
 
     async def run() -> None:
         await heartbeat.start(noop_send)

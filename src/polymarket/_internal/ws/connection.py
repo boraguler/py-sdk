@@ -72,10 +72,9 @@ class AsyncWebSocketConnection:
         if existing is not None:
             if _socket_is_open(existing):
                 return ConnectResult(reused=True)
-            # Socket is CLOSING/CLOSED but the read-loop finalizer has not run
-            # yet. Detach so a fresh open can proceed; the in-flight reader
-            # task will see `self._socket is not existing` and skip on_close.
-            self._socket = None
+            # Stale socket: route through close() so the finalizer's
+            # heartbeat.stop() and watchdog cancel run before re-opening.
+            await self.close()
         if self._connecting is not None:
             return await self._connecting
         task = asyncio.create_task(
@@ -117,7 +116,7 @@ class AsyncWebSocketConnection:
         self._on_error = on_error
         self._reader_task = asyncio.create_task(self._read_loop(socket, on_message))
         try:
-            await self._heartbeat.start(self._send_text_if_open)
+            await self._heartbeat.start(self.send)
         except BaseException:
             await self._abort_open(socket)
             raise
@@ -136,6 +135,14 @@ class AsyncWebSocketConnection:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self._reader_task
             self._reader_task = None
+
+    def _claim_socket(self, expected: ClientConnection) -> bool:
+        # Atomic check-and-clear: no await between the two lines, so only
+        # one caller can claim cleanup ownership for any given socket.
+        if self._socket is not expected:
+            return False
+        self._socket = None
+        return True
 
     async def _read_loop(self, socket: ClientConnection, on_message: OnMessage) -> None:
         try:
@@ -168,23 +175,20 @@ class AsyncWebSocketConnection:
                 except Exception:
                     self._logger.exception("on_error callback raised")
         finally:
-            if self._socket is socket:
-                await self._handle_unexpected_close(socket)
-
-    async def _handle_unexpected_close(self, socket: ClientConnection) -> None:
-        self._socket = None
-        on_close = self._on_close
-        self._on_close = None
-        self._on_error = None
-        await self._heartbeat.stop()
-        if self._watchdog_task is not None:
-            self._watchdog_task.cancel()
-            self._watchdog_task = None
-        if on_close is not None:
-            try:
-                on_close()
-            except Exception:
-                self._logger.exception("on_close callback raised")
+            if self._claim_socket(socket):
+                on_close = self._on_close
+                self._on_close = None
+                self._on_error = None
+                watchdog = self._watchdog_task
+                self._watchdog_task = None
+                await self._heartbeat.stop()
+                if watchdog is not None:
+                    watchdog.cancel()
+                if on_close is not None:
+                    try:
+                        on_close()
+                    except Exception:
+                        self._logger.exception("on_close callback raised")
 
     async def _watchdog_loop(self, socket: ClientConnection) -> None:
         try:
@@ -202,24 +206,19 @@ class AsyncWebSocketConnection:
         except asyncio.CancelledError:
             return
 
-    async def send(self, payload: Any) -> None:
+    async def send(self, payload: Any) -> bool:
+        # Best-effort: returns False on disconnect rather than raising. The
+        # reconnect path is expected to replay any frames that were missed.
         socket = self._socket
         if not _socket_is_open(socket):
-            raise RuntimeError("WebSocket is not connected")
+            return False
         text = payload if isinstance(payload, str) else json.dumps(payload, separators=(",", ":"))
         try:
             assert socket is not None
             await socket.send(text)
-        except ConnectionClosed as error:
-            raise TransportError("WebSocket is closed") from error
-
-    async def _send_text_if_open(self, text: str) -> None:
-        socket = self._socket
-        if not _socket_is_open(socket):
-            return
-        assert socket is not None
-        with contextlib.suppress(ConnectionClosed):
-            await socket.send(text)
+        except ConnectionClosed:
+            return False
+        return True
 
     async def close(self) -> None:
         if self._closing is None:
@@ -236,21 +235,26 @@ class AsyncWebSocketConnection:
             with contextlib.suppress(Exception):
                 await self._connecting
         socket = self._socket
-        self._socket = None
-        self._on_close = None
-        self._on_error = None
-        await self._heartbeat.stop()
+        # If the reader finalizer claimed first, cleanup is done — just
+        # await the leftover tasks below.
+        claimed = socket is not None and self._claim_socket(socket)
         watchdog = self._watchdog_task
         self._watchdog_task = None
-        if watchdog is not None:
-            watchdog.cancel()
-        if socket is not None:
-            try:
-                await socket.close()
-            except Exception:
-                self._logger.debug("error closing socket on shutdown", exc_info=True)
         reader = self._reader_task
         self._reader_task = None
+        if claimed:
+            # User-initiated close: suppress on_close to distinguish from
+            # an unexpected disconnect.
+            self._on_close = None
+            self._on_error = None
+            await self._heartbeat.stop()
+            if watchdog is not None:
+                watchdog.cancel()
+            if socket is not None:
+                try:
+                    await socket.close()
+                except Exception:
+                    self._logger.debug("error closing socket on shutdown", exc_info=True)
         if reader is not None:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await reader

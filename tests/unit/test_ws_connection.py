@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -288,13 +289,12 @@ def test_send_str_is_passed_through_verbatim() -> None:
     asyncio.run(run())
 
 
-def test_send_raises_when_not_connected() -> None:
-    async def run() -> None:
+def test_send_returns_false_when_not_connected() -> None:
+    async def run() -> bool:
         conn = AsyncWebSocketConnection()
-        with pytest.raises(RuntimeError, match="not connected"):
-            await conn.send({"x": 1})
+        return await conn.send({"x": 1})
 
-    asyncio.run(run())
+    assert asyncio.run(run()) is False
 
 
 def test_heartbeat_consumes_pong_before_json_parsing() -> None:
@@ -402,11 +402,36 @@ def test_connect_failure_wraps_as_transport_error() -> None:
     asyncio.run(run())
 
 
-def test_send_after_server_close_raises_transport_error() -> None:
+def test_send_returns_true_on_success() -> None:
+    received: list[str] = []
+
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            received.append(raw)
+
+    async def run() -> bool:
+        async with ws_server(handler) as url:
+            conn = AsyncWebSocketConnection()
+            await conn.connect(
+                url=url,
+                on_message=lambda _m: None,
+                on_close=lambda: None,
+                on_error=lambda _e: None,
+            )
+            ok = await conn.send({"hello": "world"})
+            await _wait_until(lambda: received == ['{"hello":"world"}'])
+            await conn.close()
+            return ok
+
+    assert asyncio.run(run()) is True
+
+
+def test_send_returns_false_after_server_close() -> None:
     async def handler(ws: ServerConnection) -> None:
         await ws.close()
 
-    async def run() -> None:
+    async def run() -> bool:
         closed = asyncio.Event()
         async with ws_server(handler) as url:
             conn = AsyncWebSocketConnection()
@@ -417,11 +442,137 @@ def test_send_after_server_close_raises_transport_error() -> None:
                 on_error=lambda _e: None,
             )
             await asyncio.wait_for(closed.wait(), timeout=2.0)
-            with pytest.raises(RuntimeError, match="not connected"):
-                await conn.send({"x": 1})
+            ok = await conn.send({"x": 1})
             await conn.close()
+            return ok
 
-    asyncio.run(run())
+    assert asyncio.run(run()) is False
+
+
+def test_reconnect_over_stale_socket_does_not_leak_heartbeat() -> None:
+    """Connecting again while a prior socket is CLOSING (read-loop finalizer
+    not yet run) must not leak the prior heartbeat's ping task. The fix
+    routes the stale-socket path through close(), which calls heartbeat.stop().
+    """
+
+    class CountingHeartbeat:
+        def __init__(self) -> None:
+            self.starts = 0
+            self.stops = 0
+            self._timer: asyncio.Task[None] | None = None
+
+        async def start(self, send: SendText) -> None:
+            self.starts += 1
+            self._timer = asyncio.create_task(self._tick())
+
+        async def stop(self) -> None:
+            self.stops += 1
+            if self._timer is not None:
+                self._timer.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await self._timer
+                self._timer = None
+
+        def handle(self, message: str) -> bool:
+            return False
+
+        def is_stale(self, now: float) -> bool:
+            return False
+
+        async def _tick(self) -> None:
+            try:
+                while True:
+                    await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                return
+
+    heartbeat = CountingHeartbeat()
+
+    server_closed_first = asyncio.Event()
+
+    async def handler(ws: ServerConnection) -> None:
+        if not server_closed_first.is_set():
+            server_closed_first.set()
+            await ws.close()
+            return
+        async for _ in ws:
+            pass
+
+    async def run() -> tuple[int, int]:
+        async with ws_server(handler) as url:
+            conn = AsyncWebSocketConnection(heartbeat=heartbeat)
+            await conn.connect(
+                url=url,
+                on_message=lambda _m: None,
+                on_close=lambda: None,
+                on_error=lambda _e: None,
+            )
+            await asyncio.wait_for(server_closed_first.wait(), timeout=2.0)
+            # Immediately reconnect while the prior socket may still be
+            # CLOSING and its finalizer not yet run.
+            await conn.connect(
+                url=url,
+                on_message=lambda _m: None,
+                on_close=lambda: None,
+                on_error=lambda _e: None,
+            )
+            await conn.close()
+            return heartbeat.starts, heartbeat.stops
+
+    starts, stops = asyncio.run(run())
+    assert starts == 2
+    assert stops == 2
+
+
+def test_concurrent_cleanup_paths_run_heartbeat_stop_exactly_once() -> None:
+    """Forces overlap between close()'s shutdown and the reader's finalizer
+    by making heartbeat.stop yield control. Verifies the atomic claim keeps
+    cleanup single-owner: heartbeat.stop is called exactly once per socket.
+    """
+
+    class SlowStopHeartbeat:
+        def __init__(self) -> None:
+            self.starts = 0
+            self.stops = 0
+
+        async def start(self, send: SendText) -> None:  # noqa: ARG002
+            self.starts += 1
+
+        async def stop(self) -> None:
+            self.stops += 1
+            # Yield control so other tasks (reader finalizer) can run.
+            await asyncio.sleep(0.01)
+
+        def handle(self, message: str) -> bool:  # noqa: ARG002
+            return False
+
+        def is_stale(self, now: float) -> bool:  # noqa: ARG002
+            return False
+
+    heartbeat = SlowStopHeartbeat()
+    server_closing = asyncio.Event()
+
+    async def handler(ws: ServerConnection) -> None:
+        server_closing.set()
+        await ws.close()
+
+    async def run() -> tuple[int, int]:
+        async with ws_server(handler) as url:
+            conn = AsyncWebSocketConnection(heartbeat=heartbeat)
+            await conn.connect(
+                url=url,
+                on_message=lambda _m: None,
+                on_close=lambda: None,
+                on_error=lambda _e: None,
+            )
+            await asyncio.wait_for(server_closing.wait(), timeout=2.0)
+            # Race close() against the reader's finalizer.
+            await conn.close()
+            return heartbeat.starts, heartbeat.stops
+
+    starts, stops = asyncio.run(run())
+    assert starts == 1
+    assert stops == 1
 
 
 def test_on_message_callback_exception_does_not_break_stream() -> None:

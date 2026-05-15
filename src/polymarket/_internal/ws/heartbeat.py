@@ -1,7 +1,7 @@
 from collections.abc import Awaitable, Callable
 from typing import Protocol, runtime_checkable
 
-SendText = Callable[[str], Awaitable[None]]
+SendText = Callable[[str], Awaitable[bool]]
 
 
 @runtime_checkable
@@ -13,7 +13,7 @@ class Heartbeat(Protocol):
 
 
 class NoopHeartbeat:
-    async def start(self, send: SendText) -> None:
+    async def start(self, send: SendText) -> None:  # noqa: ARG002
         return None
 
     async def stop(self) -> None:
