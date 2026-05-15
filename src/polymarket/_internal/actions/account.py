@@ -3,6 +3,12 @@ from typing import cast
 
 from pydantic import TypeAdapter, ValidationError
 
+from polymarket._internal.actions._cursor import (
+    END_CURSOR,
+    next_cursor_or_none,
+    optional_int,
+    validate_cursor,
+)
 from polymarket._internal.request import QueryParamValue
 from polymarket._internal.validation import require_nonempty
 from polymarket.errors import UnexpectedResponseError, UserInputError
@@ -21,8 +27,6 @@ _NotificationsAdapter = TypeAdapter(tuple[Notification, ...])
 
 _VALID_ASSET_TYPES: frozenset[str] = frozenset({"COLLATERAL", "CONDITIONAL"})
 
-END_CURSOR = "LTE="
-
 
 def _validate_asset_type(asset_type: object) -> None:
     if asset_type not in _VALID_ASSET_TYPES:
@@ -37,23 +41,6 @@ def _add_optional(params: dict[str, QueryParamValue], key: str, value: object) -
     if not isinstance(value, str | int | float | bool):
         raise UserInputError(f"{key} must be a primitive, got {type(value).__name__}.")
     params[key] = value
-
-
-def _next_cursor_or_none(raw: object) -> str | None:
-    if raw is None:
-        return None
-    if not isinstance(raw, str):
-        raise UnexpectedResponseError(
-            f"expected next_cursor to be a string, got {type(raw).__name__}"
-        )
-    return None if raw == END_CURSOR else raw
-
-
-def _optional_int(payload: dict[str, object], key: str) -> int | None:
-    value = payload.get(key)
-    if isinstance(value, bool) or not isinstance(value, int):
-        return None
-    return value
 
 
 def build_closed_only_mode_request() -> tuple[str, dict[str, str]]:
@@ -85,8 +72,9 @@ def build_list_open_orders_request(
         _add_optional(params, "id", require_nonempty("id", id))
     if market is not None:
         _add_optional(params, "market", require_nonempty("market", market))
-    if cursor is not None:
-        _add_optional(params, "next_cursor", cursor)
+    validated_cursor = validate_cursor(cursor)
+    if validated_cursor is not None:
+        _add_optional(params, "next_cursor", validated_cursor)
     return "/data/orders", params
 
 
@@ -98,12 +86,12 @@ def parse_open_orders_page(data: object) -> Page[OpenOrder]:
         items = _OpenOrdersAdapter.validate_python(payload.get("data"))
     except ValidationError as error:
         raise UnexpectedResponseError("open orders response items malformed") from error
-    next_cursor = _next_cursor_or_none(payload.get("next_cursor"))
+    next_cursor = next_cursor_or_none(payload.get("next_cursor"))
     return Page(
         items=items,
         has_more=next_cursor is not None,
         next_cursor=next_cursor,
-        total_count=_optional_int(payload, "count"),
+        total_count=optional_int(payload, "count"),
     )
 
 
@@ -139,8 +127,9 @@ def build_list_account_trades_request(
         _add_optional(params, "after", require_nonempty("after", after))
     if before is not None:
         _add_optional(params, "before", require_nonempty("before", before))
-    if cursor is not None:
-        _add_optional(params, "next_cursor", cursor)
+    validated_cursor = validate_cursor(cursor)
+    if validated_cursor is not None:
+        _add_optional(params, "next_cursor", validated_cursor)
     return "/data/trades", params
 
 
@@ -152,12 +141,12 @@ def parse_account_trades_page(data: object) -> Page[ClobTrade]:
         items = _ClobTradesAdapter.validate_python(payload.get("data"))
     except ValidationError as error:
         raise UnexpectedResponseError("account trades response items malformed") from error
-    next_cursor = _next_cursor_or_none(payload.get("next_cursor"))
+    next_cursor = next_cursor_or_none(payload.get("next_cursor"))
     return Page(
         items=items,
         has_more=next_cursor is not None,
         next_cursor=next_cursor,
-        total_count=_optional_int(payload, "count"),
+        total_count=optional_int(payload, "count"),
     )
 
 

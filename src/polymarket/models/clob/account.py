@@ -34,7 +34,11 @@ def _parse_epoch(value: object) -> datetime:
             return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
     if isinstance(value, int):
         seconds = value / 1000 if abs(value) >= _EPOCH_MS_THRESHOLD else value
-        return datetime.fromtimestamp(seconds, tz=UTC)
+        try:
+            return datetime.fromtimestamp(seconds, tz=UTC)
+        except (OverflowError, OSError, ValueError) as error:
+            msg = f"epoch timestamp out of range: {value!r}"
+            raise ValueError(msg) from error
     msg = f"expected an epoch timestamp, got {type(value).__name__}"
     raise ValueError(msg)
 

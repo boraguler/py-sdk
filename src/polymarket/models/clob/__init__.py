@@ -11,15 +11,34 @@ from polymarket.models.clob.last_trade import LastTradePrice, LastTradePriceForT
 from polymarket.models.clob.order_book import OrderBook, OrderBookLevel
 from polymarket.models.clob.price_history import PriceHistoryInterval, PriceHistoryPoint
 from polymarket.models.clob.requests import PriceRequest
+from polymarket.models.clob.rewards import (
+    CurrentReward,
+    CurrentRewardConfig,
+    EarningBreakdown,
+    MarketReward,
+    MarketRewardConfig,
+    MarketRewardToken,
+    RewardsPercentages,
+    TotalUserEarning,
+    UserEarning,
+    UserRewardsConfig,
+    UserRewardsEarning,
+)
 
 __all__ = [
     "ApiKeyCreds",
     "AssetType",
     "BalanceAllowance",
     "ClobTrade",
+    "CurrentReward",
+    "CurrentRewardConfig",
+    "EarningBreakdown",
     "LastTradePrice",
     "LastTradePriceForToken",
     "MakerOrder",
+    "MarketReward",
+    "MarketRewardConfig",
+    "MarketRewardToken",
     "Notification",
     "OpenOrder",
     "OrderBook",
@@ -27,4 +46,9 @@ __all__ = [
     "PriceHistoryInterval",
     "PriceHistoryPoint",
     "PriceRequest",
+    "RewardsPercentages",
+    "TotalUserEarning",
+    "UserEarning",
+    "UserRewardsConfig",
+    "UserRewardsEarning",
 ]

@@ -138,6 +138,11 @@ def test_parse_open_orders_page_returns_none_total_count_when_missing() -> None:
     assert page.next_cursor is None
 
 
+def test_parse_open_orders_page_raises_on_wrong_type_count() -> None:
+    with pytest.raises(UnexpectedResponseError, match="count"):
+        parse_open_orders_page({"data": [], "next_cursor": END_CURSOR, "count": "5"})
+
+
 def test_parse_open_orders_page_treats_missing_next_cursor_as_terminal() -> None:
     page = parse_open_orders_page({"data": [], "count": 0})
     assert page.next_cursor is None
