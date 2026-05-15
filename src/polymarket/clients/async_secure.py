@@ -14,6 +14,7 @@ from polymarket._internal.actions import auth as _auth_actions
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
+from polymarket._internal.actions import rewards as _rewards_actions
 from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
@@ -97,6 +98,14 @@ from polymarket.models import (
 from polymarket.models.clob.cancel import CancelOrdersResponse
 from polymarket.models.clob.order_response import OrderResponse
 from polymarket.models.clob.orders import MarketOrderType, SignedOrder
+from polymarket.models.clob.rewards import (
+    CurrentReward,
+    MarketReward,
+    RewardsPercentages,
+    TotalUserEarning,
+    UserEarning,
+    UserRewardsEarning,
+)
 from polymarket.models.data import (
     Activity,
     BuilderVolumeEntry,
@@ -116,6 +125,7 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
+from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
 from polymarket.types import EvmAddress, HexString
 
@@ -1214,6 +1224,101 @@ class AsyncSecureClient:
         signature_hex = HexString(raw_hex if raw_hex.startswith("0x") else "0x" + raw_hex)
         final_signature = build_order_signature(unsigned, signature_hex)
         return create_signed_order(unsigned, final_signature, post_only=post_only)
+
+    def list_current_rewards(
+        self, *, sponsored: bool | None = None
+    ) -> AsyncPaginator[CurrentReward]:
+        async def fetch(cursor: str | None) -> Page[CurrentReward]:
+            path, params = _rewards_actions.build_list_current_rewards_request(
+                sponsored=sponsored, cursor=cursor
+            )
+            return _rewards_actions.parse_current_rewards_page(
+                await self._ctx.clob.get_json(path, params=params)
+            )
+
+        return AsyncPaginator(fetch=fetch)
+
+    def list_market_rewards(
+        self, *, condition_id: str, sponsored: bool | None = None
+    ) -> AsyncPaginator[MarketReward]:
+        async def fetch(cursor: str | None) -> Page[MarketReward]:
+            path, params = _rewards_actions.build_list_market_rewards_request(
+                condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor
+            )
+            return _rewards_actions.parse_market_rewards_page(
+                await self._ctx.clob.get_json(path, params=params)
+            )
+
+        return AsyncPaginator(fetch=fetch)
+
+    async def get_order_scoring(self, *, order_id: str) -> bool:
+        path, params = _rewards_actions.build_get_order_scoring_request(order_id=order_id)
+        return _rewards_actions.parse_order_scoring(
+            await self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    async def get_orders_scoring(self, *, order_ids: Sequence[str]) -> dict[str, bool]:
+        path, body = _rewards_actions.build_get_orders_scoring_request(order_ids=order_ids)
+        return _rewards_actions.parse_orders_scoring(
+            await self._ctx.secure_clob.post_json(path, json=body)
+        )
+
+    def list_user_earnings_for_day(self, *, date: str) -> AsyncPaginator[UserEarning]:
+        async def fetch(cursor: str | None) -> Page[UserEarning]:
+            path, params = _rewards_actions.build_list_user_earnings_for_day_request(
+                date=date,
+                signature_type=signature_type_for(self._ctx.wallet_type),
+                cursor=cursor,
+            )
+            return _rewards_actions.parse_user_earnings_page(
+                await self._ctx.secure_clob.get_json(path, params=params)
+            )
+
+        return AsyncPaginator(fetch=fetch)
+
+    async def get_total_earnings_for_user_for_day(
+        self, *, date: str
+    ) -> tuple[TotalUserEarning, ...]:
+        path, params = _rewards_actions.build_total_user_earnings_for_day_request(
+            date=date, signature_type=signature_type_for(self._ctx.wallet_type)
+        )
+        return _rewards_actions.parse_total_user_earnings(
+            await self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    def list_user_earnings_and_markets_config(
+        self,
+        *,
+        date: str,
+        no_competition: bool | None = None,
+        order_by: str | None = None,
+        position: str | None = None,
+        page_size: int | None = None,
+    ) -> AsyncPaginator[UserRewardsEarning]:
+        async def fetch(cursor: str | None) -> Page[UserRewardsEarning]:
+            path, params = _rewards_actions.build_list_user_earnings_and_markets_config_request(
+                date=date,
+                signature_type=signature_type_for(self._ctx.wallet_type),
+                no_competition=no_competition,
+                order_by=order_by,
+                position=position,
+                page_size=page_size,
+                cursor=cursor,
+            )
+            return _rewards_actions.parse_user_rewards_earnings_page(
+                await self._ctx.secure_clob.get_json(path, params=params)
+            )
+
+        return AsyncPaginator(fetch=fetch)
+
+    async def get_reward_percentages(self) -> RewardsPercentages:
+        path, params = _rewards_actions.build_get_reward_percentages_request(
+            signature_type=signature_type_for(self._ctx.wallet_type)
+        )
+        return _rewards_actions.parse_reward_percentages(
+            await self._ctx.secure_clob.get_json(path, params=params)
+        )
+
 
 
 def _validate_nonce(nonce: object) -> None:
