@@ -35,14 +35,23 @@ def _env_with_sports_ws(url: str) -> Environment:
     return _env_with(sports_ws_url=url)
 
 
+def _env_with_rtds_ws(url: str) -> Environment:
+    return _env_with(rtds_ws_url=url)
+
+
 def _env_with_both(market_url: str, sports_url: str) -> Environment:
     return _env_with(clob_market_ws_url=market_url, sports_ws_url=sports_url)
+
+
+def _env_with_all(market_url: str, sports_url: str, rtds_url: str) -> Environment:
+    return _env_with(clob_market_ws_url=market_url, sports_ws_url=sports_url, rtds_ws_url=rtds_url)
 
 
 def _env_with(
     *,
     clob_market_ws_url: str = PRODUCTION.clob_market_ws_url,
     sports_ws_url: str = PRODUCTION.sports_ws_url,
+    rtds_ws_url: str = PRODUCTION.rtds_ws_url,
 ) -> Environment:
     return Environment(
         name="test",
@@ -68,7 +77,7 @@ def _env_with(
         relayer_url=PRODUCTION.relayer_url,
         gamma_url=PRODUCTION.gamma_url,
         data_url=PRODUCTION.data_url,
-        rtds_ws_url=PRODUCTION.rtds_ws_url,
+        rtds_ws_url=rtds_ws_url,
         sports_ws_url=sports_ws_url,
     )
 
@@ -436,3 +445,153 @@ def test_close_cascades_to_both_managers() -> None:
                 await sh.__aiter__().__anext__()
 
     asyncio.run(run())
+
+
+def test_subscribe_with_rtds_spec_returns_rtds_handle() -> None:
+    from polymarket.models.rtds_events import CryptoPricesBinanceEvent
+    from polymarket.streams import CryptoPricesSpec
+
+    async def handler(ws: ServerConnection) -> None:
+        await ws.recv()
+        await ws.send(
+            json.dumps(
+                {
+                    "topic": "crypto_prices",
+                    "type": "update",
+                    "timestamp": "1710000000000",
+                    "payload": {
+                        "symbol": "btcusdt",
+                        "timestamp": 1710000000000,
+                        "value": "65000",
+                    },
+                }
+            )
+        )
+        async for _ in ws:
+            pass
+
+    async def run() -> str:
+        async with ws_server(handler) as url:
+            client = AsyncPublicClient(environment=_env_with_rtds_ws(url))
+            try:
+                async with await client.subscribe(
+                    CryptoPricesSpec(topic="prices.crypto.binance")
+                ) as stream:
+                    event = await asyncio.wait_for(stream.__aiter__().__anext__(), timeout=2.0)
+                    assert isinstance(event, CryptoPricesBinanceEvent)
+                    return event.payload.symbol
+            finally:
+                await client.close()
+
+    assert asyncio.run(run()) == "btcusdt"
+
+
+def test_subscribe_with_market_sports_and_rtds_returns_merged_handle() -> None:
+    from polymarket.streams import CryptoPricesSpec, SportsSpec
+
+    async def market_handler(ws: ServerConnection) -> None:
+        await ws.recv()
+        await ws.send(json.dumps(_book_frame("a")))
+        async for _ in ws:
+            pass
+
+    async def sports_handler(ws: ServerConnection) -> None:
+        await ws.send(
+            json.dumps(
+                {
+                    "gameId": 7,
+                    "leagueAbbreviation": "NBA",
+                    "status": "live",
+                    "live": True,
+                    "ended": False,
+                    "score": "2-2",
+                }
+            )
+        )
+        async for _ in ws:
+            pass
+
+    async def rtds_handler(ws: ServerConnection) -> None:
+        await ws.recv()
+        await ws.send(
+            json.dumps(
+                {
+                    "topic": "crypto_prices",
+                    "type": "update",
+                    "timestamp": "1710000000000",
+                    "payload": {
+                        "symbol": "btcusdt",
+                        "timestamp": 1710000000000,
+                        "value": "1",
+                    },
+                }
+            )
+        )
+        async for _ in ws:
+            pass
+
+    async def run() -> set[str]:
+        async with (
+            ws_server(market_handler) as market_url,
+            ws_server(sports_handler) as sports_url,
+            ws_server(rtds_handler) as rtds_url,
+        ):
+            client = AsyncPublicClient(environment=_env_with_all(market_url, sports_url, rtds_url))
+            try:
+                async with await client.subscribe(
+                    [
+                        MarketSpec(token_ids=["a"]),
+                        SportsSpec(),
+                        CryptoPricesSpec(topic="prices.crypto.binance"),
+                    ]
+                ) as stream:
+                    seen: set[str] = set()
+                    while len(seen) < 3:
+                        event = await asyncio.wait_for(stream.__aiter__().__anext__(), timeout=3.0)
+                        seen.add(event.topic)
+                    return seen
+            finally:
+                await client.close()
+
+    topics = asyncio.run(run())
+    assert topics == {"market", "sports", "prices.crypto.binance"}
+
+
+def test_close_cascades_to_rtds_manager() -> None:
+    from polymarket.streams import CryptoPricesSpec
+
+    async def handler(ws: ServerConnection) -> None:
+        async for _ in ws:
+            pass
+
+    async def run() -> None:
+        async with ws_server(handler) as url:
+            client = AsyncPublicClient(environment=_env_with_rtds_ws(url))
+            handle = await client.subscribe(CryptoPricesSpec(topic="prices.crypto.binance"))
+            await asyncio.sleep(0.05)
+            await client.close()
+            with pytest.raises(StopAsyncIteration):
+                await handle.__aiter__().__anext__()
+
+    asyncio.run(run())
+
+
+def test_crypto_prices_spec_topic_field_is_caller_required() -> None:
+    from polymarket.streams import CryptoPricesSpec
+
+    with pytest.raises(TypeError):
+        CryptoPricesSpec()  # pyright: ignore[reportCallIssue]
+
+
+def test_comments_spec_topic_field_is_not_caller_settable() -> None:
+    from polymarket.streams import CommentsSpec
+
+    with pytest.raises(TypeError):
+        CommentsSpec(topic="prices.crypto.binance")  # pyright: ignore[reportCallIssue]
+
+
+def test_equity_spec_topic_field_is_not_caller_settable() -> None:
+    from polymarket.streams import EquityPricesSpec
+
+    with pytest.raises(TypeError):
+        EquityPricesSpec(symbol="AAPL", topic="comments")  # pyright: ignore[reportCallIssue]
