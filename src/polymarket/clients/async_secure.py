@@ -1320,7 +1320,6 @@ class AsyncSecureClient:
         )
 
 
-
 def _validate_nonce(nonce: object) -> None:
     if isinstance(nonce, bool) or not isinstance(nonce, int):
         raise UserInputError("nonce must be a non-negative integer.")
