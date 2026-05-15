@@ -1,9 +1,10 @@
+import contextlib
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import Self, TypeAlias, cast
+from typing import TYPE_CHECKING, Self, TypeAlias, cast
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -63,6 +64,7 @@ from polymarket._internal.dispatch import (
 )
 from polymarket._internal.hmac import build_hmac_signature
 from polymarket._internal.l1_auth import sign_api_key_auth
+from polymarket._internal.streams.handle import AsyncSubscriptionHandle, SubscriptionHandle
 from polymarket._internal.wallet import WalletType, classify_wallet_type, signature_type_for
 from polymarket.clients._transport import AsyncTransport
 from polymarket.clients.async_public import AsyncPublicClient
@@ -96,6 +98,7 @@ from polymarket.models import (
     Team,
 )
 from polymarket.models.clob.cancel import CancelOrdersResponse
+from polymarket.models.clob.market_events import MarketEvent
 from polymarket.models.clob.order_response import OrderResponse
 from polymarket.models.clob.orders import MarketOrderType, SignedOrder
 from polymarket.models.clob.rewards import (
@@ -127,7 +130,17 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
+from polymarket.streams._specs import Subscription, _normalize_market_specs
 from polymarket.types import EvmAddress, HexString
+
+if TYPE_CHECKING:
+    from polymarket._internal.streams.clob.market import ClobMarketStreamManager
+
+
+_WEBSOCKET_EXTRA_HINT = (
+    "Polymarket streams require the optional websocket dependency. "
+    'Install with: pip install "polymarket-sdk[websocket]"'
+)
 
 _CREATE_TOKEN = object()
 
@@ -140,11 +153,14 @@ class AsyncSecureClient:
         *,
         ctx: AsyncSecureClientContext,
         _create_token: object | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         if _create_token is not _CREATE_TOKEN:
             raise RuntimeError("Use AsyncSecureClient.create(...) to create a secure client")
         self._ended = False
         self._ctx_inner = ctx
+        self._market_manager: ClobMarketStreamManager | None = None
+        self._streams_logger = logger
 
     @property
     def _ctx(self) -> AsyncSecureClientContext:
@@ -232,7 +248,7 @@ class AsyncSecureClient:
             wallet=branded_wallet,
             wallet_type=wallet_type,
         )
-        return cls(ctx=ctx, _create_token=_CREATE_TOKEN)
+        return cls(ctx=ctx, _create_token=_CREATE_TOKEN, logger=logger)
 
     @property
     def environment(self) -> Environment:
@@ -254,6 +270,42 @@ class AsyncSecureClient:
     def credentials(self) -> ApiKeyCreds:
         return self._ctx.credentials
 
+    async def subscribe(
+        self,
+        specs: Subscription | Sequence[Subscription],
+    ) -> SubscriptionHandle[MarketEvent]:
+        market_specs = _normalize_market_specs(specs)
+        if self._market_manager is None:
+            try:
+                from polymarket._internal.streams.clob.market import (
+                    ClobMarketStreamManager,
+                )
+            except ImportError as exc:
+                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            self._market_manager = ClobMarketStreamManager(
+                url=self._ctx.environment.clob_market_ws_url,
+                logger=self._streams_logger,
+            )
+        handles: list[AsyncSubscriptionHandle[MarketEvent]] = []
+        try:
+            for spec in market_specs:
+                handles.append(
+                    await self._market_manager.subscribe(
+                        token_ids=spec.token_ids,
+                        custom_feature_enabled=spec.custom_feature_enabled,
+                    )
+                )
+        except BaseException:
+            for handle in handles:
+                with contextlib.suppress(Exception):
+                    await handle.close()
+            raise
+        if len(handles) == 1:
+            return handles[0]
+        from polymarket._internal.streams.merged_handle import MergedSubscriptionHandle
+
+        return MergedSubscriptionHandle(handles)
+
     async def __aenter__(self) -> Self:
         return self
 
@@ -268,15 +320,19 @@ class AsyncSecureClient:
     async def close(self) -> None:
         ctx = self._ctx_inner
         try:
-            await ctx.gamma.close()
+            if self._market_manager is not None:
+                await self._market_manager.close()
         finally:
             try:
-                await ctx.data.close()
+                await ctx.gamma.close()
             finally:
                 try:
-                    await ctx.clob.close()
+                    await ctx.data.close()
                 finally:
-                    await ctx.secure_clob.close()
+                    try:
+                        await ctx.clob.close()
+                    finally:
+                        await ctx.secure_clob.close()
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user

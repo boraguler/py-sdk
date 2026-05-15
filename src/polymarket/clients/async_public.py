@@ -1,10 +1,11 @@
 """Asynchronous public Polymarket client."""
 
+import contextlib
 import logging
 from collections.abc import Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
@@ -37,6 +38,7 @@ from polymarket._internal.dispatch import (
     async_paginate_offset,
     async_paginate_page_based,
 )
+from polymarket._internal.streams.handle import AsyncSubscriptionHandle, SubscriptionHandle
 from polymarket.clients._transport import AsyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import RequestRejectedError
@@ -61,6 +63,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
+from polymarket.models.clob.market_events import MarketEvent
 from polymarket.models.clob.rewards import CurrentReward, MarketReward
 from polymarket.models.data import (
     Activity,
@@ -83,6 +86,16 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
+from polymarket.streams._specs import Subscription, _normalize_market_specs
+
+if TYPE_CHECKING:
+    from polymarket._internal.streams.clob.market import ClobMarketStreamManager
+
+
+_WEBSOCKET_EXTRA_HINT = (
+    "Polymarket streams require the optional websocket dependency. "
+    'Install with: pip install "polymarket-sdk[websocket]"'
+)
 
 
 class AsyncPublicClient:
@@ -103,10 +116,48 @@ class AsyncPublicClient:
             data=AsyncTransport(base_url=environment.data_url, logger=logger),
             clob=AsyncTransport(base_url=environment.clob_url, logger=logger),
         )
+        self._market_manager: ClobMarketStreamManager | None = None
+        self._streams_logger = logger
 
     @property
     def environment(self) -> Environment:
         return self._ctx.environment
+
+    async def subscribe(
+        self,
+        specs: Subscription | Sequence[Subscription],
+    ) -> SubscriptionHandle[MarketEvent]:
+        market_specs = _normalize_market_specs(specs)
+        if self._market_manager is None:
+            try:
+                from polymarket._internal.streams.clob.market import (
+                    ClobMarketStreamManager,
+                )
+            except ImportError as exc:
+                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            self._market_manager = ClobMarketStreamManager(
+                url=self._ctx.environment.clob_market_ws_url,
+                logger=self._streams_logger,
+            )
+        handles: list[AsyncSubscriptionHandle[MarketEvent]] = []
+        try:
+            for spec in market_specs:
+                handles.append(
+                    await self._market_manager.subscribe(
+                        token_ids=spec.token_ids,
+                        custom_feature_enabled=spec.custom_feature_enabled,
+                    )
+                )
+        except BaseException:
+            for handle in handles:
+                with contextlib.suppress(Exception):
+                    await handle.close()
+            raise
+        if len(handles) == 1:
+            return handles[0]
+        from polymarket._internal.streams.merged_handle import MergedSubscriptionHandle
+
+        return MergedSubscriptionHandle(handles)
 
     async def __aenter__(self) -> Self:
         return self
@@ -120,14 +171,18 @@ class AsyncPublicClient:
         await self.close()
 
     async def close(self) -> None:
-        """Close the underlying network transports."""
+        """Close the underlying network transports and any open streams."""
         try:
-            await self._ctx.gamma.close()
+            if self._market_manager is not None:
+                await self._market_manager.close()
         finally:
             try:
-                await self._ctx.data.close()
+                await self._ctx.gamma.close()
             finally:
-                await self._ctx.clob.close()
+                try:
+                    await self._ctx.data.close()
+                finally:
+                    await self._ctx.clob.close()
 
     async def get_market(
         self,
