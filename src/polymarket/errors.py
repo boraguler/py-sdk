@@ -47,3 +47,7 @@ class InsufficientLiquidityError(PolymarketError):
 
 class SigningError(PolymarketError):
     """Error raised when the SDK cannot produce a signature or auth payload."""
+
+
+class InsufficientAllowanceError(PolymarketError):
+    """Error raised when the on-chain allowance is insufficient for the order amount."""
