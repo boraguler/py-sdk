@@ -220,7 +220,7 @@ def _comment_removed(parent_entity_id: int = 1, parent_entity_type: str = "Event
             "type": "comment_removed",
             "timestamp": "1710000000000",
             "payload": {
-                "id": 99,
+                "id": "99",
                 "parentEntityType": parent_entity_type,
                 "parentEntityID": parent_entity_id,
             },

@@ -1,6 +1,6 @@
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, assert_never
 
 from polymarket.models.rtds_events import (
     CommentCreatedEvent,
@@ -38,11 +38,10 @@ def server_subscriptions_for(spec: RtdsSpec) -> tuple[RtdsServerSubscription, ..
     if isinstance(spec, CommentsSpec):
         types = spec.types if spec.types else _DEFAULT_COMMENT_TYPES
         return tuple(RtdsServerSubscription(topic="comments", type=t) for t in types)
-    if isinstance(spec, CryptoPricesSpec):
+    if isinstance(spec, CryptoPricesSpec | EquityPricesSpec):  # pyright: ignore[reportUnnecessaryIsInstance]
         wire = api_topic_to_wire(spec.topic)
         return (RtdsServerSubscription(topic=wire, type="update"),)
-    wire = api_topic_to_wire(spec.topic)
-    return (RtdsServerSubscription(topic=wire, type="update"),)
+    assert_never(spec)
 
 
 def derive_state(subs: Iterable[RtdsSpec]) -> dict[str, RtdsServerSubscription]:
@@ -91,7 +90,8 @@ def matcher_for(spec: RtdsSpec) -> Callable[[RtdsEvent], bool]:
 
 def _comments_matcher(spec: CommentsSpec) -> Callable[[RtdsEvent], bool]:
     allowed_types = frozenset(spec.types or _DEFAULT_COMMENT_TYPES)
-    parent_id = str(spec.parent_entity_id) if spec.parent_entity_id is not None else None
+    parent_id = spec.parent_entity_id
+    parent_id_str = str(parent_id) if parent_id is not None else None
     parent_type = spec.parent_entity_type
     needs_parent_check = parent_id is not None or parent_type is not None
 
@@ -108,8 +108,10 @@ def _comments_matcher(spec: CommentsSpec) -> Callable[[RtdsEvent], bool]:
         if isinstance(event, ReactionCreatedEvent | ReactionRemovedEvent):
             return False
         payload = event.payload
-        if parent_id is not None and payload.parent_entity_id != parent_id:
-            return False
+        if parent_id_str is not None:
+            payload_parent = payload.parent_entity_id
+            if payload_parent is None or str(payload_parent) != parent_id_str:
+                return False
         return not (parent_type is not None and payload.parent_entity_type != parent_type)
 
     return matches

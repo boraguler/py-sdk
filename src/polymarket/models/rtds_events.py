@@ -4,7 +4,12 @@ from pydantic import Field, TypeAdapter, model_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.clob._validators import DecimalishString, EpochMsOrIsoTimestamp
-from polymarket.models.gamma.comment import Comment, CommentMedia, CommentProfile, Reaction
+from polymarket.models.gamma.comment import (
+    Comment,
+    CommentMedia,
+    CommentProfile,
+    Reaction,
+)
 
 _WIRE_TO_API_TOPIC: dict[str, str] = {
     "comments": "comments",
@@ -26,21 +31,22 @@ def api_topic_to_wire(api: str) -> str:
 
 class CommentRemovedPayload(BaseModel):
     id: str
+    body: str | None = None
     parent_entity_type: Literal["Event", "Market"] | None = Field(
         default=None, validation_alias="parentEntityType"
     )
-    parent_entity_id: str | None = Field(default=None, validation_alias="parentEntityID")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize_ids(cls, value: object) -> object:
-        if not isinstance(value, dict):
-            return value
-        data = dict(cast(dict[str, Any], value))
-        for key in ("id", "parentEntityID"):
-            if key in data and data[key] is not None:
-                data[key] = str(data[key])
-        return data
+    parent_entity_id: int | None = Field(default=None, validation_alias="parentEntityID")
+    parent_comment_id: str | None = Field(default=None, validation_alias="parentCommentID")
+    user_address: str | None = Field(default=None, validation_alias="userAddress")
+    reply_address: str | None = Field(default=None, validation_alias="replyAddress")
+    created_at: str | None = Field(default=None, validation_alias="createdAt")
+    updated_at: str | None = Field(default=None, validation_alias="updatedAt")
+    media: tuple[CommentMedia, ...] | None = None
+    profile: CommentProfile | None = None
+    reactions: tuple[Reaction, ...] | None = None
+    report_count: int | None = Field(default=None, validation_alias="reportCount")
+    reaction_count: int | None = Field(default=None, validation_alias="reactionCount")
+    trade_asset: str | None = Field(default=None, validation_alias="tradeAsset")
 
 
 class CommentCreatedEvent(BaseModel):

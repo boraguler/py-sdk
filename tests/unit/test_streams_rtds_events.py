@@ -4,6 +4,7 @@ import pytest
 
 from polymarket.models.rtds_events import (
     CommentCreatedEvent,
+    CommentRemovedEvent,
     CryptoPricesBinanceEvent,
     CryptoPricesChainlinkEvent,
     EquityPricesSubscribeEvent,
@@ -105,6 +106,44 @@ def test_comment_created_parses_with_camelcase_aliases() -> None:
     assert event.payload.parent_entity_type == "Event"
     assert event.payload.parent_entity_id == "123"
     assert event.payload.user_address == "0xabc"
+
+
+def test_comment_removed_parses_full_payload_mirroring_ts() -> None:
+    event = parse_rtds_event(
+        {
+            "topic": "comments",
+            "type": "comment_removed",
+            "timestamp": "1710000000000",
+            "payload": {
+                "id": "99",
+                "body": "deleted body",
+                "parentEntityType": "Event",
+                "parentEntityID": 7,
+                "parentCommentID": "pc-1",
+                "userAddress": "0xabc",
+                "replyAddress": "0xdef",
+                "createdAt": "2024-03-09T00:00:00Z",
+                "updatedAt": "2024-03-10T00:00:00Z",
+                "reportCount": 2,
+                "reactionCount": 5,
+                "tradeAsset": "asset-1",
+            },
+        }
+    )
+    assert isinstance(event, CommentRemovedEvent)
+    p = event.payload
+    assert p.id == "99"
+    assert p.body == "deleted body"
+    assert p.parent_entity_type == "Event"
+    assert p.parent_entity_id == 7  # noqa: PLR2004
+    assert p.parent_comment_id == "pc-1"
+    assert p.user_address == "0xabc"
+    assert p.reply_address == "0xdef"
+    assert p.created_at == "2024-03-09T00:00:00Z"
+    assert p.updated_at == "2024-03-10T00:00:00Z"
+    assert p.report_count == 2  # noqa: PLR2004
+    assert p.reaction_count == 5  # noqa: PLR2004
+    assert p.trade_asset == "asset-1"
 
 
 def test_reaction_created_parses() -> None:
