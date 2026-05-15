@@ -26,6 +26,10 @@ from polymarket._internal.actions.gamma import (
     Recurrence,
     TagMatch,
 )
+from polymarket._internal.actions.orders.estimate import (
+    estimate_market_price as _estimate_market_price,
+)
+from polymarket._internal.actions.orders.types import MarketOrderType
 from polymarket._internal.context import AsyncClientContext
 from polymarket._internal.dispatch import (
     async_dispatch,
@@ -805,6 +809,24 @@ class AsyncPublicClient:
             interval=interval,
         )
         return _clob_actions.parse_price_history(await self._ctx.clob.get_json(path, params=params))
+
+    async def estimate_market_price(
+        self,
+        *,
+        token_id: str,
+        side: OrderSide,
+        amount: Decimal | int | float | str | None = None,
+        shares: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FOK",
+    ) -> Decimal:
+        return await _estimate_market_price(
+            self._ctx,
+            token_id=token_id,
+            side=side,
+            amount=amount,
+            shares=shares,
+            order_type=order_type,
+        )
 
     def list_current_rewards(
         self, *, sponsored: bool | None = None

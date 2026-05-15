@@ -31,6 +31,29 @@ from polymarket._internal.actions.gamma import (
     Recurrence,
     TagMatch,
 )
+from polymarket._internal.actions.orders import cancel as _cancel_actions
+from polymarket._internal.actions.orders import post as _post_actions
+from polymarket._internal.actions.orders.allowance import ensure_order_allowance
+from polymarket._internal.actions.orders.estimate import (
+    estimate_market_price as _estimate_market_price,
+)
+from polymarket._internal.actions.orders.limit import (
+    prepare_limit_order_draft,
+    validate_limit_order_params,
+)
+from polymarket._internal.actions.orders.market import (
+    prepare_market_order_draft,
+    validate_market_order_params,
+)
+from polymarket._internal.actions.orders.orders import (
+    create_signed_order,
+    create_unsigned_order,
+)
+from polymarket._internal.actions.orders.typed_data import (
+    build_order_signature,
+    build_order_typed_data,
+)
+from polymarket._internal.actions.orders.types import OrderDraft
 from polymarket._internal.context import AsyncSecureClientContext
 from polymarket._internal.dispatch import (
     async_dispatch,
@@ -44,7 +67,7 @@ from polymarket._internal.wallet import WalletType, classify_wallet_type, signat
 from polymarket.clients._transport import AsyncTransport
 from polymarket.clients.async_public import AsyncPublicClient
 from polymarket.environments import PRODUCTION, Environment
-from polymarket.errors import RequestRejectedError, UserInputError
+from polymarket.errors import RequestRejectedError, SigningError, UserInputError
 from polymarket.models import (
     ApiKeyCreds,
     AssetType,
@@ -72,6 +95,9 @@ from polymarket.models import (
     TagReference,
     Team,
 )
+from polymarket.models.clob.cancel import CancelOrdersResponse
+from polymarket.models.clob.order_response import OrderResponse
+from polymarket.models.clob.orders import MarketOrderType, SignedOrder
 from polymarket.models.clob.rewards import (
     CurrentReward,
     MarketReward,
@@ -101,7 +127,7 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
-from polymarket.types import EvmAddress
+from polymarket.types import EvmAddress, HexString
 
 _CREATE_TOKEN = object()
 
@@ -1039,6 +1065,165 @@ class AsyncSecureClient:
         return _account_actions.parse_balance_allowance(
             await self._ctx.secure_clob.get_json(path, params=params)
         )
+
+    async def estimate_market_price(
+        self,
+        *,
+        token_id: str,
+        side: OrderSide,
+        amount: Decimal | int | float | str | None = None,
+        shares: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FOK",
+    ) -> Decimal:
+        return await _estimate_market_price(
+            self._ctx,
+            token_id=token_id,
+            side=side,
+            amount=amount,
+            shares=shares,
+            order_type=order_type,
+        )
+
+    async def create_limit_order(
+        self,
+        *,
+        token_id: str,
+        price: Decimal | int | float | str,
+        size: Decimal | int | float | str,
+        side: OrderSide,
+        post_only: bool = False,
+        expiration: int | None = None,
+    ) -> SignedOrder:
+        params = validate_limit_order_params(
+            token_id=token_id,
+            price=price,
+            size=size,
+            side=side,
+            post_only=post_only,
+            expiration=expiration,
+        )
+        draft = await prepare_limit_order_draft(self._ctx, params)
+        return await self._sign_order(draft, post_only=params.post_only)
+
+    async def create_market_order(
+        self,
+        *,
+        token_id: str,
+        side: OrderSide,
+        amount: Decimal | int | float | str | None = None,
+        shares: Decimal | int | float | str | None = None,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+    ) -> SignedOrder:
+        params = validate_market_order_params(
+            token_id=token_id,
+            side=side,
+            amount=amount,
+            shares=shares,
+            max_spend=max_spend,
+            order_type=order_type,
+        )
+        draft = await prepare_market_order_draft(self._ctx, params)
+        return await self._sign_order(draft, post_only=False)
+
+    async def place_limit_order(
+        self,
+        *,
+        token_id: str,
+        price: Decimal | int | float | str,
+        size: Decimal | int | float | str,
+        side: OrderSide,
+        post_only: bool = False,
+        expiration: int | None = None,
+    ) -> OrderResponse:
+        signed = await self.create_limit_order(
+            token_id=token_id,
+            price=price,
+            size=size,
+            side=side,
+            post_only=post_only,
+            expiration=expiration,
+        )
+        return await self.post_order(signed)
+
+    async def place_market_order(
+        self,
+        *,
+        token_id: str,
+        side: OrderSide,
+        amount: Decimal | int | float | str | None = None,
+        shares: Decimal | int | float | str | None = None,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+    ) -> OrderResponse:
+        signed = await self.create_market_order(
+            token_id=token_id,
+            side=side,
+            amount=amount,
+            shares=shares,
+            max_spend=max_spend,
+            order_type=order_type,
+        )
+        return await self.post_order(signed)
+
+    async def post_order(self, signed_order: SignedOrder) -> OrderResponse:
+        path, payload = _post_actions.build_post_order_request(
+            signed_order, owner_api_key=self._ctx.credentials.key
+        )
+        return _post_actions.parse_order_response(
+            await self._ctx.secure_clob.post_json(path, json=payload)
+        )
+
+    async def post_orders(self, signed_orders: Sequence[SignedOrder]) -> tuple[OrderResponse, ...]:
+        path, payload = _post_actions.build_post_orders_request(
+            signed_orders, owner_api_key=self._ctx.credentials.key
+        )
+        return _post_actions.parse_order_responses(
+            await self._ctx.secure_clob.post_json(path, json=payload)
+        )
+
+    async def cancel_order(self, *, order_id: str) -> CancelOrdersResponse:
+        path, body = _cancel_actions.build_cancel_order_request(order_id=order_id)
+        return _cancel_actions.parse_cancel_orders_response(
+            await self._ctx.secure_clob.delete_json(path, json=body)
+        )
+
+    async def cancel_orders(self, *, order_ids: Sequence[str]) -> CancelOrdersResponse:
+        path, body = _cancel_actions.build_cancel_orders_request(order_ids=order_ids)
+        return _cancel_actions.parse_cancel_orders_response(
+            await self._ctx.secure_clob.delete_json(path, json=body)
+        )
+
+    async def cancel_all(self) -> CancelOrdersResponse:
+        path, body = _cancel_actions.build_cancel_all_request()
+        return _cancel_actions.parse_cancel_orders_response(
+            await self._ctx.secure_clob.delete_json(path, json=body)
+        )
+
+    async def cancel_market_orders(
+        self, *, market: str | None = None, token_id: str | None = None
+    ) -> CancelOrdersResponse:
+        path, body = _cancel_actions.build_cancel_market_orders_request(
+            market=market, token_id=token_id
+        )
+        return _cancel_actions.parse_cancel_orders_response(
+            await self._ctx.secure_clob.delete_json(path, json=body)
+        )
+
+    async def _sign_order(self, draft: OrderDraft, *, post_only: bool) -> SignedOrder:
+        await ensure_order_allowance(self._ctx, draft)
+        unsigned = create_unsigned_order(
+            draft, wallet=self._ctx.wallet, wallet_type=self._ctx.wallet_type
+        )
+        typed_data = build_order_typed_data(unsigned)
+        try:
+            signed_message = self._ctx.signer.sign_typed_data(full_message=typed_data)
+        except Exception as error:
+            raise SigningError(f"Failed to sign order: {error}") from error
+        raw_hex = signed_message.signature.hex()
+        signature_hex = HexString(raw_hex if raw_hex.startswith("0x") else "0x" + raw_hex)
+        final_signature = build_order_signature(unsigned, signature_hex)
+        return create_signed_order(unsigned, final_signature, post_only=post_only)
 
     def list_current_rewards(
         self, *, sponsored: bool | None = None
