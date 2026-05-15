@@ -48,8 +48,8 @@ def test_live_market_stream_delivers_an_event() -> None:
 
     event = asyncio.run(asyncio.wait_for(run(), timeout=_EVENT_TIMEOUT_S + 5.0))
     # The discriminated union enforces it's one of the known variants.
-    assert hasattr(event, "event_type")
-    assert event.event_type in {
+    assert hasattr(event, "type")
+    assert event.type in {
         "book",
         "price_change",
         "last_trade_price",

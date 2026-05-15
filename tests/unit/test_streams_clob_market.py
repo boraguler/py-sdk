@@ -191,7 +191,7 @@ def test_book_event_parsed_and_dispatched_to_subscriber() -> None:
                 await mgr.close()
 
     event = asyncio.run(run())
-    assert event.token_id == "a"
+    assert event.payload.token_id == "a"
 
 
 def test_event_array_unwrapped_in_order() -> None:
@@ -209,7 +209,7 @@ def test_event_array_unwrapped_in_order() -> None:
                 first = await _next_event(handle)
                 second = await _next_event(handle)
                 await handle.close()
-                return first.market, second.market
+                return first.payload.market, second.payload.market
             finally:
                 await mgr.close()
 

@@ -10,7 +10,7 @@ from polymarket.models.clob.market_events import (
     MarketPriceChangeEvent,
     MarketResolvedEvent,
     NewMarketEvent,
-    market_event_adapter,
+    parse_market_event,
 )
 from polymarket.models.types import TokenId
 
@@ -94,16 +94,16 @@ def match_for(sub: MarketSubscription) -> Callable[[MarketEvent], bool]:
 
     def matches(event: MarketEvent) -> bool:
         if isinstance(event, MarketPriceChangeEvent):
-            return any(change.token_id in token_ids for change in event.price_changes)
+            return any(change.token_id in token_ids for change in event.payload.price_changes)
         if isinstance(event, NewMarketEvent):
             return custom
         if isinstance(event, MarketResolvedEvent):
             if not custom:
                 return False
-            return any(tid in token_ids for tid in (event.token_ids or ()))
+            return any(tid in token_ids for tid in (event.payload.token_ids or ()))
         if isinstance(event, MarketBestBidAskEvent):
-            return custom and event.token_id in token_ids
-        return event.token_id in token_ids
+            return custom and event.payload.token_id in token_ids
+        return event.payload.token_id in token_ids
 
     return matches
 
@@ -116,10 +116,9 @@ def parse_events(raw: object) -> tuple[list[MarketEvent], int]:
     items: list[object] = list(cast(list[object], raw)) if isinstance(raw, list) else [raw]
     parsed: list[MarketEvent] = []
     dropped = 0
-    adapter = market_event_adapter()
     for item in items:
         try:
-            parsed.append(adapter.validate_python(item))
+            parsed.append(parse_market_event(item))
         except ValidationError:
             dropped += 1
     return parsed, dropped

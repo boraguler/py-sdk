@@ -11,13 +11,7 @@ from polymarket._internal.streams.clob.market_protocol import (
     match_for,
     parse_events,
 )
-from polymarket.models.clob.market_events import (
-    MarketBestBidAskEvent,
-    MarketBookEvent,
-    MarketPriceChangeEvent,
-    MarketResolvedEvent,
-    NewMarketEvent,
-)
+from polymarket.models.clob.market_events import parse_market_event
 from polymarket.models.types import TokenId
 
 
@@ -121,7 +115,7 @@ def test_diff_state_toggle_with_empty_after_emits_only_unsub() -> None:
 
 def test_matcher_default_event_matches_only_when_token_in_subscription() -> None:
     sub = _sub("a")
-    event = MarketBookEvent.model_validate(
+    event = parse_market_event(
         {
             "event_type": "book",
             "market": "m",
@@ -130,7 +124,7 @@ def test_matcher_default_event_matches_only_when_token_in_subscription() -> None
             "asks": [],
         }
     )
-    other = MarketBookEvent.model_validate(
+    other = parse_market_event(
         {
             "event_type": "book",
             "market": "m",
@@ -146,7 +140,7 @@ def test_matcher_default_event_matches_only_when_token_in_subscription() -> None
 
 def test_matcher_price_change_fans_when_any_change_matches() -> None:
     sub = _sub("a")
-    event = MarketPriceChangeEvent.model_validate(
+    event = parse_market_event(
         {
             "event_type": "price_change",
             "market": "m",
@@ -162,13 +156,13 @@ def test_matcher_price_change_fans_when_any_change_matches() -> None:
 def test_matcher_new_market_gated_by_custom_feature() -> None:
     plain = _sub("a")
     custom = _sub("a", custom=True)
-    event = NewMarketEvent.model_validate({"event_type": "new_market", "id": "1", "market": "m"})
+    event = parse_market_event({"event_type": "new_market", "id": "1", "market": "m"})
     assert match_for(plain)(event) is False
     assert match_for(custom)(event) is True
 
 
 def test_matcher_market_resolved_requires_custom_and_intersection() -> None:
-    event = MarketResolvedEvent.model_validate(
+    event = parse_market_event(
         {
             "event_type": "market_resolved",
             "id": "1",
@@ -182,9 +176,7 @@ def test_matcher_market_resolved_requires_custom_and_intersection() -> None:
 
 
 def test_matcher_best_bid_ask_requires_custom_and_token_match() -> None:
-    event = MarketBestBidAskEvent.model_validate(
-        {"event_type": "best_bid_ask", "market": "m", "asset_id": "a"}
-    )
+    event = parse_market_event({"event_type": "best_bid_ask", "market": "m", "asset_id": "a"})
     assert match_for(_sub("a"))(event) is False
     assert match_for(_sub("a", custom=True))(event) is True
     assert match_for(_sub("b", custom=True))(event) is False

@@ -85,7 +85,7 @@ def test_subscribe_with_single_market_spec_returns_underlying_handle() -> None:
                 async with await client.subscribe(MarketSpec(token_ids=["a"])) as stream:
                     event = await asyncio.wait_for(stream.__aiter__().__anext__(), timeout=2.0)
                     assert isinstance(event, MarketBookEvent)
-                    return event.token_id
+                    return event.payload.token_id
             finally:
                 await client.close()
 
@@ -123,7 +123,7 @@ def test_subscribe_with_list_of_specs_returns_merged_handle() -> None:
                     while len(seen) < 2:
                         event = await asyncio.wait_for(stream.__aiter__().__anext__(), timeout=2.0)
                         assert isinstance(event, MarketBookEvent)
-                        seen.add(event.token_id)
+                        seen.add(event.payload.token_id)
                     return seen
             finally:
                 await client.close()

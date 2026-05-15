@@ -11,10 +11,8 @@ from polymarket.models.clob.market_events import (
     MarketResolvedEvent,
     MarketTickSizeChangeEvent,
     NewMarketEvent,
-    market_event_adapter,
+    parse_market_event,
 )
-
-_ADAPTER = market_event_adapter()
 
 _BOOK: dict[str, Any] = {
     "event_type": "book",
@@ -94,74 +92,110 @@ _RESOLVED: dict[str, Any] = {
 }
 
 
+def test_event_envelope_has_topic_and_event_type_at_top_level() -> None:
+    event = parse_market_event(_BOOK)
+    assert event.topic == "market"
+    assert event.type == "book"
+    assert event.payload is not None
+
+
+@pytest.mark.parametrize(
+    ("wire", "expected_event_type"),
+    [
+        (_BOOK, "book"),
+        (_PRICE_CHANGE, "price_change"),
+        (_LAST_TRADE, "last_trade_price"),
+        (_TICK, "tick_size_change"),
+        (_BBA, "best_bid_ask"),
+        (_NEW_MARKET, "new_market"),
+        (_RESOLVED, "market_resolved"),
+    ],
+)
+def test_every_variant_has_uniform_envelope_shape(
+    wire: dict[str, Any], expected_event_type: str
+) -> None:
+    event = parse_market_event(wire)
+    assert event.topic == "market"
+    assert event.type == expected_event_type
+    assert event.payload is not None
+
+
+def test_envelope_roundtrip_through_model_dump_and_validate() -> None:
+    original = parse_market_event(_BOOK)
+    dumped = original.model_dump()
+    restored = parse_market_event(dumped)
+    assert restored.topic == original.topic
+    assert restored.type == original.type
+    assert restored.payload.market == original.payload.market  # type: ignore[union-attr]
+
+
 def test_book_event_parses_with_asset_id_aliased_to_token_id() -> None:
-    event = _ADAPTER.validate_python(_BOOK)
+    event = parse_market_event(_BOOK)
     assert isinstance(event, MarketBookEvent)
-    assert event.token_id == "token-a"
-    assert event.market == "0xmarket"
-    assert len(event.bids) == 1
-    assert event.bids[0].price == event.bids[0].price  # smoke
+    assert event.payload.token_id == "token-a"
+    assert event.payload.market == "0xmarket"
+    assert len(event.payload.bids) == 1
 
 
 def test_price_change_event_parses_nested_changes() -> None:
-    event = _ADAPTER.validate_python(_PRICE_CHANGE)
+    event = parse_market_event(_PRICE_CHANGE)
     assert isinstance(event, MarketPriceChangeEvent)
-    assert len(event.price_changes) == 1
-    assert event.price_changes[0].token_id == "token-a"
-    assert event.price_changes[0].side == "BUY"
+    assert len(event.payload.price_changes) == 1
+    assert event.payload.price_changes[0].token_id == "token-a"
+    assert event.payload.price_changes[0].side == "BUY"
 
 
 def test_last_trade_price_event_parses() -> None:
-    event = _ADAPTER.validate_python(_LAST_TRADE)
+    event = parse_market_event(_LAST_TRADE)
     assert isinstance(event, MarketLastTradePriceEvent)
-    assert event.token_id == "token-a"
-    assert event.transaction_hash == "0xhash"
+    assert event.payload.token_id == "token-a"
+    assert event.payload.transaction_hash == "0xhash"
 
 
 def test_tick_size_change_event_parses() -> None:
-    event = _ADAPTER.validate_python(_TICK)
+    event = parse_market_event(_TICK)
     assert isinstance(event, MarketTickSizeChangeEvent)
-    assert event.token_id == "token-a"
+    assert event.payload.token_id == "token-a"
 
 
 def test_best_bid_ask_event_parses() -> None:
-    event = _ADAPTER.validate_python(_BBA)
+    event = parse_market_event(_BBA)
     assert isinstance(event, MarketBestBidAskEvent)
-    assert event.token_id == "token-a"
-    assert event.spread is not None
+    assert event.payload.token_id == "token-a"
+    assert event.payload.spread is not None
 
 
 def test_new_market_event_parses_with_assets_ids_aliased() -> None:
-    event = _ADAPTER.validate_python(_NEW_MARKET)
+    event = parse_market_event(_NEW_MARKET)
     assert isinstance(event, NewMarketEvent)
-    assert event.token_ids == ("token-a", "token-b")
-    assert event.active is True
+    assert event.payload.token_ids == ("token-a", "token-b")
+    assert event.payload.active is True
 
 
 def test_market_resolved_event_parses_winning_asset_id_alias() -> None:
-    event = _ADAPTER.validate_python(_RESOLVED)
+    event = parse_market_event(_RESOLVED)
     assert isinstance(event, MarketResolvedEvent)
-    assert event.winning_token_id == "token-a"
-    assert event.token_ids == ("token-a", "token-b")
+    assert event.payload.winning_token_id == "token-a"
+    assert event.payload.token_ids == ("token-a", "token-b")
 
 
 def test_discriminator_rejects_unknown_event_type() -> None:
     with pytest.raises(ValidationError):
-        _ADAPTER.validate_python({"event_type": "unknown_event", "market": "x"})
+        parse_market_event({"event_type": "unknown_event", "market": "x"})
 
 
 def test_missing_required_field_raises() -> None:
     payload = dict(_BOOK)
     del payload["asset_id"]
     with pytest.raises(ValidationError):
-        _ADAPTER.validate_python(payload)
+        parse_market_event(payload)
 
 
 def test_order_side_normalized_to_uppercase() -> None:
     payload = dict(_LAST_TRADE) | {"side": "sell"}
-    event = _ADAPTER.validate_python(payload)
+    event = parse_market_event(payload)
     assert isinstance(event, MarketLastTradePriceEvent)
-    assert event.side == "SELL"
+    assert event.payload.side == "SELL"
 
 
 def test_order_side_normalized_in_nested_price_change() -> None:
@@ -176,32 +210,32 @@ def test_order_side_normalized_in_nested_price_change() -> None:
             }
         ],
     }
-    event = _ADAPTER.validate_python(payload)
+    event = parse_market_event(payload)
     assert isinstance(event, MarketPriceChangeEvent)
-    assert event.price_changes[0].side == "BUY"
+    assert event.payload.price_changes[0].side == "BUY"
 
 
 def test_timestamp_parsed_to_utc_datetime() -> None:
     from datetime import UTC, datetime
 
-    event = _ADAPTER.validate_python(_BOOK)
+    event = parse_market_event(_BOOK)
     assert isinstance(event, MarketBookEvent)
-    assert event.timestamp == datetime.fromtimestamp(1710000000, tz=UTC)
-    assert event.timestamp is not None
-    assert event.timestamp.tzinfo is UTC
+    assert event.payload.timestamp == datetime.fromtimestamp(1710000000, tz=UTC)
+    assert event.payload.timestamp is not None
+    assert event.payload.timestamp.tzinfo is UTC
 
 
 def test_empty_string_timestamp_normalized_to_none() -> None:
     payload = dict(_BOOK) | {"timestamp": ""}
-    event = _ADAPTER.validate_python(payload)
+    event = parse_market_event(payload)
     assert isinstance(event, MarketBookEvent)
-    assert event.timestamp is None
+    assert event.payload.timestamp is None
 
 
 def test_invalid_timestamp_raises_validation_error() -> None:
     payload = dict(_BOOK) | {"timestamp": "not-a-number"}
     with pytest.raises(ValidationError):
-        _ADAPTER.validate_python(payload)
+        parse_market_event(payload)
 
 
 @pytest.mark.parametrize(
@@ -219,13 +253,13 @@ def test_invalid_timestamp_raises_validation_error() -> None:
 def test_loose_numeric_strings_rejected_as_epoch_ms(bad_value: str) -> None:
     payload = dict(_BOOK) | {"timestamp": bad_value}
     with pytest.raises(ValidationError):
-        _ADAPTER.validate_python(payload)
+        parse_market_event(payload)
 
 
 def test_new_market_game_start_time_parsed_to_datetime() -> None:
     from datetime import UTC, datetime
 
     payload = dict(_NEW_MARKET) | {"game_start_time": "1710000000000"}
-    event = _ADAPTER.validate_python(payload)
+    event = parse_market_event(payload)
     assert isinstance(event, NewMarketEvent)
-    assert event.game_start_time == datetime.fromtimestamp(1710000000, tz=UTC)
+    assert event.payload.game_start_time == datetime.fromtimestamp(1710000000, tz=UTC)

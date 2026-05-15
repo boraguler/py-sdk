@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, cast
 
 from pydantic import BeforeValidator, Field, TypeAdapter
 
@@ -33,8 +33,10 @@ class PriceChange(BaseModel):
     best_ask: DecimalishString | None = None
 
 
-class MarketBookEvent(BaseModel):
-    event_type: Literal["book"]
+# --- Payloads (the variant-specific data; lifted out of the wire's top level) ---
+
+
+class MarketBookPayload(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
     bids: tuple[OrderBookLevel, ...]
@@ -47,15 +49,13 @@ class MarketBookEvent(BaseModel):
     last_trade_price: DecimalishString | None = None
 
 
-class MarketPriceChangeEvent(BaseModel):
-    event_type: Literal["price_change"]
+class MarketPriceChangePayload(BaseModel):
     market: str
     price_changes: tuple[PriceChange, ...]
     timestamp: EpochMsTimestamp = None
 
 
-class MarketLastTradePriceEvent(BaseModel):
-    event_type: Literal["last_trade_price"]
+class MarketLastTradePricePayload(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
     price: DecimalishString
@@ -66,8 +66,7 @@ class MarketLastTradePriceEvent(BaseModel):
     timestamp: EpochMsTimestamp = None
 
 
-class MarketTickSizeChangeEvent(BaseModel):
-    event_type: Literal["tick_size_change"]
+class MarketTickSizeChangePayload(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
     old_tick_size: DecimalishString | None = None
@@ -75,8 +74,7 @@ class MarketTickSizeChangeEvent(BaseModel):
     timestamp: EpochMsTimestamp = None
 
 
-class MarketBestBidAskEvent(BaseModel):
-    event_type: Literal["best_bid_ask"]
+class MarketBestBidAskPayload(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
     best_bid: DecimalishString | None = None
@@ -85,8 +83,7 @@ class MarketBestBidAskEvent(BaseModel):
     timestamp: EpochMsTimestamp = None
 
 
-class NewMarketEvent(BaseModel):
-    event_type: Literal["new_market"]
+class NewMarketPayload(BaseModel):
     id: str
     market: str
     question: str | None = None
@@ -110,8 +107,7 @@ class NewMarketEvent(BaseModel):
     fee_schedule: object | None = None
 
 
-class MarketResolvedEvent(BaseModel):
-    event_type: Literal["market_resolved"]
+class MarketResolvedPayload(BaseModel):
     id: str
     market: str
     token_ids: tuple[TokenId, ...] | None = Field(default=None, validation_alias="assets_ids")
@@ -122,6 +118,51 @@ class MarketResolvedEvent(BaseModel):
     tags: tuple[str, ...] | None = None
 
 
+# --- Envelope: every event is {topic, type, payload} ---
+
+
+class MarketBookEvent(BaseModel):
+    topic: Literal["market"] = "market"
+    type: Literal["book"]
+    payload: MarketBookPayload
+
+
+class MarketPriceChangeEvent(BaseModel):
+    topic: Literal["market"] = "market"
+    type: Literal["price_change"]
+    payload: MarketPriceChangePayload
+
+
+class MarketLastTradePriceEvent(BaseModel):
+    topic: Literal["market"] = "market"
+    type: Literal["last_trade_price"]
+    payload: MarketLastTradePricePayload
+
+
+class MarketTickSizeChangeEvent(BaseModel):
+    topic: Literal["market"] = "market"
+    type: Literal["tick_size_change"]
+    payload: MarketTickSizeChangePayload
+
+
+class MarketBestBidAskEvent(BaseModel):
+    topic: Literal["market"] = "market"
+    type: Literal["best_bid_ask"]
+    payload: MarketBestBidAskPayload
+
+
+class NewMarketEvent(BaseModel):
+    topic: Literal["market"] = "market"
+    type: Literal["new_market"]
+    payload: NewMarketPayload
+
+
+class MarketResolvedEvent(BaseModel):
+    topic: Literal["market"] = "market"
+    type: Literal["market_resolved"]
+    payload: MarketResolvedPayload
+
+
 MarketEvent = Annotated[
     MarketBookEvent
     | MarketPriceChangeEvent
@@ -130,26 +171,51 @@ MarketEvent = Annotated[
     | MarketBestBidAskEvent
     | NewMarketEvent
     | MarketResolvedEvent,
-    Field(discriminator="event_type"),
+    Field(discriminator="type"),
 ]
 
 _MARKET_EVENT_ADAPTER: TypeAdapter[MarketEvent] = TypeAdapter(MarketEvent)
 
 
-def market_event_adapter() -> TypeAdapter[MarketEvent]:
-    return _MARKET_EVENT_ADAPTER
+def _normalize_to_envelope(raw: object) -> Any:
+    """Lift the wire's flat ``{event_type, ...}`` shape into the envelope
+    ``{topic, type, payload}`` so the discriminated union can dispatch on
+    ``type``. Already-enveloped input is passed through unchanged.
+    """
+    if not isinstance(raw, dict):
+        return raw
+    wire = cast(dict[str, Any], raw)
+    if "type" in wire and "payload" in wire and "topic" in wire:
+        return wire
+    type_value = wire.get("event_type") or wire.get("type")
+    return {
+        "topic": "market",
+        "type": type_value,
+        "payload": {k: v for k, v in wire.items() if k not in ("event_type", "type", "topic")},
+    }
+
+
+def parse_market_event(raw: object) -> MarketEvent:
+    return _MARKET_EVENT_ADAPTER.validate_python(_normalize_to_envelope(raw))
 
 
 __all__ = [
     "MarketBestBidAskEvent",
+    "MarketBestBidAskPayload",
     "MarketBookEvent",
+    "MarketBookPayload",
     "MarketEvent",
     "MarketEventMessage",
     "MarketLastTradePriceEvent",
+    "MarketLastTradePricePayload",
     "MarketPriceChangeEvent",
+    "MarketPriceChangePayload",
     "MarketResolvedEvent",
+    "MarketResolvedPayload",
     "MarketTickSizeChangeEvent",
+    "MarketTickSizeChangePayload",
     "NewMarketEvent",
+    "NewMarketPayload",
     "PriceChange",
-    "market_event_adapter",
+    "parse_market_event",
 ]
