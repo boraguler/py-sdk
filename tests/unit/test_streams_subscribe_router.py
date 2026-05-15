@@ -28,6 +28,22 @@ async def ws_server(handler: Handler) -> AsyncGenerator[str, None]:
 
 
 def _env_with_market_ws(url: str) -> Environment:
+    return _env_with(clob_market_ws_url=url)
+
+
+def _env_with_sports_ws(url: str) -> Environment:
+    return _env_with(sports_ws_url=url)
+
+
+def _env_with_both(market_url: str, sports_url: str) -> Environment:
+    return _env_with(clob_market_ws_url=market_url, sports_ws_url=sports_url)
+
+
+def _env_with(
+    *,
+    clob_market_ws_url: str = PRODUCTION.clob_market_ws_url,
+    sports_ws_url: str = PRODUCTION.sports_ws_url,
+) -> Environment:
     return Environment(
         name="test",
         chain_id=PRODUCTION.chain_id,
@@ -47,13 +63,13 @@ def _env_with_market_ws(url: str) -> Environment:
         safe_multisend=PRODUCTION.safe_multisend,
         relay_hub=PRODUCTION.relay_hub,
         clob_url=PRODUCTION.clob_url,
-        clob_market_ws_url=url,
+        clob_market_ws_url=clob_market_ws_url,
         clob_user_ws_url=PRODUCTION.clob_user_ws_url,
         relayer_url=PRODUCTION.relayer_url,
         gamma_url=PRODUCTION.gamma_url,
         data_url=PRODUCTION.data_url,
         rtds_ws_url=PRODUCTION.rtds_ws_url,
-        sports_ws_url=PRODUCTION.sports_ws_url,
+        sports_ws_url=sports_ws_url,
     )
 
 
@@ -148,7 +164,7 @@ def test_subscribe_rejects_bare_string() -> None:
         client = AsyncPublicClient()
         try:
             with pytest.raises(UserInputError, match="sequence of Subscriptions"):
-                await client.subscribe("not-a-spec")  # pyright: ignore[reportArgumentType]
+                await client.subscribe("not-a-spec")  # pyright: ignore[reportCallIssue, reportArgumentType]
         finally:
             await client.close()
 
@@ -160,7 +176,7 @@ def test_subscribe_rejects_unknown_spec_type() -> None:
         client = AsyncPublicClient()
         try:
             with pytest.raises(UserInputError, match="unsupported"):
-                await client.subscribe([object()])  # pyright: ignore[reportArgumentType]
+                await client.subscribe([object()])  # pyright: ignore[reportCallIssue, reportArgumentType]
         finally:
             await client.close()
 
@@ -281,6 +297,19 @@ def test_merged_handle_uses_bounded_queue_with_drop_oldest() -> None:
     assert dropped > 0
 
 
+def test_market_spec_topic_field_is_not_caller_settable() -> None:
+    # Discriminator is fixed by class; caller can't lie about it.
+    with pytest.raises(TypeError):
+        MarketSpec(token_ids=["a"], topic="sports")  # pyright: ignore[reportCallIssue]
+
+
+def test_sports_spec_topic_field_is_not_caller_settable() -> None:
+    from polymarket.streams import SportsSpec
+
+    with pytest.raises(TypeError):
+        SportsSpec(topic="market")  # pyright: ignore[reportCallIssue]
+
+
 def test_close_cascades_to_streams() -> None:
     async def handler(ws: ServerConnection) -> None:
         async for _ in ws:
@@ -298,3 +327,112 @@ def test_close_cascades_to_streams() -> None:
             return True
 
     assert asyncio.run(run()) is True
+
+
+def test_subscribe_with_sports_spec_returns_sports_handle() -> None:
+    from polymarket.models.sports_events import SportsResultEvent
+    from polymarket.streams import SportsSpec
+
+    async def handler(ws: ServerConnection) -> None:
+        await ws.send(
+            json.dumps(
+                {
+                    "gameId": 1,
+                    "leagueAbbreviation": "NBA",
+                    "status": "live",
+                    "live": True,
+                    "ended": False,
+                    "score": "0-0",
+                }
+            )
+        )
+        async for _ in ws:
+            pass
+
+    async def run() -> int:
+        async with ws_server(handler) as url:
+            client = AsyncPublicClient(environment=_env_with_sports_ws(url))
+            try:
+                async with await client.subscribe(SportsSpec()) as stream:
+                    event = await asyncio.wait_for(stream.__aiter__().__anext__(), timeout=2.0)
+                    assert isinstance(event, SportsResultEvent)
+                    return event.payload.game_id
+            finally:
+                await client.close()
+
+    assert asyncio.run(run()) == 1
+
+
+def test_subscribe_with_mixed_market_and_sports_specs_returns_merged_handle() -> None:
+    from polymarket.streams import SportsSpec
+
+    async def market_handler(ws: ServerConnection) -> None:
+        await ws.recv()  # initial subscribe frame
+        await ws.send(
+            json.dumps(
+                {
+                    "event_type": "book",
+                    "market": "m",
+                    "asset_id": "a",
+                    "bids": [{"price": "0.49", "size": "100"}],
+                    "asks": [{"price": "0.51", "size": "100"}],
+                }
+            )
+        )
+        async for _ in ws:
+            pass
+
+    async def sports_handler(ws: ServerConnection) -> None:
+        await ws.send(
+            json.dumps(
+                {
+                    "gameId": 99,
+                    "leagueAbbreviation": "NBA",
+                    "status": "live",
+                    "live": True,
+                    "ended": False,
+                    "score": "1-1",
+                }
+            )
+        )
+        async for _ in ws:
+            pass
+
+    async def run() -> set[str]:
+        async with ws_server(market_handler) as market_url, ws_server(sports_handler) as sports_url:
+            client = AsyncPublicClient(environment=_env_with_both(market_url, sports_url))
+            try:
+                async with await client.subscribe(
+                    [MarketSpec(token_ids=["a"]), SportsSpec()]
+                ) as stream:
+                    seen: set[str] = set()
+                    while len(seen) < 2:
+                        event = await asyncio.wait_for(stream.__aiter__().__anext__(), timeout=2.0)
+                        seen.add(event.topic)
+                    return seen
+            finally:
+                await client.close()
+
+    assert asyncio.run(run()) == {"market", "sports"}
+
+
+def test_close_cascades_to_both_managers() -> None:
+    from polymarket.streams import SportsSpec
+
+    async def handler(ws: ServerConnection) -> None:
+        async for _ in ws:
+            pass
+
+    async def run() -> None:
+        async with ws_server(handler) as market_url, ws_server(handler) as sports_url:
+            client = AsyncPublicClient(environment=_env_with_both(market_url, sports_url))
+            mh = await client.subscribe(MarketSpec(token_ids=["a"]))
+            sh = await client.subscribe(SportsSpec())
+            await asyncio.sleep(0.05)
+            await client.close()
+            with pytest.raises(StopAsyncIteration):
+                await mh.__aiter__().__anext__()
+            with pytest.raises(StopAsyncIteration):
+                await sh.__aiter__().__anext__()
+
+    asyncio.run(run())

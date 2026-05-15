@@ -20,9 +20,14 @@ from polymarket.models.clob.market_events import (
     NewMarketPayload,
     PriceChange,
 )
-from polymarket.streams._specs import MarketSpec, Subscription
+from polymarket.models.sports_events import (
+    SportsEvent,
+    SportsGameResult,
+    SportsResultEvent,
+)
+from polymarket.streams._specs import MarketSpec, SportsSpec, Subscription
 
-StreamEvent = MarketEvent
+StreamEvent = MarketEvent | SportsEvent
 
 __all__ = [
     "MarketBestBidAskEvent",
@@ -43,6 +48,10 @@ __all__ = [
     "NewMarketEvent",
     "NewMarketPayload",
     "PriceChange",
+    "SportsEvent",
+    "SportsGameResult",
+    "SportsResultEvent",
+    "SportsSpec",
     "StreamEvent",
     "Subscription",
     "SubscriptionHandle",

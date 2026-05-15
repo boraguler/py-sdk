@@ -50,9 +50,55 @@ def _parse_epoch_ms_timestamp(value: object) -> object:
         raise ValueError(msg) from error
 
 
+def _parse_epoch_ms_or_iso_timestamp(value: object) -> object:
+    """Permissive timestamp parser.
+
+    Accepts ``int`` (epoch ms), digit-string (epoch ms), and ISO-8601 strings.
+    Returns ``datetime`` (UTC-aware for epoch inputs; the string's own tz for
+    ISO inputs). Empty string / None / boolean / unknown shapes all surface
+    via ``ValueError``.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, bool):
+        msg = f"expected timestamp, got bool {value!r}"
+        raise ValueError(msg)
+    if isinstance(value, int):
+        try:
+            return datetime.fromtimestamp(value / 1000, tz=UTC)
+        except (OverflowError, OSError, ValueError) as error:
+            msg = f"invalid epoch-ms timestamp: {value!r}"
+            raise ValueError(msg) from error
+    if isinstance(value, str):
+        if value.isdecimal():
+            ms = int(value)
+            try:
+                return datetime.fromtimestamp(ms / 1000, tz=UTC)
+            except (OverflowError, OSError, ValueError) as error:
+                msg = f"invalid epoch-ms timestamp: {value!r}"
+                raise ValueError(msg) from error
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError as error:
+            msg = f"invalid timestamp: {value!r}"
+            raise ValueError(msg) from error
+    msg = f"expected epoch-ms or ISO timestamp, got {type(value).__name__}"
+    raise ValueError(msg)
+
+
 DecimalString = Annotated[Decimal, BeforeValidator(_require_decimal_string)]
 DecimalishString = Annotated[Decimal, BeforeValidator(_coerce_decimalish)]
 EpochMsTimestamp = Annotated[datetime | None, BeforeValidator(_parse_epoch_ms_timestamp)]
+EpochMsOrIsoTimestamp = Annotated[
+    datetime | None, BeforeValidator(_parse_epoch_ms_or_iso_timestamp)
+]
 
 
-__all__ = ["DecimalString", "DecimalishString", "EpochMsTimestamp"]
+__all__ = [
+    "DecimalString",
+    "DecimalishString",
+    "EpochMsOrIsoTimestamp",
+    "EpochMsTimestamp",
+]
