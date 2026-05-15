@@ -1,0 +1,259 @@
+import asyncio
+import contextlib
+import json
+import logging
+import time
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Any
+
+from websockets.asyncio.client import ClientConnection
+from websockets.asyncio.client import connect as ws_connect
+from websockets.exceptions import ConnectionClosed, WebSocketException
+from websockets.protocol import State
+
+from polymarket._internal.ws.heartbeat import Heartbeat, NoopHeartbeat
+from polymarket.errors import TransportError
+
+OnMessage = Callable[[Any], None]
+OnClose = Callable[[], None]
+OnError = Callable[[BaseException], None]
+
+DEFAULT_WATCHDOG_INTERVAL_S = 5.0
+DEFAULT_OPEN_TIMEOUT_S = 10.0
+
+
+@dataclass(frozen=True)
+class ConnectResult:
+    reused: bool
+
+
+def _socket_is_open(socket: ClientConnection | None) -> bool:
+    return socket is not None and socket.state is State.OPEN
+
+
+class AsyncWebSocketConnection:
+    def __init__(
+        self,
+        *,
+        heartbeat: Heartbeat | None = None,
+        logger: logging.Logger | None = None,
+        watchdog_interval_s: float = DEFAULT_WATCHDOG_INTERVAL_S,
+        open_timeout_s: float = DEFAULT_OPEN_TIMEOUT_S,
+    ) -> None:
+        if watchdog_interval_s <= 0:
+            raise ValueError("watchdog_interval_s must be positive")
+        self._heartbeat: Heartbeat = heartbeat or NoopHeartbeat()
+        self._logger = logger or logging.getLogger("polymarket.ws")
+        self._watchdog_interval_s = watchdog_interval_s
+        self._open_timeout_s = open_timeout_s
+        self._socket: ClientConnection | None = None
+        self._reader_task: asyncio.Task[None] | None = None
+        self._watchdog_task: asyncio.Task[None] | None = None
+        self._connecting: asyncio.Task[ConnectResult] | None = None
+        self._closing: asyncio.Task[None] | None = None
+        self._on_close: OnClose | None = None
+        self._on_error: OnError | None = None
+
+    @property
+    def is_open(self) -> bool:
+        return _socket_is_open(self._socket)
+
+    async def connect(
+        self,
+        *,
+        url: str,
+        on_message: OnMessage,
+        on_close: OnClose,
+        on_error: OnError,
+        headers: Mapping[str, str] | None = None,
+    ) -> ConnectResult:
+        existing = self._socket
+        if existing is not None:
+            if _socket_is_open(existing):
+                return ConnectResult(reused=True)
+            # Socket is CLOSING/CLOSED but the read-loop finalizer has not run
+            # yet. Detach so a fresh open can proceed; the in-flight reader
+            # task will see `self._socket is not existing` and skip on_close.
+            self._socket = None
+        if self._connecting is not None:
+            return await self._connecting
+        task = asyncio.create_task(
+            self._open(
+                url=url,
+                on_message=on_message,
+                on_close=on_close,
+                on_error=on_error,
+                headers=headers,
+            )
+        )
+        self._connecting = task
+        try:
+            return await task
+        finally:
+            if self._connecting is task:
+                self._connecting = None
+
+    async def _open(
+        self,
+        *,
+        url: str,
+        on_message: OnMessage,
+        on_close: OnClose,
+        on_error: OnError,
+        headers: Mapping[str, str] | None,
+    ) -> ConnectResult:
+        additional_headers = dict(headers) if headers else None
+        try:
+            socket = await ws_connect(
+                url,
+                additional_headers=additional_headers,
+                open_timeout=self._open_timeout_s,
+            )
+        except (OSError, TimeoutError, WebSocketException) as error:
+            raise TransportError(str(error) or f"WebSocket connection failed: {url}") from error
+        self._socket = socket
+        self._on_close = on_close
+        self._on_error = on_error
+        self._reader_task = asyncio.create_task(self._read_loop(socket, on_message))
+        try:
+            await self._heartbeat.start(self._send_text_if_open)
+        except BaseException:
+            await self._abort_open(socket)
+            raise
+        self._watchdog_task = asyncio.create_task(self._watchdog_loop(socket))
+        return ConnectResult(reused=False)
+
+    async def _abort_open(self, socket: ClientConnection) -> None:
+        self._socket = None
+        self._on_close = None
+        self._on_error = None
+        try:
+            await socket.close()
+        except Exception:
+            self._logger.debug("error closing socket during aborted open", exc_info=True)
+        if self._reader_task is not None:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._reader_task
+            self._reader_task = None
+
+    async def _read_loop(self, socket: ClientConnection, on_message: OnMessage) -> None:
+        try:
+            async for raw in socket:
+                if self._socket is not socket:
+                    return
+                if isinstance(raw, bytes):
+                    try:
+                        text = raw.decode("utf-8")
+                    except UnicodeDecodeError:
+                        continue
+                else:
+                    text = raw
+                if self._heartbeat.handle(text):
+                    continue
+                try:
+                    parsed = json.loads(text)
+                except json.JSONDecodeError:
+                    continue
+                try:
+                    on_message(parsed)
+                except Exception:
+                    self._logger.exception("on_message callback raised")
+        except ConnectionClosed:
+            pass
+        except Exception as exc:
+            if self._socket is socket and self._on_error is not None:
+                try:
+                    self._on_error(exc)
+                except Exception:
+                    self._logger.exception("on_error callback raised")
+        finally:
+            if self._socket is socket:
+                await self._handle_unexpected_close(socket)
+
+    async def _handle_unexpected_close(self, socket: ClientConnection) -> None:
+        self._socket = None
+        on_close = self._on_close
+        self._on_close = None
+        self._on_error = None
+        await self._heartbeat.stop()
+        if self._watchdog_task is not None:
+            self._watchdog_task.cancel()
+            self._watchdog_task = None
+        if on_close is not None:
+            try:
+                on_close()
+            except Exception:
+                self._logger.exception("on_close callback raised")
+
+    async def _watchdog_loop(self, socket: ClientConnection) -> None:
+        try:
+            while True:
+                await asyncio.sleep(self._watchdog_interval_s)
+                if self._socket is not socket:
+                    return
+                if self._heartbeat.is_stale(time.monotonic()):
+                    self._logger.warning("WebSocket heartbeat stale; closing")
+                    try:
+                        await socket.close()
+                    except Exception:
+                        self._logger.debug("error closing stale socket", exc_info=True)
+                    return
+        except asyncio.CancelledError:
+            return
+
+    async def send(self, payload: Any) -> None:
+        socket = self._socket
+        if not _socket_is_open(socket):
+            raise RuntimeError("WebSocket is not connected")
+        text = payload if isinstance(payload, str) else json.dumps(payload, separators=(",", ":"))
+        try:
+            assert socket is not None
+            await socket.send(text)
+        except ConnectionClosed as error:
+            raise TransportError("WebSocket is closed") from error
+
+    async def _send_text_if_open(self, text: str) -> None:
+        socket = self._socket
+        if not _socket_is_open(socket):
+            return
+        assert socket is not None
+        with contextlib.suppress(ConnectionClosed):
+            await socket.send(text)
+
+    async def close(self) -> None:
+        if self._closing is None:
+            self._closing = asyncio.create_task(self._shutdown())
+        closing = self._closing
+        try:
+            await closing
+        finally:
+            if self._closing is closing:
+                self._closing = None
+
+    async def _shutdown(self) -> None:
+        if self._connecting is not None:
+            with contextlib.suppress(Exception):
+                await self._connecting
+        socket = self._socket
+        self._socket = None
+        self._on_close = None
+        self._on_error = None
+        await self._heartbeat.stop()
+        watchdog = self._watchdog_task
+        self._watchdog_task = None
+        if watchdog is not None:
+            watchdog.cancel()
+        if socket is not None:
+            try:
+                await socket.close()
+            except Exception:
+                self._logger.debug("error closing socket on shutdown", exc_info=True)
+        reader = self._reader_task
+        self._reader_task = None
+        if reader is not None:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await reader
+        if watchdog is not None:
+            with contextlib.suppress(asyncio.CancelledError):
+                await watchdog
