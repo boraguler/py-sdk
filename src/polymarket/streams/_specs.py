@@ -1,7 +1,7 @@
 # pyright: reportUnnecessaryIsInstance=false
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, TypeVar
 
 from polymarket.errors import UserInputError
 
@@ -138,8 +138,30 @@ class EquityPricesSpec:
             object.__setattr__(self, "types", tuple(normalized))
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UserSpec:
+    markets: Sequence[str] | None = None
+    topic: Literal["user"] = field(default="user", init=False)
+
+    def __post_init__(self) -> None:
+        if self.markets is None:
+            return
+        if isinstance(self.markets, str | bytes):
+            raise UserInputError("markets must be a sequence of market ids, not a single string")
+        normalized: list[str] = []
+        for m in self.markets:
+            if isinstance(m, bool) or not isinstance(m, str):
+                raise UserInputError(f"market must be a string, got {type(m).__name__}")
+            if not m:
+                raise UserInputError("market must be non-empty")
+            normalized.append(m)
+        object.__setattr__(self, "markets", tuple(normalized) if normalized else None)
+
+
 RtdsSpec = CommentsSpec | CryptoPricesSpec | EquityPricesSpec
-Subscription = MarketSpec | SportsSpec | RtdsSpec
+PublicSubscription = MarketSpec | SportsSpec | RtdsSpec
+SecureSubscription = PublicSubscription | UserSpec
+Subscription = SecureSubscription
 
 
 _SPEC_TYPES: tuple[
@@ -148,23 +170,26 @@ _SPEC_TYPES: tuple[
     type[CommentsSpec],
     type[CryptoPricesSpec],
     type[EquityPricesSpec],
+    type[UserSpec],
 ] = (
     MarketSpec,
     SportsSpec,
     CommentsSpec,
     CryptoPricesSpec,
     EquityPricesSpec,
+    UserSpec,
 )
 
 
-def _normalize_specs(
-    specs: Subscription | Sequence[Subscription],
-) -> list[Subscription]:
+_S = TypeVar("_S", bound=Subscription)
+
+
+def _normalize_specs(specs: _S | Sequence[_S]) -> list[_S]:
     if isinstance(specs, _SPEC_TYPES):
         return [specs]
     if not isinstance(specs, Sequence) or isinstance(specs, str | bytes):
         raise UserInputError("subscribe() expects a Subscription or a sequence of Subscriptions")
-    items: list[Subscription] = []
+    items: list[_S] = []
     for spec in specs:
         if not isinstance(spec, _SPEC_TYPES):
             raise UserInputError(f"unsupported subscription type: {type(spec).__name__}")
@@ -175,6 +200,8 @@ def _normalize_specs(
 
 
 __all__ = [
+    "PublicSubscription",
+    "SecureSubscription",
     "CommentsEventType",
     "CommentsSpec",
     "CryptoPricesSpec",
@@ -186,5 +213,6 @@ __all__ = [
     "RtdsSpec",
     "SportsSpec",
     "Subscription",
+    "UserSpec",
     "_normalize_specs",
 ]

@@ -88,12 +88,77 @@ def _parse_epoch_ms_or_iso_timestamp(value: object) -> object:
     raise ValueError(msg)
 
 
+_EPOCH_MS_THRESHOLD = 10**11
+
+
+def _parse_epoch_seconds_or_ms_timestamp(value: object) -> object:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, bool):
+        msg = f"expected epoch timestamp, got bool {value!r}"
+        raise ValueError(msg)
+    if isinstance(value, int):
+        magnitude = value
+    elif isinstance(value, str):
+        if not value.isdecimal():
+            msg = f"invalid epoch timestamp: {value!r}"
+            raise ValueError(msg)
+        magnitude = int(value)
+    else:
+        msg = f"expected epoch timestamp, got {type(value).__name__}"
+        raise ValueError(msg)
+    seconds = magnitude / 1000 if magnitude >= _EPOCH_MS_THRESHOLD else magnitude
+    try:
+        return datetime.fromtimestamp(seconds, tz=UTC)
+    except (OverflowError, OSError, ValueError) as error:
+        msg = f"invalid epoch timestamp: {value!r}"
+        raise ValueError(msg) from error
+
+
+def _parse_epoch_seconds_timestamp(value: object) -> object:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, bool):
+        msg = f"expected epoch-seconds timestamp, got bool {value!r}"
+        raise ValueError(msg)
+    if isinstance(value, int):
+        seconds = value
+    elif isinstance(value, str):
+        if not value.isdecimal():
+            msg = f"invalid epoch-seconds timestamp: {value!r}"
+            raise ValueError(msg)
+        seconds = int(value)
+    else:
+        msg = f"expected epoch-seconds timestamp, got {type(value).__name__}"
+        raise ValueError(msg)
+    try:
+        return datetime.fromtimestamp(seconds, tz=UTC)
+    except (OverflowError, OSError, ValueError) as error:
+        msg = f"invalid epoch-seconds timestamp: {value!r}"
+        raise ValueError(msg) from error
+
+
+def _parse_expiration_timestamp(value: object) -> object:
+    if value == 0 or value == "0":
+        return None
+    return _parse_epoch_seconds_timestamp(value)
+
+
 DecimalString = Annotated[Decimal, BeforeValidator(_require_decimal_string)]
 DecimalishString = Annotated[Decimal, BeforeValidator(_coerce_decimalish)]
 EpochMsTimestamp = Annotated[datetime | None, BeforeValidator(_parse_epoch_ms_timestamp)]
 EpochMsOrIsoTimestamp = Annotated[
     datetime | None, BeforeValidator(_parse_epoch_ms_or_iso_timestamp)
 ]
+EpochSecondsTimestamp = Annotated[datetime | None, BeforeValidator(_parse_epoch_seconds_timestamp)]
+EpochSecondsOrMsTimestamp = Annotated[
+    datetime | None, BeforeValidator(_parse_epoch_seconds_or_ms_timestamp)
+]
+ExpirationTimestamp = Annotated[datetime | None, BeforeValidator(_parse_expiration_timestamp)]
 
 
 __all__ = [
@@ -101,4 +166,7 @@ __all__ = [
     "DecimalishString",
     "EpochMsOrIsoTimestamp",
     "EpochMsTimestamp",
+    "EpochSecondsOrMsTimestamp",
+    "EpochSecondsTimestamp",
+    "ExpirationTimestamp",
 ]

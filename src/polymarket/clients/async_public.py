@@ -5,7 +5,7 @@ import logging
 from collections.abc import Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self, cast, overload
+from typing import TYPE_CHECKING, Any, Self, assert_never, cast, overload
 
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
@@ -98,8 +98,8 @@ from polymarket.streams._specs import (
     CryptoPricesSpec,
     EquityPricesSpec,
     MarketSpec,
+    PublicSubscription,
     SportsSpec,
-    Subscription,
     _normalize_specs,
 )
 
@@ -178,11 +178,11 @@ class AsyncPublicClient:
     ) -> SubscriptionHandle[EquityPricesEvent]: ...
     @overload
     async def subscribe(
-        self, specs: Sequence[Subscription], /
+        self, specs: Sequence[PublicSubscription], /
     ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]: ...
     async def subscribe(
         self,
-        specs: Subscription | Sequence[Subscription],
+        specs: PublicSubscription | Sequence[PublicSubscription],
     ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]:
         items = _normalize_specs(specs)
         # AsyncSubscriptionHandle is invariant in T, so per-channel handles
@@ -200,8 +200,10 @@ class AsyncPublicClient:
                     )
                 elif isinstance(spec, SportsSpec):
                     handles.append(await self._get_sports_manager().subscribe())
-                else:
+                elif isinstance(spec, CommentsSpec | CryptoPricesSpec | EquityPricesSpec):  # pyright: ignore[reportUnnecessaryIsInstance]
                     handles.append(await self._get_rtds_manager().subscribe(spec))
+                else:
+                    assert_never(spec)
         except BaseException:
             for handle in handles:
                 with contextlib.suppress(Exception):

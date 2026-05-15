@@ -595,3 +595,33 @@ def test_equity_spec_topic_field_is_not_caller_settable() -> None:
 
     with pytest.raises(TypeError):
         EquityPricesSpec(symbol="AAPL", topic="comments")  # pyright: ignore[reportCallIssue]
+
+
+def test_public_client_assert_never_protects_against_smuggled_user_spec() -> None:
+    from polymarket.streams import UserSpec
+
+    async def run() -> None:
+        client = AsyncPublicClient()
+        try:
+            smuggled: list[Any] = [UserSpec()]
+            with pytest.raises(AssertionError):
+                await client.subscribe(smuggled)
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+
+def test_user_spec_topic_field_is_not_caller_settable() -> None:
+    from polymarket.streams import UserSpec
+
+    with pytest.raises(TypeError):
+        UserSpec(topic="market")  # pyright: ignore[reportCallIssue]
+
+
+def test_user_spec_normalizes_empty_markets_to_none() -> None:
+    from polymarket.streams import UserSpec
+
+    assert UserSpec(markets=[]).markets is None
+    assert UserSpec(markets=()).markets is None
+    assert UserSpec().markets is None
