@@ -4,7 +4,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self, TypeAlias, cast, overload
+from typing import TYPE_CHECKING, Any, Self, TypeAlias, assert_never, cast, overload
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -143,8 +143,8 @@ from polymarket.streams._specs import (
     CryptoPricesSpec,
     EquityPricesSpec,
     MarketSpec,
+    SecureSubscription,
     SportsSpec,
-    Subscription,
     UserSpec,
     _normalize_specs,
 )
@@ -333,11 +333,11 @@ class AsyncSecureClient:
     async def subscribe(self, specs: Sequence[UserSpec], /) -> SubscriptionHandle[UserEvent]: ...
     @overload
     async def subscribe(
-        self, specs: Sequence[Subscription], /
+        self, specs: Sequence[SecureSubscription], /
     ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent]: ...
     async def subscribe(
         self,
-        specs: Subscription | Sequence[Subscription],
+        specs: SecureSubscription | Sequence[SecureSubscription],
     ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent]:
         items = _normalize_specs(specs)
         handles: list[AsyncSubscriptionHandle[Any]] = []
@@ -354,8 +354,10 @@ class AsyncSecureClient:
                     handles.append(await self._get_sports_manager().subscribe())
                 elif isinstance(spec, UserSpec):
                     handles.append(await self._get_user_manager().subscribe(markets=spec.markets))
-                else:
+                elif isinstance(spec, CommentsSpec | CryptoPricesSpec | EquityPricesSpec):  # pyright: ignore[reportUnnecessaryIsInstance]
                     handles.append(await self._get_rtds_manager().subscribe(spec))
+                else:
+                    assert_never(spec)
         except BaseException:
             for handle in handles:
                 with contextlib.suppress(Exception):

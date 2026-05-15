@@ -201,9 +201,13 @@ class ClobUserStreamManager:
             self._scheduler.reset()
             try:
                 credentials = await self._resolve_credentials()
-            except BaseException:
+            except Exception:
                 self._logger.exception("user stream credential resolution failed on reconnect")
                 await self._connection.close()
+                self._scheduler.schedule(
+                    reconnect=self._reconnect,
+                    should_reconnect=self._should_reconnect,
+                )
                 return
             state = self._registry.server_state()
             await self._connection.send(build_initial_frame(state, credentials))

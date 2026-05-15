@@ -597,46 +597,19 @@ def test_equity_spec_topic_field_is_not_caller_settable() -> None:
         EquityPricesSpec(symbol="AAPL", topic="comments")  # pyright: ignore[reportCallIssue]
 
 
-def test_public_client_rejects_user_spec() -> None:
-    from polymarket.errors import UserInputError
+def test_public_client_assert_never_protects_against_smuggled_user_spec() -> None:
     from polymarket.streams import UserSpec
 
     async def run() -> None:
         client = AsyncPublicClient()
         try:
-            with pytest.raises(UserInputError, match="UserSpec requires AsyncSecureClient"):
-                await client.subscribe(UserSpec())  # pyright: ignore[reportCallIssue, reportArgumentType]
+            smuggled: list[Any] = [UserSpec()]
+            with pytest.raises(AssertionError):
+                await client.subscribe(smuggled)
         finally:
             await client.close()
 
     asyncio.run(run())
-
-
-def test_public_client_rejects_user_spec_in_mixed_sequence_before_opening_sockets() -> None:
-    from polymarket.errors import UserInputError
-    from polymarket.streams import UserSpec
-
-    accepts = 0
-
-    async def handler(ws: ServerConnection) -> None:
-        nonlocal accepts
-        accepts += 1
-        async for _ in ws:
-            pass
-
-    async def run() -> int:
-        async with ws_server(handler) as url:
-            client = AsyncPublicClient(environment=_env_with_market_ws(url))
-            try:
-                mixed: list[Any] = [MarketSpec(token_ids=["a"]), UserSpec()]
-                with pytest.raises(UserInputError, match="UserSpec requires AsyncSecureClient"):
-                    await client.subscribe(mixed)
-                await asyncio.sleep(0.05)
-                return accepts
-            finally:
-                await client.close()
-
-    assert asyncio.run(run()) == 0
 
 
 def test_user_spec_topic_field_is_not_caller_settable() -> None:

@@ -324,3 +324,44 @@ def test_subscribe_after_close_raises() -> None:
             await mgr.subscribe(markets=["m1"])
 
     asyncio.run(run())
+
+
+def test_credential_failure_on_reconnect_reschedules_instead_of_hanging() -> None:
+    connect_count = 0
+    resolve_calls = 0
+
+    async def resolve() -> ApiKeyCreds:
+        nonlocal resolve_calls
+        resolve_calls += 1
+        if resolve_calls == 1:
+            return _CREDS
+        if resolve_calls == 2:
+            raise RuntimeError("simulated credential lookup failure")
+        return _CREDS
+
+    async def handler(ws: ServerConnection) -> None:
+        nonlocal connect_count
+        connect_count += 1
+        if connect_count == 1:
+            await ws.recv()
+            await ws.close()
+            return
+        async for _ in ws:
+            pass
+
+    async def run() -> int:
+        async with ws_server(handler) as url:
+            mgr = ClobUserStreamManager(url=url, resolve_credentials=resolve)
+            try:
+                handle = await mgr.subscribe(markets=["m1"])
+                await asyncio.sleep(3.0)
+                await handle.close()
+            finally:
+                await mgr.close()
+        return resolve_calls
+
+    final_calls = asyncio.run(run())
+    assert final_calls >= 3, (
+        "credential resolution should be re-attempted after a transient failure; "
+        f"only got {final_calls} attempts"
+    )

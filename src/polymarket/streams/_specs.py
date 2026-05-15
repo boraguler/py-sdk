@@ -1,7 +1,7 @@
 # pyright: reportUnnecessaryIsInstance=false
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, TypeVar
 
 from polymarket.errors import UserInputError
 
@@ -159,7 +159,9 @@ class UserSpec:
 
 
 RtdsSpec = CommentsSpec | CryptoPricesSpec | EquityPricesSpec
-Subscription = MarketSpec | SportsSpec | RtdsSpec | UserSpec
+PublicSubscription = MarketSpec | SportsSpec | RtdsSpec
+SecureSubscription = PublicSubscription | UserSpec
+Subscription = SecureSubscription
 
 
 _SPEC_TYPES: tuple[
@@ -179,14 +181,15 @@ _SPEC_TYPES: tuple[
 )
 
 
-def _normalize_specs(
-    specs: Subscription | Sequence[Subscription],
-) -> list[Subscription]:
+_S = TypeVar("_S", bound=Subscription)
+
+
+def _normalize_specs(specs: _S | Sequence[_S]) -> list[_S]:
     if isinstance(specs, _SPEC_TYPES):
         return [specs]
     if not isinstance(specs, Sequence) or isinstance(specs, str | bytes):
         raise UserInputError("subscribe() expects a Subscription or a sequence of Subscriptions")
-    items: list[Subscription] = []
+    items: list[_S] = []
     for spec in specs:
         if not isinstance(spec, _SPEC_TYPES):
             raise UserInputError(f"unsupported subscription type: {type(spec).__name__}")
@@ -197,6 +200,8 @@ def _normalize_specs(
 
 
 __all__ = [
+    "PublicSubscription",
+    "SecureSubscription",
     "CommentsEventType",
     "CommentsSpec",
     "CryptoPricesSpec",
