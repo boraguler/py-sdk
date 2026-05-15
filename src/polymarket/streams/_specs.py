@@ -5,6 +5,23 @@ from typing import Literal
 
 from polymarket.errors import UserInputError
 
+_COMMENT_EVENT_TYPES: frozenset[str] = frozenset(
+    {"comment_created", "comment_removed", "reaction_created", "reaction_removed"}
+)
+_PARENT_ENTITY_TYPES: frozenset[str] = frozenset({"Event", "Market"})
+_CRYPTO_PRICES_TOPICS: frozenset[str] = frozenset(
+    {"prices.crypto.binance", "prices.crypto.chainlink"}
+)
+_EQUITY_EVENT_TYPES: frozenset[str] = frozenset({"update", "subscribe"})
+
+
+CommentsEventType = Literal[
+    "comment_created", "comment_removed", "reaction_created", "reaction_removed"
+]
+ParentEntityType = Literal["Event", "Market"]
+CryptoPricesTopic = Literal["prices.crypto.binance", "prices.crypto.chainlink"]
+EquityPricesEventType = Literal["update", "subscribe"]
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MarketSpec:
@@ -42,23 +59,132 @@ class SportsSpec:
     topic: Literal["sports"] = field(default="sports", init=False)
 
 
-Subscription = MarketSpec | SportsSpec
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CommentsSpec:
+    types: Sequence[CommentsEventType] | None = None
+    parent_entity_id: int | None = None
+    parent_entity_type: ParentEntityType | None = None
+    topic: Literal["comments"] = field(default="comments", init=False)
+
+    def __post_init__(self) -> None:
+        if self.types is not None:
+            if isinstance(self.types, str | bytes):
+                raise UserInputError("types must be a sequence, not a single string")
+            normalized: list[CommentsEventType] = []
+            for t in self.types:
+                if not isinstance(t, str) or t not in _COMMENT_EVENT_TYPES:
+                    raise UserInputError(f"invalid comments event type: {t!r}")
+                normalized.append(t)  # type: ignore[arg-type]
+            if not normalized:
+                raise UserInputError("types must be non-empty when provided")
+            object.__setattr__(self, "types", tuple(normalized))
+        if self.parent_entity_id is not None and (
+            isinstance(self.parent_entity_id, bool) or not isinstance(self.parent_entity_id, int)
+        ):
+            raise UserInputError("parent_entity_id must be an int")
+        if (
+            self.parent_entity_type is not None
+            and self.parent_entity_type not in _PARENT_ENTITY_TYPES
+        ):
+            raise UserInputError(
+                f"parent_entity_type must be 'Event' or 'Market', got {self.parent_entity_type!r}"
+            )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CryptoPricesSpec:
+    topic: CryptoPricesTopic
+    symbols: Sequence[str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.topic not in _CRYPTO_PRICES_TOPICS:
+            raise UserInputError(
+                f"topic must be one of {sorted(_CRYPTO_PRICES_TOPICS)}, got {self.topic!r}"
+            )
+        if self.symbols is not None:
+            if isinstance(self.symbols, str | bytes):
+                raise UserInputError("symbols must be a sequence of symbols, not a single string")
+            normalized: list[str] = []
+            for s in self.symbols:
+                if not isinstance(s, str):
+                    raise UserInputError(f"symbol must be a string, got {type(s).__name__}")
+                if not s:
+                    raise UserInputError("symbol must be non-empty")
+                normalized.append(s)
+            if not normalized:
+                raise UserInputError("symbols must be non-empty when provided")
+            object.__setattr__(self, "symbols", tuple(normalized))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class EquityPricesSpec:
+    symbol: str
+    types: Sequence[EquityPricesEventType] | None = None
+    topic: Literal["prices.equity.pyth"] = field(default="prices.equity.pyth", init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.symbol, str) or not self.symbol:
+            raise UserInputError("symbol must be a non-empty string")
+        if self.types is not None:
+            if isinstance(self.types, str | bytes):
+                raise UserInputError("types must be a sequence, not a single string")
+            normalized: list[EquityPricesEventType] = []
+            for t in self.types:
+                if not isinstance(t, str) or t not in _EQUITY_EVENT_TYPES:
+                    raise UserInputError(f"invalid equity event type: {t!r}")
+                normalized.append(t)  # type: ignore[arg-type]
+            if not normalized:
+                raise UserInputError("types must be non-empty when provided")
+            object.__setattr__(self, "types", tuple(normalized))
+
+
+RtdsSpec = CommentsSpec | CryptoPricesSpec | EquityPricesSpec
+Subscription = MarketSpec | SportsSpec | RtdsSpec
+
+
+_SPEC_TYPES: tuple[
+    type[MarketSpec],
+    type[SportsSpec],
+    type[CommentsSpec],
+    type[CryptoPricesSpec],
+    type[EquityPricesSpec],
+] = (
+    MarketSpec,
+    SportsSpec,
+    CommentsSpec,
+    CryptoPricesSpec,
+    EquityPricesSpec,
+)
 
 
 def _normalize_specs(
     specs: Subscription | Sequence[Subscription],
 ) -> list[Subscription]:
-    if isinstance(specs, MarketSpec | SportsSpec):
+    if isinstance(specs, _SPEC_TYPES):
         return [specs]
     if not isinstance(specs, Sequence) or isinstance(specs, str | bytes):
         raise UserInputError("subscribe() expects a Subscription or a sequence of Subscriptions")
-    items = list(specs)
+    items: list[Subscription] = []
+    for spec in specs:
+        if not isinstance(spec, _SPEC_TYPES):
+            raise UserInputError(f"unsupported subscription type: {type(spec).__name__}")
+        items.append(spec)
     if not items:
         raise UserInputError("subscribe() requires at least one subscription")
-    for spec in items:
-        if not isinstance(spec, MarketSpec | SportsSpec):
-            raise UserInputError(f"unsupported subscription type: {type(spec).__name__}")
     return items
 
 
-__all__ = ["MarketSpec", "SportsSpec", "Subscription", "_normalize_specs"]
+__all__ = [
+    "CommentsEventType",
+    "CommentsSpec",
+    "CryptoPricesSpec",
+    "CryptoPricesTopic",
+    "EquityPricesEventType",
+    "EquityPricesSpec",
+    "MarketSpec",
+    "ParentEntityType",
+    "RtdsSpec",
+    "SportsSpec",
+    "Subscription",
+    "_normalize_specs",
+]

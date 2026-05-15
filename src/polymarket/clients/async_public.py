@@ -84,13 +84,28 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
+from polymarket.models.rtds_events import (
+    CommentsEvent,
+    CryptoPricesEvent,
+    EquityPricesEvent,
+    RtdsEvent,
+)
 from polymarket.models.sports_events import SportsEvent
 from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
-from polymarket.streams._specs import MarketSpec, SportsSpec, Subscription, _normalize_specs
+from polymarket.streams._specs import (
+    CommentsSpec,
+    CryptoPricesSpec,
+    EquityPricesSpec,
+    MarketSpec,
+    SportsSpec,
+    Subscription,
+    _normalize_specs,
+)
 
 if TYPE_CHECKING:
     from polymarket._internal.streams.clob.market import ClobMarketStreamManager
+    from polymarket._internal.streams.rtds.manager import RtdsStreamManager
     from polymarket._internal.streams.sports.manager import SportsStreamManager
 
 
@@ -120,6 +135,7 @@ class AsyncPublicClient:
         )
         self._market_manager: ClobMarketStreamManager | None = None
         self._sports_manager: SportsStreamManager | None = None
+        self._rtds_manager: RtdsStreamManager | None = None
         self._streams_logger = logger
 
     @property
@@ -131,6 +147,16 @@ class AsyncPublicClient:
     @overload
     async def subscribe(self, specs: SportsSpec, /) -> SubscriptionHandle[SportsEvent]: ...
     @overload
+    async def subscribe(self, specs: CommentsSpec, /) -> SubscriptionHandle[CommentsEvent]: ...
+    @overload
+    async def subscribe(
+        self, specs: CryptoPricesSpec, /
+    ) -> SubscriptionHandle[CryptoPricesEvent]: ...
+    @overload
+    async def subscribe(
+        self, specs: EquityPricesSpec, /
+    ) -> SubscriptionHandle[EquityPricesEvent]: ...
+    @overload
     async def subscribe(
         self, specs: Sequence[MarketSpec], /
     ) -> SubscriptionHandle[MarketEvent]: ...
@@ -140,12 +166,24 @@ class AsyncPublicClient:
     ) -> SubscriptionHandle[SportsEvent]: ...
     @overload
     async def subscribe(
-        self, specs: Sequence[MarketSpec | SportsSpec], /
-    ) -> SubscriptionHandle[MarketEvent | SportsEvent]: ...
+        self, specs: Sequence[CommentsSpec], /
+    ) -> SubscriptionHandle[CommentsEvent]: ...
+    @overload
+    async def subscribe(
+        self, specs: Sequence[CryptoPricesSpec], /
+    ) -> SubscriptionHandle[CryptoPricesEvent]: ...
+    @overload
+    async def subscribe(
+        self, specs: Sequence[EquityPricesSpec], /
+    ) -> SubscriptionHandle[EquityPricesEvent]: ...
+    @overload
+    async def subscribe(
+        self, specs: Sequence[Subscription], /
+    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]: ...
     async def subscribe(
         self,
         specs: Subscription | Sequence[Subscription],
-    ) -> SubscriptionHandle[MarketEvent | SportsEvent]:
+    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]:
         items = _normalize_specs(specs)
         # AsyncSubscriptionHandle is invariant in T, so per-channel handles
         # can't widen to the union type at the type level. Cast at the
@@ -160,19 +198,21 @@ class AsyncPublicClient:
                             custom_feature_enabled=spec.custom_feature_enabled,
                         )
                     )
-                else:
+                elif isinstance(spec, SportsSpec):
                     handles.append(await self._get_sports_manager().subscribe())
+                else:
+                    handles.append(await self._get_rtds_manager().subscribe(spec))
         except BaseException:
             for handle in handles:
                 with contextlib.suppress(Exception):
                     await handle.close()
             raise
         if len(handles) == 1:
-            return cast(SubscriptionHandle[MarketEvent | SportsEvent], handles[0])
+            return cast(SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent], handles[0])
         from polymarket._internal.streams.merged_handle import MergedSubscriptionHandle
 
         return cast(
-            SubscriptionHandle[MarketEvent | SportsEvent],
+            SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent],
             MergedSubscriptionHandle(handles),
         )
 
@@ -187,6 +227,18 @@ class AsyncPublicClient:
                 logger=self._streams_logger,
             )
         return self._market_manager
+
+    def _get_rtds_manager(self) -> "RtdsStreamManager":
+        if self._rtds_manager is None:
+            try:
+                from polymarket._internal.streams.rtds.manager import RtdsStreamManager
+            except ImportError as exc:
+                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            self._rtds_manager = RtdsStreamManager(
+                url=self._ctx.environment.rtds_ws_url,
+                logger=self._streams_logger,
+            )
+        return self._rtds_manager
 
     def _get_sports_manager(self) -> "SportsStreamManager":
         if self._sports_manager is None:
@@ -222,12 +274,16 @@ class AsyncPublicClient:
                     await self._sports_manager.close()
             finally:
                 try:
-                    await self._ctx.gamma.close()
+                    if self._rtds_manager is not None:
+                        await self._rtds_manager.close()
                 finally:
                     try:
-                        await self._ctx.data.close()
+                        await self._ctx.gamma.close()
                     finally:
-                        await self._ctx.clob.close()
+                        try:
+                            await self._ctx.data.close()
+                        finally:
+                            await self._ctx.clob.close()
 
     async def get_market(
         self,
