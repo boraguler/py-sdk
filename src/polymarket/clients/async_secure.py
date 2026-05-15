@@ -109,6 +109,7 @@ from polymarket.models.clob.rewards import (
     UserEarning,
     UserRewardsEarning,
 )
+from polymarket.models.clob.user_events import UserEvent
 from polymarket.models.data import (
     Activity,
     BuilderVolumeEntry,
@@ -144,12 +145,14 @@ from polymarket.streams._specs import (
     MarketSpec,
     SportsSpec,
     Subscription,
+    UserSpec,
     _normalize_specs,
 )
 from polymarket.types import EvmAddress, HexString
 
 if TYPE_CHECKING:
     from polymarket._internal.streams.clob.market import ClobMarketStreamManager
+    from polymarket._internal.streams.clob.user import ClobUserStreamManager
     from polymarket._internal.streams.rtds.manager import RtdsStreamManager
     from polymarket._internal.streams.sports.manager import SportsStreamManager
 
@@ -179,6 +182,7 @@ class AsyncSecureClient:
         self._market_manager: ClobMarketStreamManager | None = None
         self._sports_manager: SportsStreamManager | None = None
         self._rtds_manager: RtdsStreamManager | None = None
+        self._user_manager: ClobUserStreamManager | None = None
         self._streams_logger = logger
 
     @property
@@ -304,6 +308,8 @@ class AsyncSecureClient:
         self, specs: EquityPricesSpec, /
     ) -> SubscriptionHandle[EquityPricesEvent]: ...
     @overload
+    async def subscribe(self, specs: UserSpec, /) -> SubscriptionHandle[UserEvent]: ...
+    @overload
     async def subscribe(
         self, specs: Sequence[MarketSpec], /
     ) -> SubscriptionHandle[MarketEvent]: ...
@@ -324,13 +330,15 @@ class AsyncSecureClient:
         self, specs: Sequence[EquityPricesSpec], /
     ) -> SubscriptionHandle[EquityPricesEvent]: ...
     @overload
+    async def subscribe(self, specs: Sequence[UserSpec], /) -> SubscriptionHandle[UserEvent]: ...
+    @overload
     async def subscribe(
         self, specs: Sequence[Subscription], /
-    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]: ...
+    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent]: ...
     async def subscribe(
         self,
         specs: Subscription | Sequence[Subscription],
-    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]:
+    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent]:
         items = _normalize_specs(specs)
         handles: list[AsyncSubscriptionHandle[Any]] = []
         try:
@@ -344,6 +352,8 @@ class AsyncSecureClient:
                     )
                 elif isinstance(spec, SportsSpec):
                     handles.append(await self._get_sports_manager().subscribe())
+                elif isinstance(spec, UserSpec):
+                    handles.append(await self._get_user_manager().subscribe(markets=spec.markets))
                 else:
                     handles.append(await self._get_rtds_manager().subscribe(spec))
         except BaseException:
@@ -352,11 +362,14 @@ class AsyncSecureClient:
                     await handle.close()
             raise
         if len(handles) == 1:
-            return cast(SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent], handles[0])
+            return cast(
+                SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent],
+                handles[0],
+            )
         from polymarket._internal.streams.merged_handle import MergedSubscriptionHandle
 
         return cast(
-            SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent],
+            SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent],
             MergedSubscriptionHandle(handles),
         )
 
@@ -396,6 +409,22 @@ class AsyncSecureClient:
             )
         return self._rtds_manager
 
+    def _get_user_manager(self) -> "ClobUserStreamManager":
+        if self._user_manager is None:
+            try:
+                from polymarket._internal.streams.clob.user import ClobUserStreamManager
+            except ImportError as exc:
+                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            self._user_manager = ClobUserStreamManager(
+                url=self._ctx.environment.clob_user_ws_url,
+                resolve_credentials=self._resolve_api_key_credentials,
+                logger=self._streams_logger,
+            )
+        return self._user_manager
+
+    async def _resolve_api_key_credentials(self) -> ApiKeyCreds:
+        return self._ctx.credentials
+
     async def __aenter__(self) -> Self:
         return self
 
@@ -422,15 +451,19 @@ class AsyncSecureClient:
                         await self._rtds_manager.close()
                 finally:
                     try:
-                        await ctx.gamma.close()
+                        if self._user_manager is not None:
+                            await self._user_manager.close()
                     finally:
                         try:
-                            await ctx.data.close()
+                            await ctx.gamma.close()
                         finally:
                             try:
-                                await ctx.clob.close()
+                                await ctx.data.close()
                             finally:
-                                await ctx.secure_clob.close()
+                                try:
+                                    await ctx.clob.close()
+                                finally:
+                                    await ctx.secure_clob.close()
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user

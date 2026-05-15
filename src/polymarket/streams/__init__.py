@@ -20,6 +20,14 @@ from polymarket.models.clob.market_events import (
     NewMarketPayload,
     PriceChange,
 )
+from polymarket.models.clob.user_events import (
+    UserEvent,
+    UserOrderEvent,
+    UserOrderPayload,
+    UserTradeEvent,
+    UserTradeMakerOrder,
+    UserTradePayload,
+)
 from polymarket.models.rtds_events import (
     Comment,
     CommentCreatedEvent,
@@ -60,9 +68,10 @@ from polymarket.streams._specs import (
     RtdsSpec,
     SportsSpec,
     Subscription,
+    UserSpec,
 )
 
-StreamEvent = MarketEvent | SportsEvent | RtdsEvent
+StreamEvent = MarketEvent | SportsEvent | RtdsEvent | UserEvent
 
 __all__ = [
     "Comment",
@@ -119,4 +128,11 @@ __all__ = [
     "StreamEvent",
     "Subscription",
     "SubscriptionHandle",
+    "UserEvent",
+    "UserOrderEvent",
+    "UserOrderPayload",
+    "UserSpec",
+    "UserTradeEvent",
+    "UserTradeMakerOrder",
+    "UserTradePayload",
 ]

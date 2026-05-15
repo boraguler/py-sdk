@@ -138,8 +138,28 @@ class EquityPricesSpec:
             object.__setattr__(self, "types", tuple(normalized))
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UserSpec:
+    markets: Sequence[str] | None = None
+    topic: Literal["user"] = field(default="user", init=False)
+
+    def __post_init__(self) -> None:
+        if self.markets is None:
+            return
+        if isinstance(self.markets, str | bytes):
+            raise UserInputError("markets must be a sequence of market ids, not a single string")
+        normalized: list[str] = []
+        for m in self.markets:
+            if isinstance(m, bool) or not isinstance(m, str):
+                raise UserInputError(f"market must be a string, got {type(m).__name__}")
+            if not m:
+                raise UserInputError("market must be non-empty")
+            normalized.append(m)
+        object.__setattr__(self, "markets", tuple(normalized) if normalized else None)
+
+
 RtdsSpec = CommentsSpec | CryptoPricesSpec | EquityPricesSpec
-Subscription = MarketSpec | SportsSpec | RtdsSpec
+Subscription = MarketSpec | SportsSpec | RtdsSpec | UserSpec
 
 
 _SPEC_TYPES: tuple[
@@ -148,12 +168,14 @@ _SPEC_TYPES: tuple[
     type[CommentsSpec],
     type[CryptoPricesSpec],
     type[EquityPricesSpec],
+    type[UserSpec],
 ] = (
     MarketSpec,
     SportsSpec,
     CommentsSpec,
     CryptoPricesSpec,
     EquityPricesSpec,
+    UserSpec,
 )
 
 
@@ -186,5 +208,6 @@ __all__ = [
     "RtdsSpec",
     "SportsSpec",
     "Subscription",
+    "UserSpec",
     "_normalize_specs",
 ]

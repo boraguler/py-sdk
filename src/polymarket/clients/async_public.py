@@ -41,7 +41,7 @@ from polymarket._internal.dispatch import (
 from polymarket._internal.streams.handle import AsyncSubscriptionHandle, SubscriptionHandle
 from polymarket.clients._transport import AsyncTransport
 from polymarket.environments import PRODUCTION, Environment
-from polymarket.errors import RequestRejectedError
+from polymarket.errors import RequestRejectedError, UserInputError
 from polymarket.models import (
     Comment,
     Event,
@@ -100,6 +100,7 @@ from polymarket.streams._specs import (
     MarketSpec,
     SportsSpec,
     Subscription,
+    UserSpec,
     _normalize_specs,
 )
 
@@ -185,6 +186,11 @@ class AsyncPublicClient:
         specs: Subscription | Sequence[Subscription],
     ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]:
         items = _normalize_specs(specs)
+        for spec in items:
+            if isinstance(spec, UserSpec):
+                raise UserInputError(
+                    "UserSpec requires AsyncSecureClient; AsyncPublicClient cannot authenticate"
+                )
         # AsyncSubscriptionHandle is invariant in T, so per-channel handles
         # can't widen to the union type at the type level. Cast at the
         # boundary — the underlying queue holds whatever was pushed into it.
@@ -200,6 +206,10 @@ class AsyncPublicClient:
                     )
                 elif isinstance(spec, SportsSpec):
                     handles.append(await self._get_sports_manager().subscribe())
+                elif isinstance(spec, UserSpec):
+                    raise UserInputError(
+                        "UserSpec requires AsyncSecureClient; AsyncPublicClient cannot authenticate"
+                    )
                 else:
                     handles.append(await self._get_rtds_manager().subscribe(spec))
         except BaseException:
