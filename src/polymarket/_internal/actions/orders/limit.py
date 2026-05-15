@@ -17,10 +17,10 @@ from polymarket._internal.actions.orders.math import (
 )
 from polymarket._internal.actions.orders.types import OrderDraft
 from polymarket._internal.context import AsyncSecureClientContext
-from polymarket._internal.validation import require_nonempty
+from polymarket._internal.validation import require_nonempty, validate_builder_code
 from polymarket.errors import UserInputError
 from polymarket.models.types import OrderSide, TokenId
-from polymarket.types import EvmAddress
+from polymarket.types import EvmAddress, HexString
 
 _MIN_EXPIRATION_BUFFER_S = 60
 
@@ -33,6 +33,7 @@ class PrepareLimitOrderParams:
     side: OrderSide
     post_only: bool = False
     expiration: int | None = None
+    builder_code: HexString | None = None
 
 
 def validate_limit_order_params(
@@ -43,6 +44,7 @@ def validate_limit_order_params(
     side: OrderSide,
     post_only: bool = False,
     expiration: int | None = None,
+    builder_code: str | None = None,
 ) -> PrepareLimitOrderParams:
     validated_token = TokenId(require_nonempty("token_id", token_id))
     validated_price = coerce_positive_decimal("price", price)
@@ -61,6 +63,7 @@ def validate_limit_order_params(
             raise UserInputError(
                 f"expiration must be at least {_MIN_EXPIRATION_BUFFER_S} seconds in the future."
             )
+    validated_builder = validate_builder_code(builder_code) if builder_code is not None else None
     return PrepareLimitOrderParams(
         token_id=validated_token,
         price=validated_price,
@@ -68,6 +71,7 @@ def validate_limit_order_params(
         side=side,
         post_only=post_only,
         expiration=expiration,
+        builder_code=validated_builder,
     )
 
 
@@ -91,6 +95,7 @@ async def prepare_limit_order_draft(
         signer=EvmAddress(ctx.signer.address),
         requested_amount=requested,
         token_id=params.token_id,
+        builder_code=params.builder_code,
     )
 
 

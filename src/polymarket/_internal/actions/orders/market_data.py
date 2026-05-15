@@ -2,9 +2,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import cast
 
+from polymarket._internal.actions.orders.types import BYTES32_ZERO
 from polymarket._internal.context import AsyncClientContext
-from polymarket._internal.validation import require_nonempty
-from polymarket.errors import UnexpectedResponseError
+from polymarket._internal.validation import require_nonempty, validate_builder_code
+from polymarket.errors import UnexpectedResponseError, UserInputError
+from polymarket.models.clob.builder import BuilderFeeRates
 from polymarket.models.types import ConditionId, TokenId
 
 _ALLOWED_TICK_SIZES: frozenset[Decimal] = frozenset(
@@ -42,6 +44,16 @@ async def fetch_platform_fee_info(
     validated = require_nonempty("condition_id", condition_id)
     data = await ctx.clob.get_json(f"/clob-markets/{validated}")
     return _parse_platform_fee_info(data)
+
+
+async def fetch_builder_fee_rates(ctx: AsyncClientContext, *, builder_code: str) -> BuilderFeeRates:
+    validated = validate_builder_code(builder_code)
+    if validated == BYTES32_ZERO:
+        raise UserInputError(
+            "builder_code must be a real builder; zero (0x000…000) represents no attribution."
+        )
+    data = await ctx.clob.get_json(f"/fees/builder-fees/{validated}")
+    return BuilderFeeRates.parse_response(data)
 
 
 def _parse_tick_size(data: object) -> Decimal:
@@ -125,6 +137,7 @@ def _coerce_decimal(value: object, field: str) -> Decimal:
 
 __all__ = [
     "PlatformFeeInfo",
+    "fetch_builder_fee_rates",
     "fetch_neg_risk",
     "fetch_platform_fee_info",
     "fetch_tick_size",

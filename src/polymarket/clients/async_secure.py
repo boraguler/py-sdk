@@ -74,6 +74,7 @@ from polymarket.models import (
     ApiKeyCreds,
     AssetType,
     BalanceAllowance,
+    BuilderFeeRates,
     ClobTrade,
     Comment,
     Event,
@@ -1247,6 +1248,7 @@ class AsyncSecureClient:
         side: OrderSide,
         post_only: bool = False,
         expiration: int | None = None,
+        builder_code: str | None = None,
     ) -> SignedOrder:
         params = validate_limit_order_params(
             token_id=token_id,
@@ -1255,6 +1257,7 @@ class AsyncSecureClient:
             side=side,
             post_only=post_only,
             expiration=expiration,
+            builder_code=builder_code,
         )
         draft = await prepare_limit_order_draft(self._ctx, params)
         return await self._sign_order(draft, post_only=params.post_only)
@@ -1268,6 +1271,7 @@ class AsyncSecureClient:
         shares: Decimal | int | float | str | None = None,
         max_spend: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
     ) -> SignedOrder:
         params = validate_market_order_params(
             token_id=token_id,
@@ -1276,6 +1280,7 @@ class AsyncSecureClient:
             shares=shares,
             max_spend=max_spend,
             order_type=order_type,
+            builder_code=builder_code,
         )
         draft = await prepare_market_order_draft(self._ctx, params)
         return await self._sign_order(draft, post_only=False)
@@ -1289,6 +1294,7 @@ class AsyncSecureClient:
         side: OrderSide,
         post_only: bool = False,
         expiration: int | None = None,
+        builder_code: str | None = None,
     ) -> OrderResponse:
         signed = await self.create_limit_order(
             token_id=token_id,
@@ -1297,6 +1303,7 @@ class AsyncSecureClient:
             side=side,
             post_only=post_only,
             expiration=expiration,
+            builder_code=builder_code,
         )
         return await self.post_order(signed)
 
@@ -1309,6 +1316,7 @@ class AsyncSecureClient:
         shares: Decimal | int | float | str | None = None,
         max_spend: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
     ) -> OrderResponse:
         signed = await self.create_market_order(
             token_id=token_id,
@@ -1317,8 +1325,14 @@ class AsyncSecureClient:
             shares=shares,
             max_spend=max_spend,
             order_type=order_type,
+            builder_code=builder_code,
         )
         return await self.post_order(signed)
+
+    async def get_builder_fee_rates(self, builder_code: str) -> BuilderFeeRates:
+        from polymarket._internal.actions.orders.market_data import fetch_builder_fee_rates
+
+        return await fetch_builder_fee_rates(self._ctx, builder_code=builder_code)
 
     async def post_order(self, signed_order: SignedOrder) -> OrderResponse:
         path, payload = _post_actions.build_post_order_request(

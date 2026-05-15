@@ -21,6 +21,7 @@ class OrderDraft:
     signer: EvmAddress
     requested_amount: int
     token_id: TokenId
+    builder_code: HexString | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

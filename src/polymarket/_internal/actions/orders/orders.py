@@ -19,7 +19,7 @@ def create_unsigned_order(
     signature_type = signature_type_for(wallet_type)
     signer = wallet if signature_type == _POLY_1271_SIGNATURE_TYPE else draft.signer
     return UnsignedOrder(
-        builder=BYTES32_ZERO,
+        builder=draft.builder_code or BYTES32_ZERO,
         chain_id=draft.chain_id,
         exchange_address=draft.exchange_address,
         expiration=draft.expiration,
