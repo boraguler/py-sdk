@@ -1,6 +1,6 @@
 """Public types for Polymarket realtime stream consumers."""
 
-from polymarket._internal.streams.handle import AsyncSubscriptionHandle
+from polymarket._internal.streams.handle import SubscriptionHandle
 from polymarket.models.clob.market_events import (
     MarketBestBidAskEvent,
     MarketBookEvent,
@@ -13,11 +13,11 @@ from polymarket.models.clob.market_events import (
     NewMarketEvent,
     PriceChange,
 )
+from polymarket.streams._specs import MarketSpec, Subscription
 
-MarketSubscriptionHandle = AsyncSubscriptionHandle[MarketEvent]
+StreamEvent = MarketEvent
 
 __all__ = [
-    "AsyncSubscriptionHandle",
     "MarketBestBidAskEvent",
     "MarketBookEvent",
     "MarketEvent",
@@ -25,8 +25,11 @@ __all__ = [
     "MarketLastTradePriceEvent",
     "MarketPriceChangeEvent",
     "MarketResolvedEvent",
-    "MarketSubscriptionHandle",
+    "MarketSpec",
     "MarketTickSizeChangeEvent",
     "NewMarketEvent",
     "PriceChange",
+    "StreamEvent",
+    "Subscription",
+    "SubscriptionHandle",
 ]

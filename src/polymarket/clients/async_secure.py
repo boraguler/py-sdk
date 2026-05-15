@@ -63,6 +63,7 @@ from polymarket._internal.dispatch import (
 )
 from polymarket._internal.hmac import build_hmac_signature
 from polymarket._internal.l1_auth import sign_api_key_auth
+from polymarket._internal.streams.handle import SubscriptionHandle
 from polymarket._internal.wallet import WalletType, classify_wallet_type, signature_type_for
 from polymarket.clients._transport import AsyncTransport
 from polymarket.clients.async_public import AsyncPublicClient
@@ -96,6 +97,7 @@ from polymarket.models import (
     Team,
 )
 from polymarket.models.clob.cancel import CancelOrdersResponse
+from polymarket.models.clob.market_events import MarketEvent
 from polymarket.models.clob.order_response import OrderResponse
 from polymarket.models.clob.orders import MarketOrderType, SignedOrder
 from polymarket.models.clob.rewards import (
@@ -127,7 +129,8 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
-from polymarket.streams._accessor import StreamsAccessor
+from polymarket.streams._router import _StreamsRouter
+from polymarket.streams._specs import Subscription
 from polymarket.types import EvmAddress, HexString
 
 _CREATE_TOKEN = object()
@@ -147,7 +150,7 @@ class AsyncSecureClient:
             raise RuntimeError("Use AsyncSecureClient.create(...) to create a secure client")
         self._ended = False
         self._ctx_inner = ctx
-        self._streams_accessor: StreamsAccessor | None = None
+        self._streams_router: _StreamsRouter | None = None
         self._streams_logger = logger
 
     @property
@@ -258,13 +261,18 @@ class AsyncSecureClient:
     def credentials(self) -> ApiKeyCreds:
         return self._ctx.credentials
 
-    @property
-    def streams(self) -> StreamsAccessor:
-        if self._streams_accessor is None:
-            self._streams_accessor = StreamsAccessor(
+    def _get_streams_router(self) -> _StreamsRouter:
+        if self._streams_router is None:
+            self._streams_router = _StreamsRouter(
                 environment=self._ctx.environment, logger=self._streams_logger
             )
-        return self._streams_accessor
+        return self._streams_router
+
+    async def subscribe(
+        self,
+        specs: Subscription | Sequence[Subscription],
+    ) -> SubscriptionHandle[MarketEvent]:
+        return await self._get_streams_router().subscribe(specs)
 
     async def __aenter__(self) -> Self:
         return self
@@ -280,8 +288,8 @@ class AsyncSecureClient:
     async def close(self) -> None:
         ctx = self._ctx_inner
         try:
-            if self._streams_accessor is not None:
-                await self._streams_accessor.close()
+            if self._streams_router is not None:
+                await self._streams_router.close()
         finally:
             try:
                 await ctx.gamma.close()

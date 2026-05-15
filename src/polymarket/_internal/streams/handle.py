@@ -2,11 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from types import TracebackType
-from typing import Generic, Self, TypeVar
+from typing import Generic, Protocol, Self, TypeVar, runtime_checkable
 
 T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
+
+
+@runtime_checkable
+class SubscriptionHandle(Protocol[T_co]):
+    """Public protocol: async-iterable events with an idempotent close()."""
+
+    def __aiter__(self) -> AsyncIterator[T_co]: ...
+    async def __anext__(self) -> T_co: ...
+    async def close(self) -> None: ...
+    async def __aenter__(self) -> SubscriptionHandle[T_co]: ...
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None: ...
 
 
 class _EndSentinel:

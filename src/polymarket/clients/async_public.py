@@ -37,6 +37,7 @@ from polymarket._internal.dispatch import (
     async_paginate_offset,
     async_paginate_page_based,
 )
+from polymarket._internal.streams.handle import SubscriptionHandle
 from polymarket.clients._transport import AsyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import RequestRejectedError
@@ -61,6 +62,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
+from polymarket.models.clob.market_events import MarketEvent
 from polymarket.models.clob.rewards import CurrentReward, MarketReward
 from polymarket.models.data import (
     Activity,
@@ -83,7 +85,8 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
-from polymarket.streams._accessor import StreamsAccessor
+from polymarket.streams._router import _StreamsRouter
+from polymarket.streams._specs import Subscription
 
 
 class AsyncPublicClient:
@@ -104,20 +107,25 @@ class AsyncPublicClient:
             data=AsyncTransport(base_url=environment.data_url, logger=logger),
             clob=AsyncTransport(base_url=environment.clob_url, logger=logger),
         )
-        self._streams_accessor: StreamsAccessor | None = None
+        self._streams_router: _StreamsRouter | None = None
         self._streams_logger = logger
 
     @property
     def environment(self) -> Environment:
         return self._ctx.environment
 
-    @property
-    def streams(self) -> StreamsAccessor:
-        if self._streams_accessor is None:
-            self._streams_accessor = StreamsAccessor(
+    def _get_streams_router(self) -> _StreamsRouter:
+        if self._streams_router is None:
+            self._streams_router = _StreamsRouter(
                 environment=self._ctx.environment, logger=self._streams_logger
             )
-        return self._streams_accessor
+        return self._streams_router
+
+    async def subscribe(
+        self,
+        specs: Subscription | Sequence[Subscription],
+    ) -> SubscriptionHandle[MarketEvent]:
+        return await self._get_streams_router().subscribe(specs)
 
     async def __aenter__(self) -> Self:
         return self
@@ -133,8 +141,8 @@ class AsyncPublicClient:
     async def close(self) -> None:
         """Close the underlying network transports and any open streams."""
         try:
-            if self._streams_accessor is not None:
-                await self._streams_accessor.close()
+            if self._streams_router is not None:
+                await self._streams_router.close()
         finally:
             try:
                 await self._ctx.gamma.close()

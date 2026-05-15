@@ -7,7 +7,7 @@ import pytest
 
 from polymarket import AsyncPublicClient
 from polymarket.environments import PRODUCTION
-from polymarket.streams import MarketEvent
+from polymarket.streams import MarketEvent, MarketSpec
 
 _DISCOVERY_LIMIT = 25
 _EVENT_TIMEOUT_S = 30.0
@@ -37,8 +37,8 @@ def test_live_market_stream_delivers_an_event() -> None:
         yes_token, no_token = await _discover_token_ids()
         client = AsyncPublicClient(environment=PRODUCTION)
         try:
-            async with await client.streams.market.subscribe(
-                token_ids=[yes_token, no_token]
+            async with await client.subscribe(
+                MarketSpec(token_ids=[yes_token, no_token])
             ) as stream:
                 async for event in stream:
                     return event
@@ -62,7 +62,7 @@ def test_live_market_stream_clean_shutdown() -> None:
     async def run() -> None:
         yes_token, _no_token = await _discover_token_ids()
         client = AsyncPublicClient(environment=PRODUCTION)
-        handle = await client.streams.market.subscribe(token_ids=[yes_token])
+        handle = await client.subscribe(MarketSpec(token_ids=[yes_token]))
         await asyncio.sleep(0.5)
         await handle.close()
         await client.close()
