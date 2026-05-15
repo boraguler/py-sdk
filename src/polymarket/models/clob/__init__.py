@@ -7,6 +7,7 @@ from polymarket.models.clob.account import (
     OpenOrder,
 )
 from polymarket.models.clob.api_key import ApiKeyCreds
+from polymarket.models.clob.builder import BuilderFeeRates
 from polymarket.models.clob.cancel import CancelOrdersResponse
 from polymarket.models.clob.last_trade import LastTradePrice, LastTradePriceForToken
 from polymarket.models.clob.order_book import OrderBook, OrderBookLevel
@@ -39,6 +40,7 @@ __all__ = [
     "ApiKeyCreds",
     "AssetType",
     "BalanceAllowance",
+    "BuilderFeeRates",
     "CancelOrdersResponse",
     "ClobTrade",
     "CurrentReward",

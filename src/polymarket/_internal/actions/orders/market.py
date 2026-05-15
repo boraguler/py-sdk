@@ -9,6 +9,7 @@ from polymarket._internal.actions.orders.context import (
 from polymarket._internal.actions.orders.estimate import resolve_estimated_market_price
 from polymarket._internal.actions.orders.market_data import (
     PlatformFeeInfo,
+    fetch_builder_fee_rates,
     fetch_neg_risk,
     fetch_platform_fee_info,
     fetch_tick_size,
@@ -20,12 +21,12 @@ from polymarket._internal.actions.orders.math import (
     round_down,
     round_up,
 )
-from polymarket._internal.actions.orders.types import MarketOrderType, OrderDraft
+from polymarket._internal.actions.orders.types import BYTES32_ZERO, MarketOrderType, OrderDraft
 from polymarket._internal.context import AsyncSecureClientContext
-from polymarket._internal.validation import require_nonempty
+from polymarket._internal.validation import require_nonempty, validate_builder_code
 from polymarket.errors import UserInputError
 from polymarket.models.types import OrderSide, TokenId
-from polymarket.types import EvmAddress
+from polymarket.types import EvmAddress, HexString
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -36,6 +37,7 @@ class PrepareMarketOrderParams:
     amount: Decimal | None = None
     shares: Decimal | None = None
     max_spend: Decimal | None = None
+    builder_code: HexString | None = None
 
 
 def validate_market_order_params(
@@ -46,12 +48,14 @@ def validate_market_order_params(
     shares: Decimal | int | float | str | None = None,
     max_spend: Decimal | int | float | str | None = None,
     order_type: MarketOrderType = "FAK",
+    builder_code: str | None = None,
 ) -> PrepareMarketOrderParams:
     validated_token = TokenId(require_nonempty("token_id", token_id))
     if side not in ("BUY", "SELL"):
         raise UserInputError(f"side must be 'BUY' or 'SELL', got {side!r}.")
     if order_type not in ("FAK", "FOK"):
         raise UserInputError(f"order_type must be 'FAK' or 'FOK', got {order_type!r}.")
+    validated_builder = validate_builder_code(builder_code) if builder_code is not None else None
     if side == "BUY":
         if amount is None:
             raise UserInputError("amount is required for BUY market orders.")
@@ -67,6 +71,7 @@ def validate_market_order_params(
             order_type=order_type,
             amount=validated_amount,
             max_spend=validated_max_spend,
+            builder_code=validated_builder,
         )
     if shares is None:
         raise UserInputError("shares is required for SELL market orders.")
@@ -79,6 +84,7 @@ def validate_market_order_params(
         side=side,
         order_type=order_type,
         shares=coerce_positive_decimal("shares", shares),
+        builder_code=validated_builder,
     )
 
 
@@ -112,6 +118,7 @@ async def prepare_market_order_draft(
         signer=EvmAddress(ctx.signer.address),
         requested_amount=requested,
         token_id=params.token_id,
+        builder_code=params.builder_code,
     )
 
 
@@ -136,19 +143,33 @@ async def _resolve_buy_amount_for_fees(
         return params.amount if params.amount is not None else params.shares  # type: ignore[return-value]
     condition_id = await resolve_condition_by_token(ctx, token_id=params.token_id)
     fee_info = await fetch_platform_fee_info(ctx, condition_id=condition_id)
+    builder_taker_fee_rate = Decimal(0)
+    if params.builder_code is not None and params.builder_code != BYTES32_ZERO:
+        rates = await fetch_builder_fee_rates(ctx, builder_code=params.builder_code)
+        builder_taker_fee_rate = rates.taker
     return adjust_buy_amount_for_fees(
-        amount=params.amount, price=price, max_spend=params.max_spend, fee=fee_info
+        amount=params.amount,
+        price=price,
+        max_spend=params.max_spend,
+        fee=fee_info,
+        builder_taker_fee_rate=builder_taker_fee_rate,
     )
 
 
 def adjust_buy_amount_for_fees(
-    *, amount: Decimal, price: Decimal, max_spend: Decimal, fee: PlatformFeeInfo
+    *,
+    amount: Decimal,
+    price: Decimal,
+    max_spend: Decimal,
+    fee: PlatformFeeInfo,
+    builder_taker_fee_rate: Decimal = Decimal(0),
 ) -> Decimal:
     effective_rate = fee.rate * ((price * (Decimal(1) - price)) ** fee.exponent)
     platform_fee = (amount / price) * effective_rate
-    total_cost = amount + platform_fee
+    builder_fee = amount * builder_taker_fee_rate
+    total_cost = amount + platform_fee + builder_fee
     if max_spend <= total_cost:
-        return max_spend / (Decimal(1) + effective_rate / price)
+        return max_spend / (Decimal(1) + effective_rate / price + builder_taker_fee_rate)
     return amount
 
 
