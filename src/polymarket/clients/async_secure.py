@@ -127,6 +127,7 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
+from polymarket.streams._accessor import StreamsAccessor
 from polymarket.types import EvmAddress, HexString
 
 _CREATE_TOKEN = object()
@@ -140,11 +141,14 @@ class AsyncSecureClient:
         *,
         ctx: AsyncSecureClientContext,
         _create_token: object | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         if _create_token is not _CREATE_TOKEN:
             raise RuntimeError("Use AsyncSecureClient.create(...) to create a secure client")
         self._ended = False
         self._ctx_inner = ctx
+        self._streams_accessor: StreamsAccessor | None = None
+        self._streams_logger = logger
 
     @property
     def _ctx(self) -> AsyncSecureClientContext:
@@ -232,7 +236,7 @@ class AsyncSecureClient:
             wallet=branded_wallet,
             wallet_type=wallet_type,
         )
-        return cls(ctx=ctx, _create_token=_CREATE_TOKEN)
+        return cls(ctx=ctx, _create_token=_CREATE_TOKEN, logger=logger)
 
     @property
     def environment(self) -> Environment:
@@ -254,6 +258,14 @@ class AsyncSecureClient:
     def credentials(self) -> ApiKeyCreds:
         return self._ctx.credentials
 
+    @property
+    def streams(self) -> StreamsAccessor:
+        if self._streams_accessor is None:
+            self._streams_accessor = StreamsAccessor(
+                environment=self._ctx.environment, logger=self._streams_logger
+            )
+        return self._streams_accessor
+
     async def __aenter__(self) -> Self:
         return self
 
@@ -268,15 +280,19 @@ class AsyncSecureClient:
     async def close(self) -> None:
         ctx = self._ctx_inner
         try:
-            await ctx.gamma.close()
+            if self._streams_accessor is not None:
+                await self._streams_accessor.close()
         finally:
             try:
-                await ctx.data.close()
+                await ctx.gamma.close()
             finally:
                 try:
-                    await ctx.clob.close()
+                    await ctx.data.close()
                 finally:
-                    await ctx.secure_clob.close()
+                    try:
+                        await ctx.clob.close()
+                    finally:
+                        await ctx.secure_clob.close()
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user

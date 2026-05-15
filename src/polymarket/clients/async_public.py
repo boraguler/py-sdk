@@ -83,6 +83,7 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import AsyncPaginator, Page
+from polymarket.streams._accessor import StreamsAccessor
 
 
 class AsyncPublicClient:
@@ -103,10 +104,20 @@ class AsyncPublicClient:
             data=AsyncTransport(base_url=environment.data_url, logger=logger),
             clob=AsyncTransport(base_url=environment.clob_url, logger=logger),
         )
+        self._streams_accessor: StreamsAccessor | None = None
+        self._streams_logger = logger
 
     @property
     def environment(self) -> Environment:
         return self._ctx.environment
+
+    @property
+    def streams(self) -> StreamsAccessor:
+        if self._streams_accessor is None:
+            self._streams_accessor = StreamsAccessor(
+                environment=self._ctx.environment, logger=self._streams_logger
+            )
+        return self._streams_accessor
 
     async def __aenter__(self) -> Self:
         return self
@@ -120,14 +131,18 @@ class AsyncPublicClient:
         await self.close()
 
     async def close(self) -> None:
-        """Close the underlying network transports."""
+        """Close the underlying network transports and any open streams."""
         try:
-            await self._ctx.gamma.close()
+            if self._streams_accessor is not None:
+                await self._streams_accessor.close()
         finally:
             try:
-                await self._ctx.data.close()
+                await self._ctx.gamma.close()
             finally:
-                await self._ctx.clob.close()
+                try:
+                    await self._ctx.data.close()
+                finally:
+                    await self._ctx.clob.close()
 
     async def get_market(
         self,
