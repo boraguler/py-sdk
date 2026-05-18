@@ -24,8 +24,8 @@ def _existing_credentials() -> ApiKeyCreds | None:
 async def _secure_client(
     require_env: Callable[[str], str],
 ) -> AsyncGenerator[AsyncSecureClient, None]:
-    private_key = require_env("POLYMARKET_TEST_PRIVATE_KEY")
-    wallet = require_env("POLYMARKET_TEST_WALLET")
+    private_key = require_env("POLYMARKET_PRIVATE_KEY")
+    wallet = require_env("POLYMARKET_DEPOSIT_WALLET")
     client = await AsyncSecureClient.create(
         private_key=private_key,
         wallet=wallet,

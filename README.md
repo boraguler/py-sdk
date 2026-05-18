@@ -109,7 +109,7 @@ import pytest
 
 @pytest.mark.integration
 def test_authenticated_flow(require_env):
-    private_key = require_env("POLYMARKET_TEST_PRIVATE_KEY")
+    private_key = require_env("POLYMARKET_PRIVATE_KEY")
     builder_api_key = require_env("POLYMARKET_BUILDER_API_KEY")
 
     assert private_key
@@ -127,7 +127,7 @@ import pytest
 @pytest.mark.integration
 @pytest.mark.metered
 def test_order_lifecycle(require_env):
-    private_key = require_env("POLYMARKET_TEST_PRIVATE_KEY")
+    private_key = require_env("POLYMARKET_PRIVATE_KEY")
 
     assert private_key
 ```

@@ -10,5 +10,5 @@ Use the `require_env` fixture for credentials so tests skip cleanly when secrets
 
 ```python
 def test_authenticated_flow(require_env):
-    private_key = require_env("POLYMARKET_TEST_PRIVATE_KEY")
+    private_key = require_env("POLYMARKET_PRIVATE_KEY")
 ```
