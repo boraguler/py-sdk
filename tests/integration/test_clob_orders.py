@@ -243,14 +243,26 @@ async def test_place_market_order_buy_executes_at_minimum_size(
 ) -> None:
     token_id = _yes_token_id(tradable_market)
     amount = _minimum_order_size(tradable_market)
-    response = await deposit_wallet_client.place_market_order(
-        token_id=token_id,
-        side="BUY",
-        amount=amount,
-        order_type="FAK",
-    )
-    assert isinstance(response, AcceptedOrder)
-    assert response.status in ("live", "matched", "delayed")
+    acquired_shares: Decimal | None = None
+    try:
+        response = await deposit_wallet_client.place_market_order(
+            token_id=token_id,
+            side="BUY",
+            amount=amount,
+            order_type="FAK",
+        )
+        assert isinstance(response, AcceptedOrder)
+        acquired_shares = response.taking_amount
+        assert response.status in ("live", "matched", "delayed")
+    finally:
+        if acquired_shares is not None and acquired_shares > 0:
+            with contextlib.suppress(Exception):
+                await deposit_wallet_client.place_market_order(
+                    token_id=token_id,
+                    side="SELL",
+                    shares=acquired_shares,
+                    order_type="FAK",
+                )
 
 
 @pytest.mark.integration
@@ -272,14 +284,26 @@ async def test_place_market_order_sell_closes_acquired_inventory(
     if acquired_shares <= 0:
         pytest.skip("market BUY filled zero shares; cannot test market SELL")
 
-    sell_response = await deposit_wallet_client.place_market_order(
-        token_id=token_id,
-        side="SELL",
-        shares=acquired_shares,
-        order_type="FAK",
-    )
-    assert isinstance(sell_response, AcceptedOrder)
-    assert sell_response.status in ("live", "matched", "delayed")
+    sold = False
+    try:
+        sell_response = await deposit_wallet_client.place_market_order(
+            token_id=token_id,
+            side="SELL",
+            shares=acquired_shares,
+            order_type="FAK",
+        )
+        assert isinstance(sell_response, AcceptedOrder)
+        sold = True
+        assert sell_response.status in ("live", "matched", "delayed")
+    finally:
+        if not sold:
+            with contextlib.suppress(Exception):
+                await deposit_wallet_client.place_market_order(
+                    token_id=token_id,
+                    side="SELL",
+                    shares=acquired_shares,
+                    order_type="FAK",
+                )
 
 
 @pytest.mark.integration
