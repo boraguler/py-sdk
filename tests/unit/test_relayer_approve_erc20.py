@@ -9,6 +9,7 @@ import pytest
 from _relayer_helpers import (
     FAKE_CREDS,
     PK_DEPLOY_WALLET,
+    RELAY_PAYLOAD_DEFAULT_ADDRESS,
     SPENDER,
     TOKEN,
     install_relayer_handler,
@@ -161,10 +162,10 @@ def test_approve_erc20_proxy_payload_shape() -> None:
     assert body["type"] == "PROXY"
     assert body["to"].lower() == "0xaB45c5A4B0c941a2F231C04C3f49182e1A254052".lower()
     assert "signatureParams" in body
-    assert body["signatureParams"]["gasLimit"] == "10000000"
+    assert body["signatureParams"]["gasLimit"] == "200000"
     assert body["signatureParams"]["gasPrice"] == "0"
     assert body["signatureParams"]["relayerFee"] == "0"
-    assert body["signatureParams"]["relay"].lower() == ("0x" + "00" * 20)
+    assert body["signatureParams"]["relay"].lower() == RELAY_PAYLOAD_DEFAULT_ADDRESS.lower()
     assert len(body["signature"]) == 2 + 130
 
 

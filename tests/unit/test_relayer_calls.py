@@ -48,7 +48,6 @@ def test_erc20_approval_rejects_bool() -> None:
 def test_encode_proxy_call_wraps_calls() -> None:
     call = erc20_approval_call(token_address=_TOKEN, spender=_SPENDER, amount=1)
     encoded = encode_proxy_call([call])
-    # Selector for proxy((uint8,address,uint256,bytes)[])
     from eth_utils.crypto import keccak
 
     expected_selector = keccak(b"proxy((uint8,address,uint256,bytes)[])")[:4]

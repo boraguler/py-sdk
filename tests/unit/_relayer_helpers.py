@@ -107,7 +107,6 @@ def make_rpc_handler(
     receipt_responses: list[dict[str, object] | None] | None = None,
     chain_id: int = 137,
 ) -> Callable[[httpx.Request], httpx.Response]:
-    """Return an RPC handler that responds to standard eth_* JSON-RPC calls."""
     captured: list[dict[str, object]] = []
     receipt_iter = iter(receipt_responses or [])
 
@@ -163,11 +162,25 @@ async def make_safe_client() -> AsyncSecureClient:
     )
 
 
+RELAY_PAYLOAD_DEFAULT_ADDRESS = "0xe679d14b2fe0bdee4a54f25bcec2978e372de566"
+
+
 def install_relayer_routes(
     client: AsyncSecureClient,
     captured: list[httpx.Request],
     routes: dict[str, Any],
 ) -> None:
+    if "/relay-payload" not in routes and "/v1/account/transactions/params" in routes:
+        legacy = routes["/v1/account/transactions/params"]
+        nonce = legacy.get("nonce") if isinstance(legacy, dict) else None
+        routes = {
+            **routes,
+            "/relay-payload": {
+                "address": RELAY_PAYLOAD_DEFAULT_ADDRESS,
+                "nonce": nonce if nonce is not None else "0",
+            },
+        }
+
     def handler(request: httpx.Request) -> httpx.Response:
         captured.append(request)
         path = urlparse(str(request.url)).path
@@ -203,6 +216,7 @@ __all__ = [
     "PK_DEPLOY_WALLET",
     "PK_PROXY_WALLET",
     "PK_SAFE_WALLET",
+    "RELAY_PAYLOAD_DEFAULT_ADDRESS",
     "SPENDER",
     "TOKEN",
     "install_relayer_handler",
