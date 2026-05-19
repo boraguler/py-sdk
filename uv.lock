@@ -672,10 +672,6 @@ dependencies = [
     { name = "eth-utils" },
     { name = "httpx", extra = ["http2"] },
     { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-websocket = [
     { name = "websockets" },
 ]
 
@@ -688,7 +684,6 @@ dev = [
     { name = "python-dotenv" },
     { name = "respx" },
     { name = "ruff" },
-    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -698,9 +693,8 @@ requires-dist = [
     { name = "eth-utils", specifier = ">=4,<6" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.27,<1" },
     { name = "pydantic", specifier = ">=2,<3" },
-    { name = "websockets", marker = "extra == 'websocket'", specifier = ">=13,<16" },
+    { name = "websockets", specifier = ">=13,<16" },
 ]
-provides-extras = ["websocket"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -711,7 +705,6 @@ dev = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "respx", specifier = ">=0.22,<1" },
     { name = "ruff", specifier = ">=0.11,<1" },
-    { name = "websockets", specifier = ">=13,<16" },
 ]
 
 [[package]]
