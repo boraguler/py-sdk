@@ -127,9 +127,7 @@ def test_approve_erc1155_for_all_live(require_env: Callable[[str], str]) -> None
 def test_setup_trading_approvals_live(require_env: Callable[[str], str]) -> None:
     async def run() -> None:
         async with _secure_client(require_env) as client:
-            handle = await client.setup_trading_approvals(
-                metadata="py-sdk integration test: setup_trading_approvals"
-            )
+            handle = await client.setup_trading_approvals()
             await handle.wait()
 
     asyncio.run(asyncio.wait_for(run(), timeout=240.0))

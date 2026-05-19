@@ -1492,7 +1492,7 @@ class AsyncSecureClient:
         )
         return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
-    async def setup_trading_approvals(self, *, metadata: str | None = None) -> TransactionHandle:
+    async def setup_trading_approvals(self) -> TransactionHandle:
         env = self._ctx.environment
         collateral = cast(EvmAddress, env.collateral_token)
         conditional = cast(EvmAddress, env.conditional_tokens)
@@ -1533,13 +1533,14 @@ class AsyncSecureClient:
                 approved=True,
             ),
         ]
-        resolved_metadata = metadata if metadata is not None else "Trading setup approvals"
         if self._ctx.wallet_type == "EOA":
             for call in calls[:-1]:
                 handle = await self._broadcast_eoa_call(call)
                 await handle.wait()
             return await self._broadcast_eoa_call(calls[-1])
-        return await prepare_gasless_transaction(self._ctx, calls=calls, metadata=resolved_metadata)
+        return await prepare_gasless_transaction(
+            self._ctx, calls=calls, metadata="Trading setup approvals"
+        )
 
     async def setup_gasless_wallet(self) -> Self:
         ctx = self._ctx
