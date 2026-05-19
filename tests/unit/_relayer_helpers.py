@@ -4,7 +4,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -171,13 +171,14 @@ def install_relayer_routes(
     routes: dict[str, Any],
 ) -> None:
     if "/relay-payload" not in routes and "/v1/account/transactions/params" in routes:
-        legacy = routes["/v1/account/transactions/params"]
-        nonce = legacy.get("nonce") if isinstance(legacy, dict) else None
+        legacy = cast(dict[str, Any], routes["/v1/account/transactions/params"])
+        raw_nonce = legacy.get("nonce")
+        nonce: str = raw_nonce if isinstance(raw_nonce, str) else "0"
         routes = {
             **routes,
             "/relay-payload": {
                 "address": RELAY_PAYLOAD_DEFAULT_ADDRESS,
-                "nonce": nonce if nonce is not None else "0",
+                "nonce": nonce,
             },
         }
 

@@ -2,14 +2,13 @@
 import asyncio
 import dataclasses
 import json
-from typing import cast
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
 from _relayer_helpers import (
     SPENDER,
     TOKEN,
-    install_relayer_handler,
     install_relayer_routes,
     make_proxy_client,
     request_json,
@@ -48,9 +47,7 @@ def test_proxy_submission_hits_relay_payload_not_legacy_params() -> None:
             },
         )
         try:
-            await client.approve_erc20(
-                token_address=TOKEN, spender_address=SPENDER, amount=1
-            )
+            await client.approve_erc20(token_address=TOKEN, spender_address=SPENDER, amount=1)
         finally:
             await client.close()
 
@@ -74,9 +71,7 @@ def test_proxy_signs_relay_address_returned_from_relay_payload() -> None:
             },
         )
         try:
-            await client.approve_erc20(
-                token_address=TOKEN, spender_address=SPENDER, amount=1
-            )
+            await client.approve_erc20(token_address=TOKEN, spender_address=SPENDER, amount=1)
         finally:
             await client.close()
 
@@ -101,9 +96,7 @@ def test_proxy_signs_default_gas_limit_when_no_rpc_configured() -> None:
             },
         )
         try:
-            await client.approve_erc20(
-                token_address=TOKEN, spender_address=SPENDER, amount=1
-            )
+            await client.approve_erc20(token_address=TOKEN, spender_address=SPENDER, amount=1)
         finally:
             await client.close()
 
@@ -146,9 +139,7 @@ def test_proxy_signs_rpc_estimated_gas_limit_when_rpc_configured() -> None:
                 base_url="https://rpc.test", transport=httpx.MockTransport(rpc_handler)
             ),
         )
-        client._ctx = dataclasses.replace(
-            client._ctx, rpc=JsonRpcClient(rpc_transport)
-        )
+        client._ctx = dataclasses.replace(client._ctx, rpc=JsonRpcClient(rpc_transport))
         install_relayer_routes(
             client,
             captured,
@@ -158,9 +149,7 @@ def test_proxy_signs_rpc_estimated_gas_limit_when_rpc_configured() -> None:
             },
         )
         try:
-            await client.approve_erc20(
-                token_address=TOKEN, spender_address=SPENDER, amount=1
-            )
+            await client.approve_erc20(token_address=TOKEN, spender_address=SPENDER, amount=1)
         finally:
             await client.close()
 
@@ -174,7 +163,7 @@ def test_proxy_signs_rpc_estimated_gas_limit_when_rpc_configured() -> None:
 def test_proxy_signed_hash_binds_relay_and_gas_limit() -> None:
     captured: list[httpx.Request] = []
 
-    async def run() -> tuple[dict[str, object], str]:
+    async def run() -> tuple[Any, str]:
         client = await make_proxy_client()
         install_relayer_routes(
             client,
@@ -186,15 +175,11 @@ def test_proxy_signed_hash_binds_relay_and_gas_limit() -> None:
         )
         signer_address = client._ctx.signer.address
         try:
-            await client.approve_erc20(
-                token_address=TOKEN, spender_address=SPENDER, amount=1
-            )
+            await client.approve_erc20(token_address=TOKEN, spender_address=SPENDER, amount=1)
         finally:
             await client.close()
         return (
-            request_json(
-                [r for r in captured if urlparse(str(r.url)).path == "/submit"][0]
-            ),
+            request_json([r for r in captured if urlparse(str(r.url)).path == "/submit"][0]),
             signer_address,
         )
 
