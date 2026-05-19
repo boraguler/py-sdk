@@ -4,10 +4,10 @@ from pydantic import AliasChoices, BeforeValidator, Field, TypeAdapter, Validati
 
 from polymarket.models.base import BaseModel
 from polymarket.models.clob._validators import (
-    DecimalishString,
     EpochSecondsOrMsTimestamp,
     EpochSecondsTimestamp,
     ExpirationTimestamp,
+    _DecimalFromNumberOrString,  # pyright: ignore[reportPrivateUsage]
 )
 from polymarket.models.types import TokenId
 
@@ -56,9 +56,9 @@ class UserOrderPayload(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
     side: _OrderSide
-    original_size: DecimalishString
-    size_matched: DecimalishString
-    price: DecimalishString
+    original_size: _DecimalFromNumberOrString
+    size_matched: _DecimalFromNumberOrString
+    price: _DecimalFromNumberOrString
     order_event_type: _OrderEventType = Field(validation_alias="type")
     timestamp: EpochSecondsOrMsTimestamp = None
     created_at: EpochSecondsTimestamp = None
@@ -75,9 +75,9 @@ class UserTradeMakerOrder(BaseModel):
     order_id: str
     owner: str
     maker_address: str | None = None
-    matched_amount: DecimalishString
-    price: DecimalishString
-    fee_rate_bps: DecimalishString | None = None
+    matched_amount: _DecimalFromNumberOrString
+    price: _DecimalFromNumberOrString
+    fee_rate_bps: _DecimalFromNumberOrString | None = None
     token_id: TokenId = Field(validation_alias="asset_id")
     side: _OrderSide
     outcome: str | None = None
@@ -90,12 +90,12 @@ class UserTradePayload(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
     side: _OrderSide
-    size: DecimalishString
-    price: DecimalishString
+    size: _DecimalFromNumberOrString
+    price: _DecimalFromNumberOrString
     status: _TradeStatusValidator
     owner: str
     timestamp: EpochSecondsOrMsTimestamp = None
-    fee_rate_bps: DecimalishString | None = None
+    fee_rate_bps: _DecimalFromNumberOrString | None = None
     matched_at: EpochSecondsTimestamp = Field(
         default=None, validation_alias=AliasChoices("match_time", "matchtime")
     )

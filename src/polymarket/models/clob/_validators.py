@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BeforeValidator
 
@@ -148,8 +148,13 @@ def _parse_expiration_timestamp(value: object) -> object:
     return _parse_epoch_seconds_timestamp(value)
 
 
-DecimalString = Annotated[Decimal, BeforeValidator(_require_decimal_string)]
-DecimalishString = Annotated[Decimal, BeforeValidator(_coerce_decimalish)]
+if TYPE_CHECKING:
+    _DecimalFromString = Decimal
+    _DecimalFromNumberOrString = Decimal
+else:
+    _DecimalFromString = Annotated[Decimal, BeforeValidator(_require_decimal_string)]
+    _DecimalFromNumberOrString = Annotated[Decimal, BeforeValidator(_coerce_decimalish)]
+
 EpochMsTimestamp = Annotated[datetime | None, BeforeValidator(_parse_epoch_ms_timestamp)]
 EpochMsOrIsoTimestamp = Annotated[
     datetime | None, BeforeValidator(_parse_epoch_ms_or_iso_timestamp)
@@ -162,8 +167,6 @@ ExpirationTimestamp = Annotated[datetime | None, BeforeValidator(_parse_expirati
 
 
 __all__ = [
-    "DecimalString",
-    "DecimalishString",
     "EpochMsOrIsoTimestamp",
     "EpochMsTimestamp",
     "EpochSecondsOrMsTimestamp",

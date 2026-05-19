@@ -3,7 +3,10 @@ from typing import Annotated, Any, Literal, cast
 from pydantic import BeforeValidator, Field, TypeAdapter
 
 from polymarket.models.base import BaseModel
-from polymarket.models.clob._validators import DecimalishString, EpochMsTimestamp
+from polymarket.models.clob._validators import (
+    EpochMsTimestamp,
+    _DecimalFromNumberOrString,  # pyright: ignore[reportPrivateUsage]
+)
 from polymarket.models.clob.order_book import OrderBookLevel
 from polymarket.models.types import ConditionId, TokenId
 
@@ -25,12 +28,12 @@ class MarketEventMessage(BaseModel):
 
 class PriceChange(BaseModel):
     token_id: TokenId = Field(validation_alias="asset_id")
-    price: DecimalishString
-    size: DecimalishString
+    price: _DecimalFromNumberOrString
+    size: _DecimalFromNumberOrString
     side: _OrderSide
     hash: str | None = None
-    best_bid: DecimalishString | None = None
-    best_ask: DecimalishString | None = None
+    best_bid: _DecimalFromNumberOrString | None = None
+    best_ask: _DecimalFromNumberOrString | None = None
 
 
 # --- Payloads (the variant-specific data; lifted out of the wire's top level) ---
@@ -43,10 +46,10 @@ class MarketBookPayload(BaseModel):
     asks: tuple[OrderBookLevel, ...]
     hash: str | None = None
     timestamp: EpochMsTimestamp = None
-    min_order_size: DecimalishString | None = None
-    tick_size: DecimalishString | None = None
+    min_order_size: _DecimalFromNumberOrString | None = None
+    tick_size: _DecimalFromNumberOrString | None = None
     neg_risk: bool | None = None
-    last_trade_price: DecimalishString | None = None
+    last_trade_price: _DecimalFromNumberOrString | None = None
 
 
 class MarketPriceChangePayload(BaseModel):
@@ -58,10 +61,10 @@ class MarketPriceChangePayload(BaseModel):
 class MarketLastTradePricePayload(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
-    price: DecimalishString
-    size: DecimalishString | None = None
+    price: _DecimalFromNumberOrString
+    size: _DecimalFromNumberOrString | None = None
     side: _OrderSide
-    fee_rate_bps: DecimalishString | None = None
+    fee_rate_bps: _DecimalFromNumberOrString | None = None
     transaction_hash: str | None = None
     timestamp: EpochMsTimestamp = None
 
@@ -69,17 +72,17 @@ class MarketLastTradePricePayload(BaseModel):
 class MarketTickSizeChangePayload(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
-    old_tick_size: DecimalishString | None = None
-    new_tick_size: DecimalishString
+    old_tick_size: _DecimalFromNumberOrString | None = None
+    new_tick_size: _DecimalFromNumberOrString
     timestamp: EpochMsTimestamp = None
 
 
 class MarketBestBidAskPayload(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
-    best_bid: DecimalishString | None = None
-    best_ask: DecimalishString | None = None
-    spread: DecimalishString | None = None
+    best_bid: _DecimalFromNumberOrString | None = None
+    best_ask: _DecimalFromNumberOrString | None = None
+    spread: _DecimalFromNumberOrString | None = None
     timestamp: EpochMsTimestamp = None
 
 
@@ -98,11 +101,11 @@ class NewMarketPayload(BaseModel):
     active: bool | None = None
     clob_token_ids: tuple[str, ...] | None = None
     sports_market_type: str | None = None
-    line: DecimalishString | None = None
+    line: _DecimalFromNumberOrString | None = None
     game_start_time: EpochMsTimestamp = None
-    order_price_min_tick_size: DecimalishString | None = None
+    order_price_min_tick_size: _DecimalFromNumberOrString | None = None
     group_item_title: str | None = None
-    taker_base_fee: DecimalishString | None = None
+    taker_base_fee: _DecimalFromNumberOrString | None = None
     fees_enabled: bool | None = None
     fee_schedule: object | None = None
 

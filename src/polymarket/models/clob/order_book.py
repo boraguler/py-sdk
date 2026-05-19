@@ -5,13 +5,15 @@ from datetime import UTC, datetime
 from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
-from polymarket.models.clob._validators import DecimalString
+from polymarket.models.clob._validators import (
+    _DecimalFromString,  # pyright: ignore[reportPrivateUsage]
+)
 from polymarket.models.types import TokenId
 
 
 class OrderBookLevel(BaseModel):
-    price: DecimalString
-    size: DecimalString
+    price: _DecimalFromString
+    size: _DecimalFromString
 
 
 class OrderBook(BaseModel):
@@ -20,10 +22,10 @@ class OrderBook(BaseModel):
     timestamp: datetime | None = None
     bids: tuple[OrderBookLevel, ...]
     asks: tuple[OrderBookLevel, ...]
-    min_order_size: DecimalString
-    tick_size: DecimalString
+    min_order_size: _DecimalFromString
+    tick_size: _DecimalFromString
     neg_risk: bool
-    last_trade_price: DecimalString | None = None
+    last_trade_price: _DecimalFromString | None = None
     hash: str
 
     @field_validator("timestamp", mode="before")

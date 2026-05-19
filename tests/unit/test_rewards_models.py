@@ -4,7 +4,9 @@ from decimal import Decimal
 import pytest
 
 from polymarket.errors import UnexpectedResponseError
-from polymarket.models.clob._validators import DecimalishString
+from polymarket.models.clob._validators import (
+    _DecimalFromNumberOrString,  # pyright: ignore[reportPrivateUsage]
+)
 from polymarket.models.clob.rewards import (
     CurrentReward,
     EarningBreakdown,
@@ -182,7 +184,7 @@ def test_decimalish_string_accepts_int() -> None:
     from pydantic import BaseModel as _Base
 
     class Foo(_Base):
-        v: DecimalishString
+        v: _DecimalFromNumberOrString
 
     assert Foo.model_validate({"v": 10}).v == Decimal("10")
 
@@ -191,7 +193,7 @@ def test_decimalish_string_accepts_float_via_str() -> None:
     from pydantic import BaseModel as _Base
 
     class Foo(_Base):
-        v: DecimalishString
+        v: _DecimalFromNumberOrString
 
     assert Foo.model_validate({"v": 0.1}).v == Decimal("0.1")
 
@@ -200,7 +202,7 @@ def test_decimalish_string_accepts_decimal_string() -> None:
     from pydantic import BaseModel as _Base
 
     class Foo(_Base):
-        v: DecimalishString
+        v: _DecimalFromNumberOrString
 
     assert Foo.model_validate({"v": "0.001"}).v == Decimal("0.001")
 
@@ -210,7 +212,7 @@ def test_decimalish_string_rejects_bool() -> None:
     from pydantic import ValidationError
 
     class Foo(_Base):
-        v: DecimalishString
+        v: _DecimalFromNumberOrString
 
     with pytest.raises(ValidationError):
         Foo.model_validate({"v": True})

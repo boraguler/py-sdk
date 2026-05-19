@@ -6,7 +6,9 @@ from typing import Any, Literal, TypeAlias, cast
 from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
-from polymarket.models.clob._validators import DecimalString
+from polymarket.models.clob._validators import (
+    _DecimalFromString,  # pyright: ignore[reportPrivateUsage]
+)
 from polymarket.models.types import OrderSide, TokenId
 
 AssetType: TypeAlias = Literal["COLLATERAL", "CONDITIONAL"]
@@ -56,9 +58,9 @@ class OpenOrder(BaseModel):
     owner: str
     maker_address: str = Field(validation_alias="maker_address")
     side: OrderSide
-    price: DecimalString
-    original_size: DecimalString = Field(validation_alias="original_size")
-    size_matched: DecimalString = Field(validation_alias="size_matched")
+    price: _DecimalFromString
+    original_size: _DecimalFromString = Field(validation_alias="original_size")
+    size_matched: _DecimalFromString = Field(validation_alias="size_matched")
     outcome: str
     order_type: str = Field(validation_alias="order_type")
     status: str
@@ -83,10 +85,10 @@ class MakerOrder(BaseModel):
     maker_address: str = Field(validation_alias="maker_address")
     owner: str
     side: OrderSide
-    price: DecimalString
-    matched_amount: DecimalString = Field(validation_alias="matched_amount")
+    price: _DecimalFromString
+    matched_amount: _DecimalFromString = Field(validation_alias="matched_amount")
     outcome: str
-    fee_rate_bps: DecimalString | None = Field(default=None, validation_alias="fee_rate_bps")
+    fee_rate_bps: _DecimalFromString | None = Field(default=None, validation_alias="fee_rate_bps")
 
     @field_validator("fee_rate_bps", mode="before")
     @classmethod
@@ -103,11 +105,11 @@ class ClobTrade(BaseModel):
     taker_order_id: str = Field(validation_alias="taker_order_id")
     side: OrderSide
     trader_side: Literal["TAKER", "MAKER"] = Field(validation_alias="trader_side")
-    price: DecimalString
-    size: DecimalString
+    price: _DecimalFromString
+    size: _DecimalFromString
     outcome: str
     status: str
-    fee_rate_bps: DecimalString = Field(validation_alias="fee_rate_bps")
+    fee_rate_bps: _DecimalFromString = Field(validation_alias="fee_rate_bps")
     bucket_index: int = Field(validation_alias="bucket_index")
     transaction_hash: str = Field(validation_alias="transaction_hash")
     maker_orders: tuple[MakerOrder, ...] = Field(validation_alias="maker_orders")
