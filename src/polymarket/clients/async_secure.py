@@ -160,7 +160,7 @@ if TYPE_CHECKING:
 
 _WEBSOCKET_EXTRA_HINT = (
     "Polymarket streams require the optional websocket dependency. "
-    'Install with: pip install "polymarket-sdk[websocket]"'
+    'Install with: pip install "polymarket-client[websocket]"'
 )
 
 _CREATE_TOKEN = object()

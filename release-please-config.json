@@ -2,7 +2,7 @@
   "packages": {
     ".": {
       "release-type": "python",
-      "package-name": "polymarket-sdk",
+      "package-name": "polymarket-client",
       "changelog-path": "CHANGELOG.md"
     }
   }

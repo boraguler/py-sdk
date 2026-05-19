@@ -3,6 +3,6 @@
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("polymarket-sdk")
+    __version__ = version("polymarket-client")
 except PackageNotFoundError:
     __version__ = "0.0.0"

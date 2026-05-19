@@ -1,19 +1,19 @@
-# Polymarket Python SDK
+# Polymarket Python Client
 
-Official Python SDK for Polymarket.
+Official Python client for Polymarket.
 
-The SDK gives Python developers one coherent, workflow-oriented interface for building on Polymarket, starting with public data access and expanding toward authenticated account, trading, builder attribution, and relayer-backed workflows.
+The client gives Python developers one coherent, workflow-oriented interface for building on Polymarket, starting with public data access and expanding toward authenticated account, trading, builder attribution, and relayer-backed workflows.
 
 ## Installation
 
 ```bash
-uv add polymarket-sdk
+uv add polymarket-client
 ```
 
 or:
 
 ```bash
-pip install polymarket-sdk
+pip install polymarket-client
 ```
 
 ## Usage
@@ -116,7 +116,7 @@ def test_authenticated_flow(require_env):
     assert builder_api_key
 ```
 
-The SDK does not load `.env` files at runtime. The integration test fixture loads `.env` only for tests that request credentials, and existing environment variables take precedence over local `.env` values.
+The client does not load `.env` files at runtime. The integration test fixture loads `.env` only for tests that request credentials, and existing environment variables take precedence over local `.env` values.
 
 Tests that place orders, spend funds, or mutate live state must also use `@pytest.mark.metered`. Metered tests are skipped unless `POLYMARKET_RUN_METERED_TESTS=1` is set:
 

@@ -72,7 +72,7 @@ from polymarket.pagination import Paginator
 class PublicClient:
     """Client for public Polymarket data workflows.
 
-    Public methods return stable, idiomatic Python SDK objects.
+    Public methods return stable, idiomatic Python client objects.
     """
 
     def __init__(

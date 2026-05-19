@@ -111,14 +111,14 @@ if TYPE_CHECKING:
 
 _WEBSOCKET_EXTRA_HINT = (
     "Polymarket streams require the optional websocket dependency. "
-    'Install with: pip install "polymarket-sdk[websocket]"'
+    'Install with: pip install "polymarket-client[websocket]"'
 )
 
 
 class AsyncPublicClient:
     """Async client for public Polymarket data workflows.
 
-    Public methods return stable, idiomatic Python SDK objects.
+    Public methods return stable, idiomatic Python client objects.
     """
 
     def __init__(

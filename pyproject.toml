@@ -3,9 +3,9 @@ requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
 [project]
-name = "polymarket-sdk"
+name = "polymarket-client"
 version = "0.1.0"
-description = "Official Python SDK for Polymarket"
+description = "Official Python client for Polymarket"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -15,7 +15,7 @@ authors = [
 maintainers = [
   { name = "Polymarket Engineering", email = "engineering@polymarket.com" },
 ]
-keywords = ["polymarket", "prediction-markets", "sdk", "trading", "web3"]
+keywords = ["polymarket", "prediction-markets", "client", "trading", "web3"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -41,8 +41,8 @@ websocket = ["websockets>=13,<16"]
 [project.urls]
 Homepage = "https://polymarket.com"
 Documentation = "https://docs.polymarket.com"
-Repository = "https://github.com/Polymarket/polymarket-python"
-Issues = "https://github.com/Polymarket/polymarket-python/issues"
+Repository = "https://github.com/Polymarket/py-sdk"
+Issues = "https://github.com/Polymarket/py-sdk/issues"
 
 [dependency-groups]
 dev = [

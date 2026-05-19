@@ -1,6 +1,6 @@
-# SDK Direction
+# Client Direction
 
-This document records developer-experience decisions that shape the public Polymarket Python SDK API.
+This document records developer-experience decisions that shape the public Polymarket Python client API.
 
 ## API Principles
 
@@ -29,7 +29,7 @@ client = AsyncPublicClient()
 market = await client.get_market("540816")
 ```
 
-We evaluated common Python SDKs in trading, exchange, and Web3 ecosystems. The most Pythonic convention is to keep unprefixed clients synchronous and expose async variants with an `Async` prefix, rather than using mode flags or adding separate `_async` methods to every sync client.
+We evaluated common Python client libraries in trading, exchange, and Web3 ecosystems. The most Pythonic convention is to keep unprefixed clients synchronous and expose async variants with an `Async` prefix, rather than using mode flags or adding separate `_async` methods to every sync client.
 
 The sync and async clients should share request builders, models, auth/signing, serialization, validation, response parsing, and namespace structure. Their implementations should differ at the transport boundary: sync clients use sync transports, async clients use async transports.
 
