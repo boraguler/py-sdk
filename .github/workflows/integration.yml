@@ -10,7 +10,7 @@ permissions:
 jobs:
   integration:
     name: Integration tests
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set-euw1
 
     steps:
       - name: Checkout
@@ -33,8 +33,7 @@ jobs:
 
       - name: Run integration tests
         env:
-          POLYMARKET_RUN_BACKEND_COMPAT_TESTS: ${{ vars.POLYMARKET_RUN_BACKEND_COMPAT_TESTS }}
-          POLYMARKET_RUN_METERED_TESTS: ${{ vars.POLYMARKET_RUN_METERED_TESTS }}
+          POLYMARKET_RUN_METERED_TESTS: "1"
           POLYMARKET_PRIVATE_KEY: ${{ secrets.POLYMARKET_PRIVATE_KEY }}
           POLYMARKET_DEPOSIT_WALLET: ${{ vars.POLYMARKET_DEPOSIT_WALLET }}
           POLYMARKET_PROXY_PRIVATE_KEY: ${{ secrets.POLYMARKET_PROXY_PRIVATE_KEY }}
