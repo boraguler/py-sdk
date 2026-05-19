@@ -139,7 +139,7 @@ def _has_required_trading_fields(market: Market) -> bool:
     return (
         market.condition_id is not None
         and market.state.enable_order_book is True
-        and market.state.accepting_orders is not False
+        and market.state.accepting_orders is True
         and market.trading.minimum_order_size is not None
         and market.trading.minimum_tick_size is not None
         and market.outcomes.yes.token_id is not None
