@@ -246,7 +246,7 @@ class AsyncSecureClient:
         cls,
         *,
         private_key: str,
-        wallet: str,
+        wallet: str | None = None,
         environment: Environment = PRODUCTION,
         credentials: ApiKeyCreds | None = None,
         api_key: ApiKey | None = None,
@@ -256,10 +256,6 @@ class AsyncSecureClient:
     ) -> Self:
         if not private_key:
             raise UserInputError("private_key is required")
-        if not wallet:
-            raise UserInputError(
-                "wallet is required. Pass the signer address itself to authenticate as an EOA."
-            )
         _validate_nonce(nonce)
         if credentials is not None and nonce != 0:
             raise UserInputError("nonce cannot be combined with credentials.")
@@ -268,8 +264,9 @@ class AsyncSecureClient:
         except (ValueError, TypeError) as error:
             raise UserInputError(f"Invalid private_key: {error}") from error
 
+        resolved_wallet = wallet if wallet else signer.address
         try:
-            wallet_checksum = to_checksum_address(wallet)
+            wallet_checksum = to_checksum_address(resolved_wallet)
         except ValueError as error:
             raise UserInputError(f"Invalid wallet address: {error}") from error
         wallet_type = classify_wallet_type(
@@ -1544,17 +1541,6 @@ class AsyncSecureClient:
             return await self._broadcast_eoa_call(calls[-1])
         return await prepare_gasless_transaction(self._ctx, calls=calls, metadata=resolved_metadata)
 
-    async def deploy_deposit_wallet(
-        self, *, metadata: str | None = None
-    ) -> GaslessTransactionHandle:
-        if self._ctx.wallet_type != "DEPOSIT_WALLET":
-            raise UserInputError(
-                "deploy_deposit_wallet is only available for DEPOSIT_WALLET wallets. "
-                "Use setup_gasless_wallet() to bootstrap from an EOA."
-            )
-        resolved_metadata = metadata if metadata is not None else "Deploy Deposit Wallet"
-        return await submit_deposit_wallet_create(self._ctx, metadata=resolved_metadata)
-
     @property
     def supports_gasless(self) -> bool:
         return self._ctx.api_key is not None
@@ -1609,18 +1595,6 @@ class AsyncSecureClient:
     ) -> GaslessTransactionHandle:
         resolved_metadata = metadata if metadata is not None else ""
         return await prepare_gasless_transaction(self._ctx, calls=calls, metadata=resolved_metadata)
-
-    def attach_gasless_handle(
-        self, *, transaction_id: str, transaction_hash: str | None = None
-    ) -> GaslessTransactionHandle:
-        env = self._ctx.environment
-        return GaslessTransactionHandle(
-            transaction_id=transaction_id,
-            transaction_hash=transaction_hash,
-            _relayer=self._ctx.relayer,
-            _max_polls=env.relayer_max_polls,
-            _poll_delay_s=env.relayer_poll_frequency_ms / 1000,
-        )
 
     async def _broadcast_eoa_call(self, call: TransactionCall) -> EoaTransactionHandle:
         rpc = self._ctx.rpc

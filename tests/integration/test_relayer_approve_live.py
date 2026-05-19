@@ -197,17 +197,3 @@ def test_redeem_positions_live(require_env: Callable[[str], str]) -> None:
             await handle.wait()
 
     asyncio.run(asyncio.wait_for(run(), timeout=240.0))
-
-
-@pytest.mark.integration
-@pytest.mark.metered
-@pytest.mark.skip(reason=_SKIP_REASON)
-def test_deploy_deposit_wallet_live(require_env: Callable[[str], str]) -> None:
-    async def run() -> None:
-        async with _secure_client(require_env) as client:
-            handle = await client.deploy_deposit_wallet(
-                metadata="py-sdk integration test: deploy_deposit_wallet"
-            )
-            await handle.wait()
-
-    asyncio.run(asyncio.wait_for(run(), timeout=240.0))

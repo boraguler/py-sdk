@@ -203,15 +203,3 @@ def test_setup_gasless_wallet_does_not_share_transports_across_closes() -> None:
             return str(returned.wallet)
 
     asyncio.run(run())
-
-
-def test_deploy_deposit_wallet_still_rejects_non_deposit_wallet() -> None:
-    async def run() -> None:
-        client = await make_proxy_client()
-        try:
-            with pytest.raises(UserInputError, match="setup_gasless_wallet"):
-                await client.deploy_deposit_wallet()
-        finally:
-            await client.close()
-
-    asyncio.run(run())

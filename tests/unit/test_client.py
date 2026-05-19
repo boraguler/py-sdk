@@ -131,9 +131,21 @@ def test_async_secure_client_invalid_key_raises_user_input_error() -> None:
     asyncio.run(run())
 
 
-def test_async_secure_client_requires_wallet() -> None:
-    async def run() -> None:
-        with pytest.raises(UserInputError, match="wallet is required"):
-            await AsyncSecureClient.create(private_key=PRIVATE_KEY, wallet="")
+def test_async_secure_client_wallet_defaults_to_signer_when_omitted() -> None:
+    from eth_account import Account
+    from eth_utils.address import to_checksum_address
 
-    asyncio.run(run())
+    expected = to_checksum_address(Account.from_key(PRIVATE_KEY).address)
+
+    async def run() -> str:
+        client = await AsyncSecureClient.create(
+            private_key=PRIVATE_KEY,
+            validate_credentials=False,
+        )
+        try:
+            assert client.wallet_type == "EOA"
+            return str(client.wallet)
+        finally:
+            await client.close()
+
+    assert asyncio.run(run()) == expected
