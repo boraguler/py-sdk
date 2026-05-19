@@ -1,5 +1,4 @@
 import contextlib
-import dataclasses
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -269,6 +268,42 @@ class AsyncSecureClient:
             wallet_checksum = to_checksum_address(resolved_wallet)
         except ValueError as error:
             raise UserInputError(f"Invalid wallet address: {error}") from error
+
+        bootstrap_clob = AsyncTransport(base_url=environment.clob_url, logger=logger)
+        try:
+            resolved_credentials = await _bootstrap_credentials(
+                environment=environment,
+                signer=signer,
+                clob=bootstrap_clob,
+                provided=credentials,
+                nonce=nonce,
+                validate=validate_credentials,
+                logger=logger,
+            )
+        finally:
+            await bootstrap_clob.close()
+
+        return cls._construct_for_wallet(
+            signer=signer,
+            wallet=wallet_checksum,
+            environment=environment,
+            credentials=resolved_credentials,
+            api_key=api_key,
+            logger=logger,
+        )
+
+    @classmethod
+    def _construct_for_wallet(
+        cls,
+        *,
+        signer: LocalAccount,
+        wallet: str,
+        environment: Environment,
+        credentials: ApiKeyCreds,
+        api_key: ApiKey | None,
+        logger: logging.Logger | None,
+    ) -> Self:
+        wallet_checksum = to_checksum_address(wallet)
         wallet_type = classify_wallet_type(
             signer=signer.address,
             wallet=wallet_checksum,
@@ -285,34 +320,15 @@ class AsyncSecureClient:
             logger=logger,
             header_resolver=relayer_resolver,
         )
+        secure_clob = AsyncTransport(
+            base_url=environment.clob_url,
+            logger=logger,
+            header_resolver=_make_l2_header_resolver(signer, credentials),
+        )
         rpc: JsonRpcClient | None = None
         if environment.rpc_url is not None:
             rpc_transport = AsyncTransport(base_url=environment.rpc_url, logger=logger)
             rpc = JsonRpcClient(rpc_transport)
-
-        try:
-            resolved_credentials = await _bootstrap_credentials(
-                environment=environment,
-                signer=signer,
-                clob=clob,
-                provided=credentials,
-                nonce=nonce,
-                validate=validate_credentials,
-                logger=logger,
-            )
-            secure_clob = AsyncTransport(
-                base_url=environment.clob_url,
-                logger=logger,
-                header_resolver=_make_l2_header_resolver(signer, resolved_credentials),
-            )
-        except BaseException:
-            await gamma.close()
-            await data.close()
-            await clob.close()
-            await relayer.close()
-            if rpc is not None:
-                await rpc.close()
-            raise
 
         ctx = AsyncSecureClientContext(
             environment=environment,
@@ -320,7 +336,7 @@ class AsyncSecureClient:
             data=data,
             clob=clob,
             signer=signer,
-            credentials=resolved_credentials,
+            credentials=credentials,
             secure_clob=secure_clob,
             wallet=branded_wallet,
             wallet_type=wallet_type,
@@ -1550,7 +1566,14 @@ class AsyncSecureClient:
                 "Pass api_key= when constructing the client."
             )
         if ctx.wallet_type != "EOA":
-            return self
+            return type(self)._construct_for_wallet(
+                signer=ctx.signer,
+                wallet=str(ctx.wallet),
+                environment=ctx.environment,
+                credentials=ctx.credentials,
+                api_key=ctx.api_key,
+                logger=self._streams_logger,
+            )
         deposit_address = cast(
             EvmAddress,
             to_checksum_address(
@@ -1565,12 +1588,14 @@ class AsyncSecureClient:
         if not ready:
             handle = await submit_deposit_wallet_create(ctx, metadata="Deploy Deposit Wallet")
             await handle.wait()
-        self._ctx = dataclasses.replace(
-            ctx,
-            wallet=deposit_address,
-            wallet_type="DEPOSIT_WALLET",
+        return type(self)._construct_for_wallet(
+            signer=ctx.signer,
+            wallet=str(deposit_address),
+            environment=ctx.environment,
+            credentials=ctx.credentials,
+            api_key=ctx.api_key,
+            logger=self._streams_logger,
         )
-        return self
 
     async def is_gasless_ready(self) -> bool:
         wallet_type = self._ctx.wallet_type

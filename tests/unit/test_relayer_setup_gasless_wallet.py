@@ -31,36 +31,52 @@ def test_setup_gasless_wallet_rejects_when_no_api_key() -> None:
     asyncio.run(run())
 
 
-def test_setup_gasless_wallet_returns_self_for_deposit_wallet() -> None:
+def test_setup_gasless_wallet_returns_new_client_for_deposit_wallet() -> None:
     async def run() -> None:
         client = await make_deposit_client()
         try:
             returned = await client.setup_gasless_wallet()
-            assert returned is client
+            try:
+                assert returned is not client
+                assert returned.wallet_type == "DEPOSIT_WALLET"
+                assert returned.wallet == client.wallet
+                assert returned.signer == client.signer
+            finally:
+                await returned.close()
         finally:
             await client.close()
 
     asyncio.run(run())
 
 
-def test_setup_gasless_wallet_returns_self_for_proxy() -> None:
+def test_setup_gasless_wallet_returns_new_client_for_proxy() -> None:
     async def run() -> None:
         client = await make_proxy_client()
         try:
             returned = await client.setup_gasless_wallet()
-            assert returned is client
+            try:
+                assert returned is not client
+                assert returned.wallet_type == "POLY_PROXY"
+                assert returned.wallet == client.wallet
+            finally:
+                await returned.close()
         finally:
             await client.close()
 
     asyncio.run(run())
 
 
-def test_setup_gasless_wallet_returns_self_for_safe() -> None:
+def test_setup_gasless_wallet_returns_new_client_for_safe() -> None:
     async def run() -> None:
         client = await make_safe_client()
         try:
             returned = await client.setup_gasless_wallet()
-            assert returned is client
+            try:
+                assert returned is not client
+                assert returned.wallet_type == "GNOSIS_SAFE"
+                assert returned.wallet == client.wallet
+            finally:
+                await returned.close()
         finally:
             await client.close()
 
@@ -85,9 +101,13 @@ def test_setup_gasless_wallet_eoa_skips_deploy_when_already_deployed() -> None:
         install_relayer_handler(client, handler)
         try:
             new_client = await client.setup_gasless_wallet()
-            assert new_client is client
-            assert new_client.wallet_type == "DEPOSIT_WALLET"
-            return str(new_client.wallet), expected_deposit
+            try:
+                assert new_client is not client
+                assert client.wallet_type == "EOA"
+                assert new_client.wallet_type == "DEPOSIT_WALLET"
+                return str(new_client.wallet), expected_deposit
+            finally:
+                await new_client.close()
         finally:
             await client.close()
 
@@ -145,8 +165,13 @@ def test_setup_gasless_wallet_eoa_deploys_when_not_deployed() -> None:
         )
         try:
             new_client = await client.setup_gasless_wallet()
-            assert new_client.wallet_type == "DEPOSIT_WALLET"
-            return str(new_client.wallet)
+            try:
+                assert new_client is not client
+                assert client.wallet_type == "EOA"
+                assert new_client.wallet_type == "DEPOSIT_WALLET"
+                return str(new_client.wallet)
+            finally:
+                await new_client.close()
         finally:
             await client.close()
 
@@ -160,7 +185,7 @@ def test_setup_gasless_wallet_eoa_deploys_when_not_deployed() -> None:
     assert body["metadata"] == "Deploy Deposit Wallet"
 
 
-def test_setup_gasless_wallet_does_not_share_transports_across_closes() -> None:
+def test_setup_gasless_wallet_returns_independent_client_with_fresh_transports() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> str:
@@ -176,8 +201,10 @@ def test_setup_gasless_wallet_does_not_share_transports_across_closes() -> None:
         install_relayer_handler(client, handler)
         async with client:
             returned = await client.setup_gasless_wallet()
-            assert returned is client
-            assert returned.wallet_type == "DEPOSIT_WALLET"
-            return str(returned.wallet)
+            async with returned:
+                assert returned is not client
+                assert returned.wallet_type == "DEPOSIT_WALLET"
+                assert client.wallet_type == "EOA"
+                return str(returned.wallet)
 
     asyncio.run(run())
