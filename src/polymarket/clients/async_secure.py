@@ -158,11 +158,6 @@ if TYPE_CHECKING:
     from polymarket._internal.streams.sports.manager import SportsStreamManager
 
 
-_WEBSOCKET_EXTRA_HINT = (
-    "Polymarket streams require the optional websocket dependency. "
-    'Install with: pip install "polymarket-sdk[websocket]"'
-)
-
 _CREATE_TOKEN = object()
 
 _L2HeaderResolver: TypeAlias = Callable[[str, str, str | None], Awaitable[Mapping[str, str]]]
@@ -378,10 +373,8 @@ class AsyncSecureClient:
 
     def _get_market_manager(self) -> "ClobMarketStreamManager":
         if self._market_manager is None:
-            try:
-                from polymarket._internal.streams.clob.market import ClobMarketStreamManager
-            except ImportError as exc:
-                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            from polymarket._internal.streams.clob.market import ClobMarketStreamManager
+
             self._market_manager = ClobMarketStreamManager(
                 url=self._ctx.environment.clob_market_ws_url,
                 logger=self._streams_logger,
@@ -390,10 +383,8 @@ class AsyncSecureClient:
 
     def _get_sports_manager(self) -> "SportsStreamManager":
         if self._sports_manager is None:
-            try:
-                from polymarket._internal.streams.sports.manager import SportsStreamManager
-            except ImportError as exc:
-                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            from polymarket._internal.streams.sports.manager import SportsStreamManager
+
             self._sports_manager = SportsStreamManager(
                 url=self._ctx.environment.sports_ws_url,
                 logger=self._streams_logger,
@@ -402,10 +393,8 @@ class AsyncSecureClient:
 
     def _get_rtds_manager(self) -> "RtdsStreamManager":
         if self._rtds_manager is None:
-            try:
-                from polymarket._internal.streams.rtds.manager import RtdsStreamManager
-            except ImportError as exc:
-                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            from polymarket._internal.streams.rtds.manager import RtdsStreamManager
+
             self._rtds_manager = RtdsStreamManager(
                 url=self._ctx.environment.rtds_ws_url,
                 logger=self._streams_logger,
@@ -414,10 +403,8 @@ class AsyncSecureClient:
 
     def _get_user_manager(self) -> "ClobUserStreamManager":
         if self._user_manager is None:
-            try:
-                from polymarket._internal.streams.clob.user import ClobUserStreamManager
-            except ImportError as exc:
-                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            from polymarket._internal.streams.clob.user import ClobUserStreamManager
+
             self._user_manager = ClobUserStreamManager(
                 url=self._ctx.environment.clob_user_ws_url,
                 resolve_credentials=self._resolve_api_key_credentials,

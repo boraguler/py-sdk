@@ -109,12 +109,6 @@ if TYPE_CHECKING:
     from polymarket._internal.streams.sports.manager import SportsStreamManager
 
 
-_WEBSOCKET_EXTRA_HINT = (
-    "Polymarket streams require the optional websocket dependency. "
-    'Install with: pip install "polymarket-sdk[websocket]"'
-)
-
-
 class AsyncPublicClient:
     """Async client for public Polymarket data workflows.
 
@@ -220,10 +214,8 @@ class AsyncPublicClient:
 
     def _get_market_manager(self) -> "ClobMarketStreamManager":
         if self._market_manager is None:
-            try:
-                from polymarket._internal.streams.clob.market import ClobMarketStreamManager
-            except ImportError as exc:
-                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            from polymarket._internal.streams.clob.market import ClobMarketStreamManager
+
             self._market_manager = ClobMarketStreamManager(
                 url=self._ctx.environment.clob_market_ws_url,
                 logger=self._streams_logger,
@@ -232,10 +224,8 @@ class AsyncPublicClient:
 
     def _get_rtds_manager(self) -> "RtdsStreamManager":
         if self._rtds_manager is None:
-            try:
-                from polymarket._internal.streams.rtds.manager import RtdsStreamManager
-            except ImportError as exc:
-                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            from polymarket._internal.streams.rtds.manager import RtdsStreamManager
+
             self._rtds_manager = RtdsStreamManager(
                 url=self._ctx.environment.rtds_ws_url,
                 logger=self._streams_logger,
@@ -244,10 +234,8 @@ class AsyncPublicClient:
 
     def _get_sports_manager(self) -> "SportsStreamManager":
         if self._sports_manager is None:
-            try:
-                from polymarket._internal.streams.sports.manager import SportsStreamManager
-            except ImportError as exc:
-                raise ImportError(_WEBSOCKET_EXTRA_HINT) from exc
+            from polymarket._internal.streams.sports.manager import SportsStreamManager
+
             self._sports_manager = SportsStreamManager(
                 url=self._ctx.environment.sports_ws_url,
                 logger=self._streams_logger,

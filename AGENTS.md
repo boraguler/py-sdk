@@ -6,7 +6,7 @@
 
 ## SDK Design
 
-- Keep the PyPI distribution name as `polymarket-sdk` and the import package as `polymarket` unless explicitly changed.
+- Keep the PyPI distribution name as `polymarket-client` and the import package as `polymarket` unless explicitly changed.
 - When implementing new areas where guidance is vague, choose the most idiomatic Python approach but avoid premature abstractions.
 - Prefer simple, direct code until there is a concrete repeated use case or public API need that justifies a helper, wrapper, protocol, base class, or configuration abstraction.
 - Do not copy TypeScript SDK shapes mechanically; preserve feature parity while adapting APIs to Python ecosystem norms and the smallest useful surface.

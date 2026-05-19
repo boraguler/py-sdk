@@ -7,13 +7,13 @@ The SDK gives Python developers one coherent, workflow-oriented interface for bu
 ## Installation
 
 ```bash
-uv add polymarket-sdk
+uv add polymarket-client
 ```
 
 or:
 
 ```bash
-pip install polymarket-sdk
+pip install polymarket-client
 ```
 
 ## Usage
