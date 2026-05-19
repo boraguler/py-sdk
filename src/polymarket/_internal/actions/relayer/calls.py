@@ -5,6 +5,7 @@ from typing import cast
 
 from eth_abi.abi import encode as abi_encode
 from eth_utils.crypto import keccak
+from eth_utils.hexadecimal import decode_hex
 
 from polymarket.errors import UserInputError
 from polymarket.types import EvmAddress, HexString
@@ -168,7 +169,7 @@ def encode_proxy_call(calls: list[TransactionCall]) -> HexString:
     if not calls:
         raise UserInputError("encode_proxy_call requires at least one call")
     tuples = [
-        (_PROXY_TYPE_CODE_CALL, str(call.to), call.value, _to_bytes(call.data)) for call in calls
+        (_PROXY_TYPE_CODE_CALL, str(call.to), call.value, decode_hex(call.data)) for call in calls
     ]
     encoded_args = abi_encode(
         ["(uint8,address,uint256,bytes)[]"],
@@ -182,10 +183,10 @@ def encode_safe_multisend_call(calls: list[TransactionCall]) -> HexString:
         raise UserInputError("encode_safe_multisend_call requires at least one call")
     inner = b""
     for call in calls:
-        to_bytes = _strip_0x_to_bytes(str(call.to))
+        to_bytes = decode_hex(str(call.to))
         if len(to_bytes) != 20:
             raise UserInputError(f"Expected 20-byte address, got {len(to_bytes)} bytes")
-        data_bytes = _to_bytes(call.data)
+        data_bytes = decode_hex(call.data)
         inner += bytes([_INNER_OPERATION_CALL])
         inner += to_bytes
         inner += call.value.to_bytes(32, "big")
@@ -193,16 +194,6 @@ def encode_safe_multisend_call(calls: list[TransactionCall]) -> HexString:
         inner += data_bytes
     payload = _SAFE_MULTISEND_SELECTOR + abi_encode(["bytes"], [inner])
     return cast(HexString, "0x" + payload.hex())
-
-
-def _to_bytes(value: str) -> bytes:
-    s = value[2:] if value.startswith(("0x", "0X")) else value
-    return bytes.fromhex(s) if s else b""
-
-
-def _strip_0x_to_bytes(value: str) -> bytes:
-    s = value[2:] if value.startswith(("0x", "0X")) else value
-    return bytes.fromhex(s)
 
 
 __all__ = [

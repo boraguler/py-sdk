@@ -5,6 +5,7 @@ from typing import cast
 from eth_account.messages import encode_defunct
 from eth_account.signers.local import LocalAccount
 from eth_utils.crypto import keccak
+from eth_utils.hexadecimal import decode_hex
 
 from polymarket.errors import SigningError
 from polymarket.types import EvmAddress, HexString
@@ -28,7 +29,7 @@ def build_proxy_transaction_hash(
         _PROXY_PREFIX
         + _addr_bytes(from_address)
         + _addr_bytes(to)
-        + _hex_bytes(data)
+        + decode_hex(data)
         + int(relayer_fee).to_bytes(32, "big")
         + int(gas_price).to_bytes(32, "big")
         + int(gas_limit).to_bytes(32, "big")
@@ -49,16 +50,10 @@ def sign_proxy_message(signer: LocalAccount, message_hash: HexString) -> HexStri
 
 
 def _addr_bytes(value: str) -> bytes:
-    s = value[2:] if value.startswith(("0x", "0X")) else value
-    out = bytes.fromhex(s)
+    out = decode_hex(value)
     if len(out) != 20:
         raise ValueError(f"Expected 20-byte address, got {len(out)} bytes")
     return out
-
-
-def _hex_bytes(value: str) -> bytes:
-    s = value[2:] if value.startswith(("0x", "0X")) else value
-    return bytes.fromhex(s) if s else b""
 
 
 __all__ = ["build_proxy_transaction_hash", "sign_proxy_message"]

@@ -72,9 +72,6 @@ from polymarket._internal.actions.relayer.gasless import (
     prepare_gasless_transaction,
     submit_deposit_wallet_create,
 )
-from polymarket._internal.actions.relayer.poll import (
-    fetch_gasless_transaction as _fetch_gasless_transaction,
-)
 from polymarket._internal.actions.relayer.positions import (
     derive_neg_risk_redeem_amounts,
     expect_binary_positions,
@@ -142,7 +139,7 @@ from polymarket.models.clob.cancel import CancelOrdersResponse
 from polymarket.models.clob.market_events import MarketEvent
 from polymarket.models.clob.order_response import OrderResponse
 from polymarket.models.clob.orders import MarketOrderType, SignedOrder
-from polymarket.models.clob.relayer import GaslessTransaction, RelayerTransactionType
+from polymarket.models.clob.relayer import RelayerTransactionType
 from polymarket.models.clob.rewards import (
     CurrentReward,
     MarketReward,
@@ -192,7 +189,6 @@ from polymarket.streams._specs import (
 )
 from polymarket.transactions import (
     EoaTransactionHandle,
-    GaslessTransactionHandle,
     TransactionHandle,
 )
 from polymarket.types import EvmAddress, HexString
@@ -1605,18 +1601,6 @@ class AsyncSecureClient:
         return await fetch_deployed(
             self._ctx.relayer, address=str(self._ctx.wallet), type=type_param
         )
-
-    async def get_transaction(self, *, transaction_id: str) -> GaslessTransaction:
-        return await _fetch_gasless_transaction(self._ctx.relayer, transaction_id=transaction_id)
-
-    async def submit_gasless(
-        self,
-        *,
-        calls: list[TransactionCall],
-        metadata: str | None = None,
-    ) -> GaslessTransactionHandle:
-        resolved_metadata = metadata if metadata is not None else ""
-        return await prepare_gasless_transaction(self._ctx, calls=calls, metadata=resolved_metadata)
 
     async def _broadcast_eoa_call(self, call: TransactionCall) -> EoaTransactionHandle:
         rpc = self._ctx.rpc

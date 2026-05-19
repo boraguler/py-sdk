@@ -14,7 +14,6 @@ from _relayer_helpers import (
 )
 
 from polymarket import AsyncSecureClient, TransactionCall
-from polymarket.calls import erc20_approval_call
 from polymarket.errors import TimeoutError, TransactionFailedError, UserInputError
 from polymarket.transactions import EoaTransactionHandle
 from polymarket.types import EvmAddress
@@ -207,21 +206,6 @@ def test_eoa_setup_trading_approvals_submits_seven_sequentially() -> None:
     assert len(send_methods) == 7
     receipt_methods = [c for c in calls if c["method"] == "eth_getTransactionReceipt"]
     assert len(receipt_methods) >= 6
-
-
-def test_eoa_submit_gasless_still_raises_for_eoa() -> None:
-    handler = make_rpc_handler()
-
-    async def run() -> None:
-        client = await make_eoa_client_with_rpc(rpc_handler=handler)
-        try:
-            with pytest.raises(UserInputError, match="EOA"):
-                call = erc20_approval_call(token_address=_TOKEN, spender=_SPENDER, amount=1)
-                await client.submit_gasless(calls=[call])
-        finally:
-            await client.close()
-
-    asyncio.run(run())
 
 
 def test_rpc_client_closes_with_client() -> None:

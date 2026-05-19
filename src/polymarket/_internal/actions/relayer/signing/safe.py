@@ -5,6 +5,7 @@ from typing import Any, cast
 from eth_account.messages import encode_defunct, encode_typed_data
 from eth_account.signers.local import LocalAccount
 from eth_utils.crypto import keccak
+from eth_utils.hexadecimal import decode_hex
 
 from polymarket.errors import SigningError
 from polymarket.types import EvmAddress, HexString
@@ -51,7 +52,7 @@ def build_safe_typed_data(
         "message": {
             "to": str(to),
             "value": value,
-            "data": _to_bytes(data),
+            "data": decode_hex(data),
             "operation": operation,
             "safeTxGas": 0,
             "baseGas": 0,
@@ -104,11 +105,6 @@ def pack_safe_signature(signature: HexString) -> HexString:
     else:
         packed_v = v
     return cast(HexString, "0x" + raw[:128] + format(packed_v, "02x"))
-
-
-def _to_bytes(value: str) -> bytes:
-    s = value[2:] if value.startswith(("0x", "0X")) else value
-    return bytes.fromhex(s) if s else b""
 
 
 __all__ = ["build_safe_typed_data", "pack_safe_signature", "sign_safe_transaction"]

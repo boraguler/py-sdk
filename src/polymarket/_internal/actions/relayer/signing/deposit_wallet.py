@@ -4,6 +4,7 @@ from typing import Any, cast
 
 from eth_account.messages import encode_typed_data
 from eth_account.signers.local import LocalAccount
+from eth_utils.hexadecimal import decode_hex
 
 from polymarket._internal.actions.relayer.calls import TransactionCall
 from polymarket.errors import SigningError
@@ -60,7 +61,7 @@ def build_deposit_wallet_typed_data(
                 {
                     "target": str(call.to),
                     "value": call.value,
-                    "data": _to_bytes(call.data),
+                    "data": decode_hex(call.data),
                 }
                 for call in calls
             ],
@@ -90,11 +91,6 @@ def sign_deposit_wallet_batch(
     except Exception as error:
         raise SigningError(f"Failed to sign deposit-wallet batch: {error}") from error
     return cast(HexString, "0x" + signed.signature.hex())
-
-
-def _to_bytes(value: str) -> bytes:
-    s = value[2:] if value.startswith(("0x", "0X")) else value
-    return bytes.fromhex(s) if s else b""
 
 
 __all__ = ["build_deposit_wallet_typed_data", "sign_deposit_wallet_batch"]
