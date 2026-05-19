@@ -9,7 +9,7 @@ from _relayer_helpers import install_relayer_handler, make_deposit_client
 from polymarket.models.clob.relayer import RelayerTransactionState, TransactionOutcome
 
 
-def test_fetch_gasless_transaction_returns_parsed_model() -> None:
+def test_get_transaction_returns_parsed_model() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
@@ -29,7 +29,7 @@ def test_fetch_gasless_transaction_returns_parsed_model() -> None:
 
         install_relayer_handler(client, handler)
         try:
-            tx = await client.fetch_gasless_transaction(transaction_id="tx-fetch")
+            tx = await client.get_transaction(transaction_id="tx-fetch")
             assert tx.state == RelayerTransactionState.MINED
             assert tx.transaction_hash == "0x" + "ab" * 32
             assert tx.transaction_id == "tx-fetch"

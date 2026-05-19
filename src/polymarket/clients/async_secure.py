@@ -1598,7 +1598,7 @@ class AsyncSecureClient:
             self._ctx.relayer, address=str(self._ctx.wallet), type=type_param
         )
 
-    async def fetch_gasless_transaction(self, *, transaction_id: str) -> GaslessTransaction:
+    async def get_transaction(self, *, transaction_id: str) -> GaslessTransaction:
         return await _fetch_gasless_transaction(self._ctx.relayer, transaction_id=transaction_id)
 
     async def submit_gasless(
