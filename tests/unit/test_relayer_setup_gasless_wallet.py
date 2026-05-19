@@ -107,7 +107,7 @@ def test_setup_gasless_wallet_eoa_skips_deploy_when_already_deployed() -> None:
         install_relayer_handler(client, handler)
         try:
             new_client = await client.setup_gasless_wallet()
-            assert new_client is not client
+            assert new_client is client
             assert new_client.wallet_type == "DEPOSIT_WALLET"
             return str(new_client.wallet), expected_deposit
         finally:
@@ -180,6 +180,29 @@ def test_setup_gasless_wallet_eoa_deploys_when_not_deployed() -> None:
     assert body["type"] == "WALLET-CREATE"
     assert "signature" not in body
     assert body["metadata"] == "Deploy Deposit Wallet"
+
+
+def test_setup_gasless_wallet_does_not_share_transports_across_closes() -> None:
+    captured: list[httpx.Request] = []
+
+    async def run() -> str:
+        client = await make_eoa_client()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(request)
+            path = urlparse(str(request.url)).path
+            if path == "/deployed":
+                return httpx.Response(200, json={"deployed": True}, request=request)
+            return httpx.Response(404, request=request)
+
+        install_relayer_handler(client, handler)
+        async with client:
+            returned = await client.setup_gasless_wallet()
+            assert returned is client
+            assert returned.wallet_type == "DEPOSIT_WALLET"
+            return str(returned.wallet)
+
+    asyncio.run(run())
 
 
 def test_deploy_deposit_wallet_still_rejects_non_deposit_wallet() -> None:

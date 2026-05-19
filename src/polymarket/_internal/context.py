@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from eth_account.signers.local import LocalAccount
 
+from polymarket._internal.eoa.rpc import JsonRpcClient
 from polymarket._internal.wallet import WalletType
 from polymarket.auth import ApiKey
 from polymarket.clients._transport import AsyncTransport, SyncTransport
@@ -42,6 +43,7 @@ class AsyncSecureClientContext(AsyncClientContext):
     wallet_type: WalletType
     relayer: AsyncTransport
     api_key: ApiKey | None
+    rpc: JsonRpcClient | None
 
 
 __all__ = [

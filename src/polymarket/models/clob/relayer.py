@@ -91,7 +91,7 @@ class RelayerDeployedResponse(BaseModel):
 @dataclass(frozen=True, slots=True)
 class TransactionOutcome:
     transaction_hash: TransactionHash
-    transaction_id: str
+    transaction_id: str | None
 
 
 __all__ = [

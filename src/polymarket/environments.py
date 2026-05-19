@@ -36,6 +36,7 @@ class Environment:
     sports_ws_url: str
     relayer_max_polls: int = 100
     relayer_poll_frequency_ms: int = 2000
+    rpc_url: str | None = None
 
 
 PRODUCTION = Environment(

@@ -1,4 +1,5 @@
 from polymarket.auth import BuilderApiKey, RelayerApiKey
+from polymarket.calls import TransactionCall
 from polymarket.clients import AsyncPublicClient, AsyncSecureClient, PublicClient, SecureClient
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import (
@@ -113,7 +114,11 @@ from polymarket.models import (
     YieldActivity,
 )
 from polymarket.pagination import AsyncPaginator, Page, Paginator
-from polymarket.transactions import GaslessTransactionHandle
+from polymarket.transactions import (
+    EoaTransactionHandle,
+    GaslessTransactionHandle,
+    TransactionHandle,
+)
 from polymarket.types import EvmAddress, HexString, TransactionHash
 from polymarket.version import __version__
 
@@ -143,6 +148,7 @@ __all__ = [
     "CurrentReward",
     "CurrentRewardConfig",
     "EarningBreakdown",
+    "EoaTransactionHandle",
     "Environment",
     "Event",
     "EventId",
@@ -229,7 +235,9 @@ __all__ = [
     "TradeActivity",
     "TradedMarketCount",
     "TraderLeaderboardEntry",
+    "TransactionCall",
     "TransactionFailedError",
+    "TransactionHandle",
     "TransactionHash",
     "TransactionOutcome",
     "TransportError",

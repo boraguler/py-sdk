@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 from polymarket.models.clob.relayer import TransactionOutcome
 
 if TYPE_CHECKING:
+    from polymarket._internal.eoa.rpc import JsonRpcClient
     from polymarket.clients._transport import AsyncTransport
 
 
@@ -29,4 +30,29 @@ class GaslessTransactionHandle:
         )
 
 
-__all__ = ["GaslessTransactionHandle"]
+@dataclass(frozen=True, slots=True)
+class EoaTransactionHandle:
+    transaction_hash: str
+    _rpc: JsonRpcClient = field(repr=False)
+    _max_polls: int
+    _poll_delay_s: float
+
+    @property
+    def transaction_id(self) -> None:
+        return None
+
+    async def wait(self) -> TransactionOutcome:
+        from polymarket._internal.eoa.broadcast import wait_for_receipt
+
+        return await wait_for_receipt(
+            self._rpc,
+            transaction_hash=self.transaction_hash,
+            max_polls=self._max_polls,
+            poll_delay_s=self._poll_delay_s,
+        )
+
+
+TransactionHandle: TypeAlias = GaslessTransactionHandle | EoaTransactionHandle
+
+
+__all__ = ["EoaTransactionHandle", "GaslessTransactionHandle", "TransactionHandle"]

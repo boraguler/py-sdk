@@ -19,8 +19,9 @@ from _relayer_helpers import (
     request_json,
 )
 
-from polymarket import AsyncSecureClient, GaslessTransactionHandle
+from polymarket import AsyncSecureClient
 from polymarket.errors import UserInputError
+from polymarket.transactions import TransactionHandle
 
 
 def test_approve_erc20_rejects_when_no_api_key() -> None:
@@ -84,7 +85,7 @@ def test_approve_erc20_rejects_invalid_token_address() -> None:
 def test_approve_erc20_deposit_wallet_payload_shape() -> None:
     captured: list[httpx.Request] = []
 
-    async def run() -> GaslessTransactionHandle:
+    async def run() -> TransactionHandle:
         client = await make_deposit_client()
         install_relayer_routes(
             client,

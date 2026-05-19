@@ -59,6 +59,7 @@ from polymarket._internal.actions.orders.types import OrderDraft
 from polymarket._internal.actions.relayer.auth import make_relayer_header_resolver
 from polymarket._internal.actions.relayer.calls import (
     MAX_UINT256,
+    TransactionCall,
     ctf_redeem_positions_call,
     erc20_approval_call,
     erc20_transfer_call,
@@ -71,6 +72,9 @@ from polymarket._internal.actions.relayer.deployed import fetch_deployed
 from polymarket._internal.actions.relayer.gasless import (
     prepare_gasless_transaction,
     submit_deposit_wallet_create,
+)
+from polymarket._internal.actions.relayer.poll import (
+    fetch_gasless_transaction as _fetch_gasless_transaction,
 )
 from polymarket._internal.actions.relayer.positions import (
     derive_neg_risk_redeem_amounts,
@@ -86,6 +90,8 @@ from polymarket._internal.dispatch import (
     async_paginate_offset,
     async_paginate_page_based,
 )
+from polymarket._internal.eoa.broadcast import broadcast_eoa_call
+from polymarket._internal.eoa.rpc import JsonRpcClient
 from polymarket._internal.hmac import build_hmac_signature
 from polymarket._internal.l1_auth import sign_api_key_auth
 from polymarket._internal.streams.handle import AsyncSubscriptionHandle, SubscriptionHandle
@@ -137,7 +143,7 @@ from polymarket.models.clob.cancel import CancelOrdersResponse
 from polymarket.models.clob.market_events import MarketEvent
 from polymarket.models.clob.order_response import OrderResponse
 from polymarket.models.clob.orders import MarketOrderType, SignedOrder
-from polymarket.models.clob.relayer import RelayerTransactionType
+from polymarket.models.clob.relayer import GaslessTransaction, RelayerTransactionType
 from polymarket.models.clob.rewards import (
     CurrentReward,
     MarketReward,
@@ -185,7 +191,11 @@ from polymarket.streams._specs import (
     UserSpec,
     _normalize_specs,
 )
-from polymarket.transactions import GaslessTransactionHandle
+from polymarket.transactions import (
+    EoaTransactionHandle,
+    GaslessTransactionHandle,
+    TransactionHandle,
+)
 from polymarket.types import EvmAddress, HexString
 
 if TYPE_CHECKING:
@@ -278,6 +288,10 @@ class AsyncSecureClient:
             logger=logger,
             header_resolver=relayer_resolver,
         )
+        rpc: JsonRpcClient | None = None
+        if environment.rpc_url is not None:
+            rpc_transport = AsyncTransport(base_url=environment.rpc_url, logger=logger)
+            rpc = JsonRpcClient(rpc_transport)
 
         try:
             resolved_credentials = await _bootstrap_credentials(
@@ -299,6 +313,8 @@ class AsyncSecureClient:
             await data.close()
             await clob.close()
             await relayer.close()
+            if rpc is not None:
+                await rpc.close()
             raise
 
         ctx = AsyncSecureClientContext(
@@ -313,6 +329,7 @@ class AsyncSecureClient:
             wallet_type=wallet_type,
             relayer=relayer,
             api_key=api_key,
+            rpc=rpc,
         )
         return cls(ctx=ctx, _create_token=_CREATE_TOKEN, logger=logger)
 
@@ -503,7 +520,11 @@ class AsyncSecureClient:
                                     try:
                                         await ctx.secure_clob.close()
                                     finally:
-                                        await ctx.relayer.close()
+                                        try:
+                                            await ctx.relayer.close()
+                                        finally:
+                                            if ctx.rpc is not None:
+                                                await ctx.rpc.close()
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user
@@ -1413,7 +1434,7 @@ class AsyncSecureClient:
         spender_address: str,
         amount: int | Literal["max"],
         metadata: str | None = None,
-    ) -> GaslessTransactionHandle:
+    ) -> TransactionHandle:
         try:
             token = cast(EvmAddress, to_checksum_address(token_address))
         except ValueError as error:
@@ -1427,9 +1448,7 @@ class AsyncSecureClient:
         resolved_metadata = (
             metadata if metadata is not None else f"Approve {amount} of {token} to {spender}"
         )
-        return await prepare_gasless_transaction(
-            self._ctx, calls=[call], metadata=resolved_metadata
-        )
+        return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
     async def approve_erc1155_for_all(
         self,
@@ -1438,7 +1457,7 @@ class AsyncSecureClient:
         operator_address: str,
         approved: bool = True,
         metadata: str | None = None,
-    ) -> GaslessTransactionHandle:
+    ) -> TransactionHandle:
         try:
             token = cast(EvmAddress, to_checksum_address(token_address))
         except ValueError as error:
@@ -1452,9 +1471,7 @@ class AsyncSecureClient:
         )
         verb = "Approve" if approved else "Revoke"
         resolved_metadata = metadata if metadata is not None else f"{verb} {operator} on {token}"
-        return await prepare_gasless_transaction(
-            self._ctx, calls=[call], metadata=resolved_metadata
-        )
+        return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
     async def transfer_erc20(
         self,
@@ -1463,7 +1480,7 @@ class AsyncSecureClient:
         recipient_address: str,
         amount: int,
         metadata: str | None = None,
-    ) -> GaslessTransactionHandle:
+    ) -> TransactionHandle:
         try:
             token = cast(EvmAddress, to_checksum_address(token_address))
         except ValueError as error:
@@ -1476,13 +1493,9 @@ class AsyncSecureClient:
         resolved_metadata = (
             metadata if metadata is not None else f"Transfer {amount} of {token} to {recipient}"
         )
-        return await prepare_gasless_transaction(
-            self._ctx, calls=[call], metadata=resolved_metadata
-        )
+        return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
-    async def setup_trading_approvals(
-        self, *, metadata: str | None = None
-    ) -> GaslessTransactionHandle:
+    async def setup_trading_approvals(self, *, metadata: str | None = None) -> TransactionHandle:
         env = self._ctx.environment
         collateral = cast(EvmAddress, env.collateral_token)
         conditional = cast(EvmAddress, env.conditional_tokens)
@@ -1524,6 +1537,11 @@ class AsyncSecureClient:
             ),
         ]
         resolved_metadata = metadata if metadata is not None else "Trading setup approvals"
+        if self._ctx.wallet_type == "EOA":
+            for call in calls[:-1]:
+                handle = await self._broadcast_eoa_call(call)
+                await handle.wait()
+            return await self._broadcast_eoa_call(calls[-1])
         return await prepare_gasless_transaction(self._ctx, calls=calls, metadata=resolved_metadata)
 
     async def deploy_deposit_wallet(
@@ -1564,12 +1582,12 @@ class AsyncSecureClient:
         if not ready:
             handle = await submit_deposit_wallet_create(ctx, metadata="Deploy Deposit Wallet")
             await handle.wait()
-        new_ctx = dataclasses.replace(
+        self._ctx = dataclasses.replace(
             ctx,
             wallet=deposit_address,
             wallet_type="DEPOSIT_WALLET",
         )
-        return type(self)(ctx=new_ctx, _create_token=_CREATE_TOKEN, logger=self._streams_logger)
+        return self
 
     async def is_gasless_ready(self) -> bool:
         wallet_type = self._ctx.wallet_type
@@ -1580,13 +1598,62 @@ class AsyncSecureClient:
             self._ctx.relayer, address=str(self._ctx.wallet), type=type_param
         )
 
+    async def fetch_gasless_transaction(self, *, transaction_id: str) -> GaslessTransaction:
+        return await _fetch_gasless_transaction(self._ctx.relayer, transaction_id=transaction_id)
+
+    async def submit_gasless(
+        self,
+        *,
+        calls: list[TransactionCall],
+        metadata: str | None = None,
+    ) -> GaslessTransactionHandle:
+        resolved_metadata = metadata if metadata is not None else ""
+        return await prepare_gasless_transaction(self._ctx, calls=calls, metadata=resolved_metadata)
+
+    def attach_gasless_handle(
+        self, *, transaction_id: str, transaction_hash: str | None = None
+    ) -> GaslessTransactionHandle:
+        env = self._ctx.environment
+        return GaslessTransactionHandle(
+            transaction_id=transaction_id,
+            transaction_hash=transaction_hash,
+            _relayer=self._ctx.relayer,
+            _max_polls=env.relayer_max_polls,
+            _poll_delay_s=env.relayer_poll_frequency_ms / 1000,
+        )
+
+    async def _broadcast_eoa_call(self, call: TransactionCall) -> EoaTransactionHandle:
+        rpc = self._ctx.rpc
+        if rpc is None:
+            raise UserInputError(
+                "EOA workflows require rpc_url set on the Environment. "
+                "Pass environment=dataclasses.replace(PRODUCTION, rpc_url='...') "
+                "at create(), or use setup_gasless_wallet() to switch to a Deposit Wallet."
+            )
+        env = self._ctx.environment
+        return await broadcast_eoa_call(
+            rpc=rpc,
+            signer=self._ctx.signer,
+            call=call,
+            chain_id=env.chain_id,
+            max_polls=env.relayer_max_polls,
+            poll_delay_s=env.relayer_poll_frequency_ms / 1000,
+        )
+
+    async def _dispatch_single_call(
+        self, call: TransactionCall, *, metadata: str
+    ) -> TransactionHandle:
+        if self._ctx.wallet_type == "EOA":
+            return await self._broadcast_eoa_call(call)
+        return await prepare_gasless_transaction(self._ctx, calls=[call], metadata=metadata)
+
     async def split_position(
         self,
         *,
         condition_id: str,
         amount: int,
         metadata: str | None = None,
-    ) -> GaslessTransactionHandle:
+    ) -> TransactionHandle:
         env = self._ctx.environment
         neg_risk = await self._resolve_market_neg_risk(condition_id)
         target = cast(EvmAddress, env.neg_risk_adapter if neg_risk else env.conditional_tokens)
@@ -1602,9 +1669,7 @@ class AsyncSecureClient:
             if metadata is not None
             else f"Split {amount} positions for condition {condition_id}"
         )
-        return await prepare_gasless_transaction(
-            self._ctx, calls=[call], metadata=resolved_metadata
-        )
+        return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
     async def merge_positions(
         self,
@@ -1612,7 +1677,7 @@ class AsyncSecureClient:
         condition_id: str,
         amount: int | Literal["max"],
         metadata: str | None = None,
-    ) -> GaslessTransactionHandle:
+    ) -> TransactionHandle:
         env = self._ctx.environment
         binary = await self._fetch_binary_positions(condition_id)
         neg_risk = expect_negative_risk_flag(binary)
@@ -1630,9 +1695,7 @@ class AsyncSecureClient:
             if metadata is not None
             else f"Merge {resolved_amount} positions for condition {condition_id}"
         )
-        return await prepare_gasless_transaction(
-            self._ctx, calls=[call], metadata=resolved_metadata
-        )
+        return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
     async def redeem_positions(
         self,
@@ -1640,7 +1703,7 @@ class AsyncSecureClient:
         condition_id: str | None = None,
         market_id: str | None = None,
         metadata: str | None = None,
-    ) -> GaslessTransactionHandle:
+    ) -> TransactionHandle:
         if (condition_id is None) == (market_id is None):
             raise UserInputError("Provide exactly one of condition_id or market_id")
         env = self._ctx.environment
@@ -1667,9 +1730,7 @@ class AsyncSecureClient:
             if metadata is not None
             else f"Redeem positions for condition {resolved_condition_id}"
         )
-        return await prepare_gasless_transaction(
-            self._ctx, calls=[call], metadata=resolved_metadata
-        )
+        return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
     async def _resolve_market_neg_risk(self, condition_id: str) -> bool:
         page = await self.list_markets(condition_ids=[condition_id], page_size=2).first_page()

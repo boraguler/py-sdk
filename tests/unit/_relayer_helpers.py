@@ -70,6 +70,82 @@ async def make_eoa_client(*, with_api_key: bool = True) -> AsyncSecureClient:
     )
 
 
+async def make_eoa_client_with_rpc(
+    *, rpc_handler: Callable[[httpx.Request], httpx.Response]
+) -> AsyncSecureClient:
+    from eth_account import Account
+
+    from polymarket._internal.eoa.rpc import JsonRpcClient
+    from polymarket.environments import PRODUCTION
+
+    env = dataclasses.replace(PRODUCTION, rpc_url="https://rpc.test")
+    signer = Account.from_key(PK_DEPLOY_WALLET)
+    client = await AsyncSecureClient.create(
+        private_key=PK_DEPLOY_WALLET,
+        wallet=signer.address,
+        credentials=FAKE_CREDS,
+        api_key=BUILDER_AUTH,
+        environment=env,
+        validate_credentials=False,
+    )
+    rpc_transport = AsyncTransport(
+        base_url="https://rpc.test",
+        client=httpx.AsyncClient(
+            base_url="https://rpc.test", transport=httpx.MockTransport(rpc_handler)
+        ),
+    )
+    client._ctx = dataclasses.replace(client._ctx, rpc=JsonRpcClient(rpc_transport))
+    return client
+
+
+def make_rpc_handler(
+    *,
+    nonce: int = 7,
+    gas_price: int = 30_000_000_000,
+    gas_estimate: int = 100_000,
+    send_response: str | None = None,
+    receipt_responses: list[dict[str, object] | None] | None = None,
+    chain_id: int = 137,
+) -> Callable[[httpx.Request], httpx.Response]:
+    """Return an RPC handler that responds to standard eth_* JSON-RPC calls."""
+    captured: list[dict[str, object]] = []
+    receipt_iter = iter(receipt_responses or [])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        captured.append(body)
+        method = body["method"]
+        if method == "eth_chainId":
+            result: object = hex(chain_id)
+        elif method == "eth_getTransactionCount":
+            result = hex(nonce)
+        elif method == "eth_gasPrice":
+            result = hex(gas_price)
+        elif method == "eth_estimateGas":
+            result = hex(gas_estimate)
+        elif method == "eth_sendRawTransaction":
+            result = send_response or ("0x" + "ab" * 32)
+        elif method == "eth_getTransactionReceipt":
+            try:
+                result = next(receipt_iter)
+            except StopIteration:
+                result = None
+        else:
+            return httpx.Response(
+                200,
+                json={"jsonrpc": "2.0", "id": body["id"], "error": {"message": "unmocked"}},
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            json={"jsonrpc": "2.0", "id": body["id"], "result": result},
+            request=request,
+        )
+
+    handler.captured = captured  # type: ignore[attr-defined]
+    return handler
+
+
 async def make_safe_client() -> AsyncSecureClient:
     from eth_account import Account
 
@@ -133,7 +209,9 @@ __all__ = [
     "install_relayer_routes",
     "make_deposit_client",
     "make_eoa_client",
+    "make_eoa_client_with_rpc",
     "make_proxy_client",
+    "make_rpc_handler",
     "make_safe_client",
     "request_json",
 ]
