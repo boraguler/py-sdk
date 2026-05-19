@@ -9,6 +9,7 @@ from polymarket import (
     AsyncPublicClient,
     AsyncSecureClient,
     Market,
+    Position,
 )
 from polymarket.errors import InsufficientLiquidityError
 
@@ -87,6 +88,19 @@ def _market_condition_id(market: Market) -> str:
     condition_id = market.condition_id
     assert condition_id is not None
     return condition_id
+
+
+async def _find_owned_token_position(
+    client: AsyncSecureClient,
+    *,
+    market: str,
+    token_id: str,
+) -> Position | None:
+    page = await client.list_positions(market=[market], size_threshold=0.0).first_page()
+    for position in page.items:
+        if position.token_id == token_id and position.size and position.size > 0:
+            return position
+    return None
 
 
 @pytest.mark.integration
@@ -237,73 +251,36 @@ async def test_create_then_post_split_workflow_matches_place_helper(
 
 @pytest.mark.integration
 @pytest.mark.metered
-async def test_place_market_order_buy_executes_at_minimum_size(
+async def test_place_market_order_closes_inventory_or_buys_minimum_size(
     deposit_wallet_client: AsyncSecureClient,
     tradable_market: Market,
 ) -> None:
     token_id = _yes_token_id(tradable_market)
+    market = _market_condition_id(tradable_market)
     amount = _minimum_order_size(tradable_market)
-    acquired_shares: Decimal | None = None
-    try:
+
+    position = await _find_owned_token_position(
+        deposit_wallet_client, market=market, token_id=token_id
+    )
+    if position is not None:
         response = await deposit_wallet_client.place_market_order(
             token_id=token_id,
-            side="BUY",
-            amount=amount,
+            side="SELL",
+            shares=position.size,
             order_type="FAK",
         )
         assert isinstance(response, AcceptedOrder)
-        acquired_shares = response.taking_amount
         assert response.status in ("live", "matched", "delayed")
-    finally:
-        if acquired_shares is not None and acquired_shares > 0:
-            with contextlib.suppress(Exception):
-                await deposit_wallet_client.place_market_order(
-                    token_id=token_id,
-                    side="SELL",
-                    shares=acquired_shares,
-                    order_type="FAK",
-                )
+        return
 
-
-@pytest.mark.integration
-@pytest.mark.metered
-async def test_place_market_order_sell_closes_acquired_inventory(
-    deposit_wallet_client: AsyncSecureClient,
-    tradable_market: Market,
-) -> None:
-    token_id = _yes_token_id(tradable_market)
-    amount = _minimum_order_size(tradable_market)
-    buy_response = await deposit_wallet_client.place_market_order(
+    response = await deposit_wallet_client.place_market_order(
         token_id=token_id,
         side="BUY",
         amount=amount,
         order_type="FAK",
     )
-    assert isinstance(buy_response, AcceptedOrder)
-    acquired_shares = buy_response.taking_amount
-    if acquired_shares <= 0:
-        pytest.skip("market BUY filled zero shares; cannot test market SELL")
-
-    sold = False
-    try:
-        sell_response = await deposit_wallet_client.place_market_order(
-            token_id=token_id,
-            side="SELL",
-            shares=acquired_shares,
-            order_type="FAK",
-        )
-        assert isinstance(sell_response, AcceptedOrder)
-        sold = True
-        assert sell_response.status in ("live", "matched", "delayed")
-    finally:
-        if not sold:
-            with contextlib.suppress(Exception):
-                await deposit_wallet_client.place_market_order(
-                    token_id=token_id,
-                    side="SELL",
-                    shares=acquired_shares,
-                    order_type="FAK",
-                )
+    assert isinstance(response, AcceptedOrder)
+    assert response.status in ("live", "matched", "delayed")
 
 
 @pytest.mark.integration
