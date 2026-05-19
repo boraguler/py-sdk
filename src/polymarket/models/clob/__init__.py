@@ -20,6 +20,11 @@ from polymarket.models.clob.order_response import (
 )
 from polymarket.models.clob.orders import MarketOrderType, OrderType, SignedOrder, TickSize
 from polymarket.models.clob.price_history import PriceHistoryInterval, PriceHistoryPoint
+from polymarket.models.clob.relayer import (
+    GaslessTransaction,
+    RelayerTransactionState,
+    TransactionOutcome,
+)
 from polymarket.models.clob.requests import PriceRequest
 from polymarket.models.clob.rewards import (
     CurrentReward,
@@ -46,6 +51,7 @@ __all__ = [
     "CurrentReward",
     "CurrentRewardConfig",
     "EarningBreakdown",
+    "GaslessTransaction",
     "LastTradePrice",
     "LastTradePriceForToken",
     "MakerOrder",
@@ -65,10 +71,12 @@ __all__ = [
     "PriceHistoryPoint",
     "PriceRequest",
     "RejectedOrder",
+    "RelayerTransactionState",
     "RewardsPercentages",
     "SignedOrder",
     "TickSize",
     "TotalUserEarning",
+    "TransactionOutcome",
     "UserEarning",
     "UserRewardsConfig",
     "UserRewardsEarning",

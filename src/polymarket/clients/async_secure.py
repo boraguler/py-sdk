@@ -4,7 +4,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self, TypeAlias, assert_never, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, Self, TypeAlias, assert_never, cast, overload
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -55,6 +55,12 @@ from polymarket._internal.actions.orders.typed_data import (
     build_order_typed_data,
 )
 from polymarket._internal.actions.orders.types import OrderDraft
+from polymarket._internal.actions.relayer.auth import make_relayer_header_resolver
+from polymarket._internal.actions.relayer.calls import (
+    MAX_UINT256,
+    erc20_approval_call,
+)
+from polymarket._internal.actions.relayer.gasless import prepare_gasless_transaction
 from polymarket._internal.context import AsyncSecureClientContext
 from polymarket._internal.dispatch import (
     async_dispatch,
@@ -66,6 +72,7 @@ from polymarket._internal.hmac import build_hmac_signature
 from polymarket._internal.l1_auth import sign_api_key_auth
 from polymarket._internal.streams.handle import AsyncSubscriptionHandle, SubscriptionHandle
 from polymarket._internal.wallet import WalletType, classify_wallet_type, signature_type_for
+from polymarket.auth import ApiKey
 from polymarket.clients._transport import AsyncTransport
 from polymarket.clients.async_public import AsyncPublicClient
 from polymarket.environments import PRODUCTION, Environment
@@ -149,6 +156,7 @@ from polymarket.streams._specs import (
     UserSpec,
     _normalize_specs,
 )
+from polymarket.transactions import GaslessTransactionHandle
 from polymarket.types import EvmAddress, HexString
 
 if TYPE_CHECKING:
@@ -202,6 +210,7 @@ class AsyncSecureClient:
         wallet: str,
         environment: Environment = PRODUCTION,
         credentials: ApiKeyCreds | None = None,
+        api_key: ApiKey | None = None,
         nonce: int = 0,
         validate_credentials: bool = True,
         logger: logging.Logger | None = None,
@@ -234,6 +243,12 @@ class AsyncSecureClient:
         gamma = AsyncTransport(base_url=environment.gamma_url, logger=logger)
         data = AsyncTransport(base_url=environment.data_url, logger=logger)
         clob = AsyncTransport(base_url=environment.clob_url, logger=logger)
+        relayer_resolver = make_relayer_header_resolver(api_key) if api_key is not None else None
+        relayer = AsyncTransport(
+            base_url=environment.relayer_url,
+            logger=logger,
+            header_resolver=relayer_resolver,
+        )
 
         try:
             resolved_credentials = await _bootstrap_credentials(
@@ -254,6 +269,7 @@ class AsyncSecureClient:
             await gamma.close()
             await data.close()
             await clob.close()
+            await relayer.close()
             raise
 
         ctx = AsyncSecureClientContext(
@@ -266,6 +282,8 @@ class AsyncSecureClient:
             secure_clob=secure_clob,
             wallet=branded_wallet,
             wallet_type=wallet_type,
+            relayer=relayer,
+            api_key=api_key,
         )
         return cls(ctx=ctx, _create_token=_CREATE_TOKEN, logger=logger)
 
@@ -453,7 +471,10 @@ class AsyncSecureClient:
                                 try:
                                     await ctx.clob.close()
                                 finally:
-                                    await ctx.secure_clob.close()
+                                    try:
+                                        await ctx.secure_clob.close()
+                                    finally:
+                                        await ctx.relayer.close()
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user
@@ -1355,6 +1376,31 @@ class AsyncSecureClient:
         from polymarket._internal.actions.orders.market_data import fetch_builder_fee_rates
 
         return await fetch_builder_fee_rates(self._ctx, builder_code=builder_code)
+
+    async def approve_erc20(
+        self,
+        *,
+        token_address: str,
+        spender_address: str,
+        amount: int | Literal["max"],
+        metadata: str | None = None,
+    ) -> GaslessTransactionHandle:
+        try:
+            token = cast(EvmAddress, to_checksum_address(token_address))
+        except ValueError as error:
+            raise UserInputError(f"Invalid token_address: {error}") from error
+        try:
+            spender = cast(EvmAddress, to_checksum_address(spender_address))
+        except ValueError as error:
+            raise UserInputError(f"Invalid spender_address: {error}") from error
+        resolved_amount = MAX_UINT256 if amount == "max" else amount
+        call = erc20_approval_call(token_address=token, spender=spender, amount=resolved_amount)
+        resolved_metadata = (
+            metadata if metadata is not None else f"Approve {amount} of {token} to {spender}"
+        )
+        return await prepare_gasless_transaction(
+            self._ctx, calls=[call], metadata=resolved_metadata
+        )
 
     async def post_order(self, signed_order: SignedOrder) -> OrderResponse:
         path, payload = _post_actions.build_post_order_request(

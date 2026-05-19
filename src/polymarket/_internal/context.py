@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from eth_account.signers.local import LocalAccount
 
 from polymarket._internal.wallet import WalletType
+from polymarket.auth import ApiKey
 from polymarket.clients._transport import AsyncTransport, SyncTransport
 from polymarket.environments import Environment
 from polymarket.models.clob import ApiKeyCreds
@@ -39,6 +40,8 @@ class AsyncSecureClientContext(AsyncClientContext):
     secure_clob: AsyncTransport
     wallet: EvmAddress
     wallet_type: WalletType
+    relayer: AsyncTransport
+    api_key: ApiKey | None
 
 
 __all__ = [
