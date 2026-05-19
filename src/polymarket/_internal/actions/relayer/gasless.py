@@ -234,4 +234,33 @@ async def _submit_safe(
     return await submit_gasless(ctx.relayer, payload=payload)
 
 
-__all__ = ["prepare_gasless_transaction"]
+async def submit_deposit_wallet_create(
+    ctx: AsyncSecureClientContext,
+    *,
+    metadata: str = "",
+) -> GaslessTransactionHandle:
+    if ctx.api_key is None:
+        raise UserInputError(
+            "Gasless transactions require a Builder API Key or Relayer API Key. "
+            "Pass api_key= when constructing the client."
+        )
+    if len(metadata) > _METADATA_MAX_LENGTH:
+        raise UserInputError(f"metadata must be at most {_METADATA_MAX_LENGTH} characters")
+    payload = {
+        "type": RelayerTransactionType.WALLET_CREATE.value,
+        "from": ctx.signer.address,
+        "to": ctx.environment.wallet_derivation.deposit_wallet_factory,
+        "metadata": metadata,
+    }
+    response = await submit_gasless(ctx.relayer, payload=payload)
+    env = ctx.environment
+    return GaslessTransactionHandle(
+        transaction_id=response.transaction_id,
+        transaction_hash=response.transaction_hash,
+        _relayer=ctx.relayer,
+        _max_polls=env.relayer_max_polls,
+        _poll_delay_s=env.relayer_poll_frequency_ms / 1000,
+    )
+
+
+__all__ = ["prepare_gasless_transaction", "submit_deposit_wallet_create"]

@@ -57,6 +57,19 @@ async def make_proxy_client() -> AsyncSecureClient:
     )
 
 
+async def make_eoa_client(*, with_api_key: bool = True) -> AsyncSecureClient:
+    from eth_account import Account
+
+    signer = Account.from_key(PK_DEPLOY_WALLET)
+    return await AsyncSecureClient.create(
+        private_key=PK_DEPLOY_WALLET,
+        wallet=signer.address,
+        credentials=FAKE_CREDS,
+        api_key=BUILDER_AUTH if with_api_key else None,
+        validate_credentials=False,
+    )
+
+
 async def make_safe_client() -> AsyncSecureClient:
     from eth_account import Account
 
@@ -119,6 +132,7 @@ __all__ = [
     "install_relayer_handler",
     "install_relayer_routes",
     "make_deposit_client",
+    "make_eoa_client",
     "make_proxy_client",
     "make_safe_client",
     "request_json",

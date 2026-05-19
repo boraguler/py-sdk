@@ -69,6 +69,7 @@ def _env_with(
         neg_risk_adapter=PRODUCTION.neg_risk_adapter,
         standard_exchange=PRODUCTION.standard_exchange,
         neg_risk_exchange=PRODUCTION.neg_risk_exchange,
+        auto_redeem_operator=PRODUCTION.auto_redeem_operator,
         safe_multisend=PRODUCTION.safe_multisend,
         relay_hub=PRODUCTION.relay_hub,
         clob_url=PRODUCTION.clob_url,

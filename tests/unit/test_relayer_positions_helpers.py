@@ -1,0 +1,197 @@
+from decimal import Decimal
+
+import pytest
+
+from polymarket._internal.actions.relayer.positions import (
+    calculate_max_merge_amount,
+    derive_neg_risk_redeem_amounts,
+    expect_binary_positions,
+    expect_negative_risk_flag,
+    resolve_binary_positions_condition_id,
+    resolve_merge_amount,
+)
+from polymarket.errors import UnexpectedResponseError, UserInputError
+from polymarket.models.data.portfolio import Position
+
+_CONDITION_ID = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+
+def _pos(
+    *,
+    outcome_index: int | None,
+    size: Decimal | None = None,
+    negative_risk: bool | None = False,
+    condition_id: str = _CONDITION_ID,
+) -> Position:
+    return Position.parse_response(
+        {
+            "conditionId": condition_id,
+            "outcomeIndex": outcome_index,
+            "size": str(size) if size is not None else None,
+            "negativeRisk": negative_risk,
+        }
+    )
+
+
+def test_expect_binary_positions_returns_yes_no_tuple() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("10.5"))
+    no_pos = _pos(outcome_index=1, size=Decimal("5.0"))
+    yes, no = expect_binary_positions([yes_pos, no_pos])
+    assert yes is yes_pos
+    assert no is no_pos
+
+
+def test_expect_binary_positions_handles_only_yes() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("10"))
+    yes, no = expect_binary_positions([yes_pos])
+    assert yes is yes_pos
+    assert no is None
+
+
+def test_expect_binary_positions_handles_only_no() -> None:
+    no_pos = _pos(outcome_index=1, size=Decimal("10"))
+    yes, no = expect_binary_positions([no_pos])
+    assert yes is None
+    assert no is no_pos
+
+
+def test_expect_binary_positions_rejects_empty() -> None:
+    with pytest.raises(UserInputError, match="no positions"):
+        expect_binary_positions([])
+
+
+def test_expect_binary_positions_rejects_too_many() -> None:
+    with pytest.raises(UnexpectedResponseError, match="at most two"):
+        expect_binary_positions(
+            [
+                _pos(outcome_index=0),
+                _pos(outcome_index=1),
+                _pos(outcome_index=0),
+            ]
+        )
+
+
+def test_expect_binary_positions_rejects_invalid_outcome_index() -> None:
+    with pytest.raises(UnexpectedResponseError, match="Unexpected outcomeIndex"):
+        expect_binary_positions([_pos(outcome_index=2)])
+
+
+def test_expect_binary_positions_rejects_duplicate_yes() -> None:
+    with pytest.raises(UnexpectedResponseError, match="Duplicate YES"):
+        expect_binary_positions([_pos(outcome_index=0), _pos(outcome_index=0)])
+
+
+def test_expect_negative_risk_flag_returns_flag() -> None:
+    yes_pos = _pos(outcome_index=0, negative_risk=True)
+    no_pos = _pos(outcome_index=1, negative_risk=True)
+    assert expect_negative_risk_flag((yes_pos, no_pos)) is True
+
+
+def test_expect_negative_risk_flag_works_with_single_position() -> None:
+    yes_pos = _pos(outcome_index=0, negative_risk=False)
+    assert expect_negative_risk_flag((yes_pos, None)) is False
+
+
+def test_expect_negative_risk_flag_rejects_missing_flag() -> None:
+    yes_pos = _pos(outcome_index=0, negative_risk=None)
+    with pytest.raises(UnexpectedResponseError, match="Missing negativeRisk"):
+        expect_negative_risk_flag((yes_pos, None))
+
+
+def test_expect_negative_risk_flag_rejects_mixed_flags() -> None:
+    yes_pos = _pos(outcome_index=0, negative_risk=True)
+    no_pos = _pos(outcome_index=1, negative_risk=False)
+    with pytest.raises(UnexpectedResponseError, match="Mixed negativeRisk"):
+        expect_negative_risk_flag((yes_pos, no_pos))
+
+
+def test_derive_neg_risk_redeem_amounts_converts_to_base_units() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("111.0"))
+    no_pos = _pos(outcome_index=1, size=Decimal("0"))
+    amounts = derive_neg_risk_redeem_amounts((yes_pos, no_pos))
+    assert amounts == (111_000_000, 0)
+
+
+def test_derive_neg_risk_redeem_amounts_none_size_is_zero() -> None:
+    yes_pos = _pos(outcome_index=0, size=None)
+    no_pos = _pos(outcome_index=1, size=Decimal("3.5"))
+    amounts = derive_neg_risk_redeem_amounts((yes_pos, no_pos))
+    assert amounts == (0, 3_500_000)
+
+
+def test_derive_neg_risk_redeem_amounts_missing_outcome_is_zero() -> None:
+    no_pos = _pos(outcome_index=1, size=Decimal("3.5"))
+    amounts = derive_neg_risk_redeem_amounts((None, no_pos))
+    assert amounts == (0, 3_500_000)
+
+
+def test_calculate_max_merge_amount_takes_min() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("100"))
+    no_pos = _pos(outcome_index=1, size=Decimal("60"))
+    assert calculate_max_merge_amount((yes_pos, no_pos)) == 60_000_000
+
+
+def test_calculate_max_merge_amount_zero_when_single_side() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("100"))
+    assert calculate_max_merge_amount((yes_pos, None)) == 0
+
+
+def test_resolve_merge_amount_max_returns_max() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("100"))
+    no_pos = _pos(outcome_index=1, size=Decimal("60"))
+    assert resolve_merge_amount((yes_pos, no_pos), "max") == 60_000_000
+
+
+def test_resolve_merge_amount_accepts_value_below_max() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("100"))
+    no_pos = _pos(outcome_index=1, size=Decimal("60"))
+    assert resolve_merge_amount((yes_pos, no_pos), 30_000_000) == 30_000_000
+
+
+def test_resolve_merge_amount_rejects_above_max() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("100"))
+    no_pos = _pos(outcome_index=1, size=Decimal("60"))
+    with pytest.raises(UserInputError, match="exceeds the maximum"):
+        resolve_merge_amount((yes_pos, no_pos), 70_000_000)
+
+
+def test_resolve_merge_amount_rejects_zero() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("100"))
+    no_pos = _pos(outcome_index=1, size=Decimal("60"))
+    with pytest.raises(UserInputError, match="positive"):
+        resolve_merge_amount((yes_pos, no_pos), 0)
+
+
+def test_resolve_merge_amount_rejects_when_no_complementary() -> None:
+    yes_pos = _pos(outcome_index=0, size=Decimal("100"))
+    with pytest.raises(UserInputError, match="no complementary"):
+        resolve_merge_amount((yes_pos, None), "max")
+
+
+def test_resolve_binary_positions_condition_id_returns_first_present() -> None:
+    no_pos = _pos(outcome_index=1, condition_id=_CONDITION_ID)
+    assert resolve_binary_positions_condition_id((None, no_pos)) == _CONDITION_ID
+
+
+def test_derive_neg_risk_redeem_amounts_rejects_non_finite_size() -> None:
+    yes_pos = Position.model_construct(
+        condition_id=_CONDITION_ID,
+        outcome_index=0,
+        size=Decimal("NaN"),
+        negative_risk=True,
+    )
+    no_pos = _pos(outcome_index=1, size=Decimal("0"), negative_risk=True)
+    with pytest.raises(UnexpectedResponseError, match="finite number"):
+        derive_neg_risk_redeem_amounts((yes_pos, no_pos))
+
+
+def test_derive_neg_risk_redeem_amounts_rejects_infinity() -> None:
+    yes_pos = Position.model_construct(
+        condition_id=_CONDITION_ID,
+        outcome_index=0,
+        size=Decimal("Infinity"),
+        negative_risk=True,
+    )
+    no_pos = _pos(outcome_index=1, size=Decimal("0"), negative_risk=True)
+    with pytest.raises(UnexpectedResponseError, match="finite number"):
+        derive_neg_risk_redeem_amounts((yes_pos, no_pos))
