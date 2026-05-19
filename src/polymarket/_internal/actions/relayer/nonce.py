@@ -17,4 +17,17 @@ async def fetch_execute_params(
     return RelayerExecuteParams.parse_response(data)
 
 
-__all__ = ["fetch_execute_params"]
+async def fetch_relay_payload(
+    relayer: AsyncTransport,
+    *,
+    address: str,
+    type: RelayerTransactionType,
+) -> RelayerExecuteParams:
+    data = await relayer.get_json(
+        "/relay-payload",
+        params={"address": address, "type": type.value},
+    )
+    return RelayerExecuteParams.parse_response(data)
+
+
+__all__ = ["fetch_execute_params", "fetch_relay_payload"]

@@ -9,7 +9,10 @@ from polymarket._internal.actions.relayer.calls import (
     encode_proxy_call,
     encode_safe_multisend_call,
 )
-from polymarket._internal.actions.relayer.nonce import fetch_execute_params
+from polymarket._internal.actions.relayer.nonce import (
+    fetch_execute_params,
+    fetch_relay_payload,
+)
 from polymarket._internal.actions.relayer.signing.deposit_wallet import (
     sign_deposit_wallet_batch,
 )
@@ -36,7 +39,7 @@ _DEPOSIT_WALLET_DEADLINE_S = 600
 _ZERO_ADDRESS: EvmAddress = EvmAddress("0x0000000000000000000000000000000000000000")
 _PROXY_RELAYER_FEE = "0"
 _PROXY_GAS_PRICE = "0"
-_PROXY_GAS_LIMIT = "10000000"
+_PROXY_DEFAULT_GAS_LIMIT = "1500000"
 _SAFE_OPERATION_CALL = 0
 _SAFE_OPERATION_DELEGATECALL = 1
 _METADATA_MAX_LENGTH = 500
@@ -143,21 +146,25 @@ async def _submit_proxy(
     calls: list[TransactionCall],
     metadata: str,
 ) -> RelayerExecuteResponse:
-    params = await fetch_execute_params(
+    params = await fetch_relay_payload(
         ctx.relayer, address=ctx.signer.address, type=RelayerTransactionType.PROXY
     )
     to = ctx.environment.wallet_derivation.proxy_factory
     data = encode_proxy_call(calls)
+    relay = EvmAddress(params.address)
+    gas_limit = await _estimate_proxy_gas_limit(
+        ctx, from_address=ctx.signer.address, to=to, data=data
+    )
     hash_ = build_proxy_transaction_hash(
         from_address=EvmAddress(ctx.signer.address),
         to=EvmAddress(to),
         data=data,
         relayer_fee=_PROXY_RELAYER_FEE,
         gas_price=_PROXY_GAS_PRICE,
-        gas_limit=_PROXY_GAS_LIMIT,
+        gas_limit=gas_limit,
         nonce=params.nonce,
         relay_hub=EvmAddress(ctx.environment.relay_hub),
-        relay=_ZERO_ADDRESS,
+        relay=relay,
     )
     signature = sign_proxy_message(ctx.signer, hash_)
     payload = {
@@ -170,14 +177,32 @@ async def _submit_proxy(
         "signature": signature,
         "metadata": metadata,
         "signatureParams": {
-            "gasLimit": _PROXY_GAS_LIMIT,
+            "gasLimit": gas_limit,
             "gasPrice": _PROXY_GAS_PRICE,
-            "relay": str(_ZERO_ADDRESS),
+            "relay": str(relay),
             "relayHub": ctx.environment.relay_hub,
             "relayerFee": _PROXY_RELAYER_FEE,
         },
     }
     return await submit_gasless(ctx.relayer, payload=payload)
+
+
+async def _estimate_proxy_gas_limit(
+    ctx: AsyncSecureClientContext,
+    *,
+    from_address: str,
+    to: str,
+    data: str,
+) -> str:
+    if ctx.rpc is None:
+        return _PROXY_DEFAULT_GAS_LIMIT
+    try:
+        estimated = await ctx.rpc.eth_estimate_gas(
+            {"from": from_address, "to": to, "data": data}
+        )
+    except Exception:
+        return _PROXY_DEFAULT_GAS_LIMIT
+    return str(estimated)
 
 
 async def _submit_safe(
