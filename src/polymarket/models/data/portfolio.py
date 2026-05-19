@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
-from polymarket.models.gamma.common import parse_epoch_seconds_optional, parse_optional_decimal
+from polymarket.models.gamma.common import (
+    parse_epoch_seconds_optional,
+    parse_optional_date,
+    parse_optional_decimal,
+)
 from polymarket.models.types import ConditionId, TokenId
 from polymarket.types import EvmAddress
 
@@ -51,7 +55,7 @@ class Position(BaseModel):
     outcome_index: int | None = Field(default=None, validation_alias="outcomeIndex")
     opposite_outcome: str | None = Field(default=None, validation_alias="oppositeOutcome")
     opposite_token_id: TokenId | None = Field(default=None, validation_alias="oppositeAsset")
-    end_date: str | None = Field(default=None, validation_alias="endDate")
+    end_date: date | None = Field(default=None, validation_alias="endDate")
     negative_risk: bool | None = Field(default=None, validation_alias="negativeRisk")
 
     @field_validator(
@@ -68,6 +72,11 @@ class Position(BaseModel):
     @classmethod
     def _parse_decimal(cls, value: object) -> Decimal | None:
         return parse_optional_decimal(value)
+
+    @field_validator("end_date", mode="before")
+    @classmethod
+    def _parse_end_date(cls, value: object) -> date | None:
+        return parse_optional_date(value)
 
 
 class ClosedPosition(BaseModel):
@@ -87,7 +96,7 @@ class ClosedPosition(BaseModel):
     outcome_index: int | None = Field(default=None, validation_alias="outcomeIndex")
     opposite_outcome: str | None = Field(default=None, validation_alias="oppositeOutcome")
     opposite_token_id: TokenId | None = Field(default=None, validation_alias="oppositeAsset")
-    end_date: str | None = Field(default=None, validation_alias="endDate")
+    end_date: date | None = Field(default=None, validation_alias="endDate")
 
     @field_validator(
         "avg_price",
@@ -104,6 +113,11 @@ class ClosedPosition(BaseModel):
     @classmethod
     def _parse_timestamp(cls, value: object) -> datetime | None:
         return parse_epoch_seconds_optional(value)
+
+    @field_validator("end_date", mode="before")
+    @classmethod
+    def _parse_end_date(cls, value: object) -> date | None:
+        return parse_optional_date(value)
 
 
 __all__ = ["ClosedPosition", "PortfolioValue", "Position", "TradedMarketCount"]

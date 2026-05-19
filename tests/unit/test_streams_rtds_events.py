@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -139,8 +140,8 @@ def test_comment_removed_parses_full_payload_mirroring_ts() -> None:
     assert p.parent_comment_id == "pc-1"
     assert p.user_address == "0xabc"
     assert p.reply_address == "0xdef"
-    assert p.created_at == "2024-03-09T00:00:00Z"
-    assert p.updated_at == "2024-03-10T00:00:00Z"
+    assert p.created_at == datetime(2024, 3, 9, tzinfo=UTC)
+    assert p.updated_at == datetime(2024, 3, 10, tzinfo=UTC)
     assert p.report_count == 2  # noqa: PLR2004
     assert p.reaction_count == 5  # noqa: PLR2004
     assert p.trade_asset == "asset-1"

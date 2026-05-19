@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
 
@@ -17,6 +17,7 @@ from polymarket.models.gamma.common import (
     Team,
     coerce_string_id,
     parse_dicts,
+    parse_optional_date,
     parse_optional_datetime,
     parse_optional_decimal,
     parse_sequence,
@@ -68,7 +69,7 @@ class EventSchedule(BaseModel):
     end_date: datetime | None = Field(default=None, validation_alias="endDate")
     closed_time: datetime | None = Field(default=None, validation_alias="closedTime")
     start_time: datetime | None = Field(default=None, validation_alias="startTime")
-    event_date: str | None = Field(default=None, validation_alias="eventDate")
+    event_date: date | None = Field(default=None, validation_alias="eventDate")
     event_week: int | None = Field(default=None, validation_alias="eventWeek")
     finished_at: datetime | None = Field(default=None, validation_alias="finishedAt")
 
@@ -84,6 +85,11 @@ class EventSchedule(BaseModel):
     @classmethod
     def _parse_datetime(cls, value: object) -> datetime | None:
         return parse_optional_datetime(value)
+
+    @field_validator("event_date", mode="before")
+    @classmethod
+    def _parse_event_date(cls, value: object) -> date | None:
+        return parse_optional_date(value)
 
 
 class EventMetrics(BaseModel):

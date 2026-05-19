@@ -1,5 +1,6 @@
 from collections.abc import Callable, Sequence
-from typing import Any, Literal, TypeVar, cast
+from datetime import date, datetime
+from typing import Any, Literal, TypeAlias, TypeVar, cast
 
 from polymarket._internal.gamma_paths import (
     build_comment_thread_path,
@@ -93,6 +94,35 @@ def _add_optional(
 ) -> None:
     if value is not None:
         params[key] = value
+
+
+DateFilter: TypeAlias = str | date
+TimestampFilter: TypeAlias = str | datetime
+
+
+def _coerce_date_filter(value: DateFilter | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, datetime):  # pyright: ignore[reportUnnecessaryIsInstance]
+        msg = "expected str or date for a date filter; got datetime (use a *_time_* filter instead)"
+        raise UserInputError(msg)
+    if not isinstance(value, date):  # pyright: ignore[reportUnnecessaryIsInstance]
+        msg = f"expected str or date; got {type(value).__name__}"
+        raise UserInputError(msg)
+    return value.isoformat()
+
+
+def _coerce_timestamp_filter(value: TimestampFilter | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str | datetime):  # pyright: ignore[reportUnnecessaryIsInstance]
+        msg = f"expected str or datetime; got {type(value).__name__}"
+        raise UserInputError(msg)
+    if isinstance(value, str):
+        return value
+    return value.isoformat()
 
 
 def _add_optional_seq(
@@ -309,8 +339,10 @@ def get_comment_thread_spec(
 
 __all__ = [
     "CommentParentEntityType",
+    "DateFilter",
     "Recurrence",
     "TagMatch",
+    "TimestampFilter",
     "get_comment_thread_spec",
     "get_event_spec",
     "get_event_tags_spec",
@@ -339,10 +371,10 @@ def list_events_spec(
     ascending: bool | None = None,
     closed: bool | None = None,
     cyom: bool | None = None,
-    end_date_max: str | None = None,
-    end_date_min: str | None = None,
+    end_date_max: TimestampFilter | None = None,
+    end_date_min: TimestampFilter | None = None,
     ended: bool | None = None,
-    event_date: str | None = None,
+    event_date: DateFilter | None = None,
     event_week: int | None = None,
     exclude_tag_ids: int | Sequence[int] | None = None,
     featured: bool | None = None,
@@ -364,10 +396,10 @@ def list_events_spec(
     related_tags: bool | None = None,
     series_ids: int | Sequence[int] | None = None,
     slug: str | Sequence[str] | None = None,
-    start_date_max: str | None = None,
-    start_date_min: str | None = None,
-    start_time_max: str | None = None,
-    start_time_min: str | None = None,
+    start_date_max: TimestampFilter | None = None,
+    start_date_min: TimestampFilter | None = None,
+    start_time_max: TimestampFilter | None = None,
+    start_time_min: TimestampFilter | None = None,
     tag_ids: int | Sequence[int] | None = None,
     tag_match: TagMatch | None = None,
     tag_slug: str | None = None,
@@ -382,10 +414,10 @@ def list_events_spec(
     _add_optional(params, "ascending", ascending)
     _add_optional(params, "closed", closed)
     _add_optional(params, "cyom", cyom)
-    _add_optional(params, "end_date_max", end_date_max)
-    _add_optional(params, "end_date_min", end_date_min)
+    _add_optional(params, "end_date_max", _coerce_timestamp_filter(end_date_max))
+    _add_optional(params, "end_date_min", _coerce_timestamp_filter(end_date_min))
     _add_optional(params, "ended", ended)
-    _add_optional(params, "event_date", event_date)
+    _add_optional(params, "event_date", _coerce_date_filter(event_date))
     _add_optional(params, "event_week", event_week)
     _add_optional_seq(params, "exclude_tag_id", exclude_tag_ids)
     _add_optional(params, "featured", featured)
@@ -407,10 +439,10 @@ def list_events_spec(
     _add_optional(params, "related_tags", related_tags)
     _add_optional_seq(params, "series_id", series_ids)
     _add_optional_seq(params, "slug", slug)
-    _add_optional(params, "start_date_max", start_date_max)
-    _add_optional(params, "start_date_min", start_date_min)
-    _add_optional(params, "start_time_max", start_time_max)
-    _add_optional(params, "start_time_min", start_time_min)
+    _add_optional(params, "start_date_max", _coerce_timestamp_filter(start_date_max))
+    _add_optional(params, "start_date_min", _coerce_timestamp_filter(start_date_min))
+    _add_optional(params, "start_time_max", _coerce_timestamp_filter(start_time_max))
+    _add_optional(params, "start_time_min", _coerce_timestamp_filter(start_time_min))
     _add_optional_seq(params, "tag_id", tag_ids)
     _add_optional(params, "tag_match", tag_match)
     _add_optional(params, "tag_slug", tag_slug)
@@ -434,8 +466,8 @@ def list_markets_spec(
     condition_ids: str | Sequence[str] | None = None,
     cyom: bool | None = None,
     decimalized: bool | None = None,
-    end_date_max: str | None = None,
-    end_date_min: str | None = None,
+    end_date_max: TimestampFilter | None = None,
+    end_date_min: TimestampFilter | None = None,
     game_id: str | None = None,
     ids: int | Sequence[int] | None = None,
     include_tag: bool | None = None,
@@ -450,8 +482,8 @@ def list_markets_spec(
     rewards_min_size: float | None = None,
     slug: str | Sequence[str] | None = None,
     sports_market_types: str | Sequence[str] | None = None,
-    start_date_max: str | None = None,
-    start_date_min: str | None = None,
+    start_date_max: TimestampFilter | None = None,
+    start_date_min: TimestampFilter | None = None,
     tag_id: int | None = None,
     tag_match: TagMatch | None = None,
     uma_resolution_status: str | None = None,
@@ -467,8 +499,8 @@ def list_markets_spec(
     _add_optional_seq(params, "condition_ids", condition_ids)
     _add_optional(params, "cyom", cyom)
     _add_optional(params, "decimalized", decimalized)
-    _add_optional(params, "end_date_max", end_date_max)
-    _add_optional(params, "end_date_min", end_date_min)
+    _add_optional(params, "end_date_max", _coerce_timestamp_filter(end_date_max))
+    _add_optional(params, "end_date_min", _coerce_timestamp_filter(end_date_min))
     _add_optional(params, "game_id", game_id)
     _add_optional_seq(params, "id", ids)
     _add_optional(params, "include_tag", include_tag)
@@ -483,8 +515,8 @@ def list_markets_spec(
     _add_optional(params, "rewards_min_size", rewards_min_size)
     _add_optional_seq(params, "slug", slug)
     _add_optional_seq(params, "sports_market_types", sports_market_types)
-    _add_optional(params, "start_date_max", start_date_max)
-    _add_optional(params, "start_date_min", start_date_min)
+    _add_optional(params, "start_date_max", _coerce_timestamp_filter(start_date_max))
+    _add_optional(params, "start_date_min", _coerce_timestamp_filter(start_date_min))
     _add_optional(params, "tag_id", tag_id)
     _add_optional(params, "tag_match", tag_match)
     _add_optional(params, "uma_resolution_status", uma_resolution_status)

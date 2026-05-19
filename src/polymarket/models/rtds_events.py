@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import Any, Literal, cast
 
-from pydantic import Field, TypeAdapter, model_validator
+from pydantic import Field, TypeAdapter, field_validator, model_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.clob._validators import DecimalishString, EpochMsOrIsoTimestamp
@@ -10,6 +11,7 @@ from polymarket.models.gamma.comment import (
     CommentProfile,
     Reaction,
 )
+from polymarket.models.gamma.common import parse_optional_datetime
 
 _WIRE_TO_API_TOPIC: dict[str, str] = {
     "comments": "comments",
@@ -39,14 +41,19 @@ class CommentRemovedPayload(BaseModel):
     parent_comment_id: str | None = Field(default=None, validation_alias="parentCommentID")
     user_address: str | None = Field(default=None, validation_alias="userAddress")
     reply_address: str | None = Field(default=None, validation_alias="replyAddress")
-    created_at: str | None = Field(default=None, validation_alias="createdAt")
-    updated_at: str | None = Field(default=None, validation_alias="updatedAt")
+    created_at: datetime | None = Field(default=None, validation_alias="createdAt")
+    updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
     media: tuple[CommentMedia, ...] | None = None
     profile: CommentProfile | None = None
     reactions: tuple[Reaction, ...] | None = None
     report_count: int | None = Field(default=None, validation_alias="reportCount")
     reaction_count: int | None = Field(default=None, validation_alias="reactionCount")
     trade_asset: str | None = Field(default=None, validation_alias="tradeAsset")
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _parse_datetime(cls, value: object) -> datetime | None:
+        return parse_optional_datetime(value)
 
 
 class CommentCreatedEvent(BaseModel):
