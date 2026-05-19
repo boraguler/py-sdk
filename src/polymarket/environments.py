@@ -50,7 +50,7 @@ PRODUCTION = Environment(
         deposit_wallet_factory="0x00000000000Fb5C9ADea0298D729A0CB3823Cc07",
         deposit_wallet_implementation="0x58CA52ebe0DadfdF531Cde7062e76746de4Db1eB",
     ),
-    collateral_token="0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+    collateral_token="0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
     conditional_tokens="0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
     neg_risk_adapter="0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296",
     standard_exchange="0xE111180000d2663C0091e4f400237545B87B996B",
