@@ -19,28 +19,6 @@ from polymarket.environments import PRODUCTION
 from polymarket.errors import UserInputError
 
 
-def test_supports_gasless_true_when_api_key_set() -> None:
-    async def run() -> bool:
-        client = await make_deposit_client()
-        try:
-            return client.supports_gasless
-        finally:
-            await client.close()
-
-    assert asyncio.run(run()) is True
-
-
-def test_supports_gasless_false_when_no_api_key() -> None:
-    async def run() -> bool:
-        client = await make_eoa_client(with_api_key=False)
-        try:
-            return client.supports_gasless
-        finally:
-            await client.close()
-
-    assert asyncio.run(run()) is False
-
-
 def test_setup_gasless_wallet_rejects_when_no_api_key() -> None:
     async def run() -> None:
         client = await make_eoa_client(with_api_key=False)

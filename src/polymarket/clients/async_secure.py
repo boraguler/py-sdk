@@ -1541,10 +1541,6 @@ class AsyncSecureClient:
             return await self._broadcast_eoa_call(calls[-1])
         return await prepare_gasless_transaction(self._ctx, calls=calls, metadata=resolved_metadata)
 
-    @property
-    def supports_gasless(self) -> bool:
-        return self._ctx.api_key is not None
-
     async def setup_gasless_wallet(self) -> Self:
         ctx = self._ctx
         if ctx.api_key is None:
