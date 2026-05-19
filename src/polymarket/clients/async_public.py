@@ -7,6 +7,7 @@ from decimal import Decimal
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self, assert_never, cast, overload
 
+from polymarket._internal.actions import builders as _builders_actions
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
@@ -65,6 +66,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
+from polymarket.models.clob.builder import BuilderTrade
 from polymarket.models.clob.market_events import MarketEvent
 from polymarket.models.clob.rewards import CurrentReward, MarketReward
 from polymarket.models.data import (
@@ -448,6 +450,31 @@ class AsyncPublicClient:
         return await async_dispatch(
             self._ctx, _data_actions.get_builder_volumes_spec(time_period=time_period)
         )
+
+    def list_builder_trades(
+        self,
+        *,
+        builder_code: str,
+        market: str | None = None,
+        token_id: str | None = None,
+        id: str | None = None,
+        after: str | None = None,
+        before: str | None = None,
+    ) -> AsyncPaginator[BuilderTrade]:
+        async def fetch(cursor: str | None) -> Page[BuilderTrade]:
+            path, params = _builders_actions.build_list_builder_trades_request(
+                builder_code=builder_code,
+                market=market,
+                token_id=token_id,
+                id=id,
+                after=after,
+                before=before,
+                cursor=cursor,
+            )
+            payload = await self._ctx.clob.get_json(path, params=params)
+            return _builders_actions.parse_builder_trades_page(payload)
+
+        return AsyncPaginator(fetch=fetch)
 
     def list_positions(
         self,
