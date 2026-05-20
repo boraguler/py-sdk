@@ -108,10 +108,12 @@ async def test_estimate_market_price_for_buy_returns_decimal_in_unit_range(
     public_client: AsyncPublicClient,
     tradable_market: Market,
 ) -> None:
+    amount = tradable_market.trading.minimum_order_size
+    assert amount is not None
     price = await public_client.estimate_market_price(
         token_id=_yes_token_id(tradable_market),
         side="BUY",
-        amount=tradable_market.trading.minimum_order_size,
+        amount=amount,
     )
 
     assert isinstance(price, Decimal)

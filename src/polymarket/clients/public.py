@@ -4,7 +4,7 @@ import logging
 from collections.abc import Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import Self
+from typing import Literal, Self, overload
 
 from polymarket._internal.actions import builders as _builders_actions
 from polymarket._internal.actions import clob as _clob_actions
@@ -845,6 +845,24 @@ class PublicClient:
         )
         return _clob_actions.parse_price_history(self._ctx.clob.get_json(path, params=params))
 
+    @overload
+    def estimate_market_price(
+        self,
+        *,
+        token_id: str,
+        side: Literal["BUY"],
+        amount: Decimal | int | float | str,
+        order_type: MarketOrderType = "FOK",
+    ) -> Decimal: ...
+    @overload
+    def estimate_market_price(
+        self,
+        *,
+        token_id: str,
+        side: Literal["SELL"],
+        shares: Decimal | int | float | str,
+        order_type: MarketOrderType = "FOK",
+    ) -> Decimal: ...
     def estimate_market_price(
         self,
         *,

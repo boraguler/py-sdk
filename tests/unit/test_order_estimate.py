@@ -194,7 +194,7 @@ def test_client_estimate_market_price_validates_input() -> None:
     async def run() -> Decimal:
         client = await _make_client()
         try:
-            return await client.estimate_market_price(
+            return await client.estimate_market_price(  # type: ignore[call-overload]
                 token_id="8501497", side="BUY", amount=Decimal(1), shares=Decimal(1)
             )
         finally:
