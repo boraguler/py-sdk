@@ -5,7 +5,7 @@ import logging
 from collections.abc import Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self, assert_never, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, Self, assert_never, cast, overload
 
 from polymarket._internal.actions import builders as _builders_actions
 from polymarket._internal.actions import clob as _clob_actions
@@ -985,6 +985,24 @@ class AsyncPublicClient:
         )
         return _clob_actions.parse_price_history(await self._ctx.clob.get_json(path, params=params))
 
+    @overload
+    async def estimate_market_price(
+        self,
+        *,
+        token_id: str,
+        side: Literal["BUY"],
+        amount: Decimal | int | float | str,
+        order_type: MarketOrderType = "FOK",
+    ) -> Decimal: ...
+    @overload
+    async def estimate_market_price(
+        self,
+        *,
+        token_id: str,
+        side: Literal["SELL"],
+        shares: Decimal | int | float | str,
+        order_type: MarketOrderType = "FOK",
+    ) -> Decimal: ...
     async def estimate_market_price(
         self,
         *,

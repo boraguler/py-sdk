@@ -1347,6 +1347,24 @@ class AsyncSecureClient:
             await self._ctx.secure_clob.get_json(path, params=params)
         )
 
+    @overload
+    async def estimate_market_price(
+        self,
+        *,
+        token_id: str,
+        side: Literal["BUY"],
+        amount: Decimal | int | float | str,
+        order_type: MarketOrderType = "FOK",
+    ) -> Decimal: ...
+    @overload
+    async def estimate_market_price(
+        self,
+        *,
+        token_id: str,
+        side: Literal["SELL"],
+        shares: Decimal | int | float | str,
+        order_type: MarketOrderType = "FOK",
+    ) -> Decimal: ...
     async def estimate_market_price(
         self,
         *,
