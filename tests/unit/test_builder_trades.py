@@ -107,6 +107,37 @@ class TestBuilderTradeModel:
         with pytest.raises(UnexpectedResponseError):
             BuilderTrade.parse_response({**_WIRE_TRADE, "matchTime": True})
 
+    def test_parses_match_time_from_epoch_seconds_digit_string(self) -> None:
+        trade = BuilderTrade.parse_response({**_WIRE_TRADE, "matchTime": "1777040544"})
+        assert trade.matched_at == datetime(2026, 4, 24, 14, 22, 24, tzinfo=UTC)
+
+    def test_parses_match_time_from_epoch_seconds_int(self) -> None:
+        trade = BuilderTrade.parse_response({**_WIRE_TRADE, "matchTime": 1777040544})
+        assert trade.matched_at == datetime(2026, 4, 24, 14, 22, 24, tzinfo=UTC)
+
+    def test_parses_created_and_updated_at_from_iso_strings(self) -> None:
+        trade = BuilderTrade.parse_response(
+            {
+                **_WIRE_TRADE,
+                "createdAt": "2026-04-24T14:22:24.198666Z",
+                "updatedAt": "2026-04-24T14:23:38.514014Z",
+            }
+        )
+        assert trade.created_at == datetime(2026, 4, 24, 14, 22, 24, 198666, tzinfo=UTC)
+        assert trade.updated_at == datetime(2026, 4, 24, 14, 23, 38, 514014, tzinfo=UTC)
+
+    def test_parses_mixed_wire_shape_as_returned_by_live_endpoint(self) -> None:
+        trade = BuilderTrade.parse_response(
+            {
+                **_WIRE_TRADE,
+                "matchTime": "1777040544",
+                "createdAt": "2026-04-24T14:22:24.198666Z",
+                "updatedAt": "2026-04-24T14:23:38.514014Z",
+            }
+        )
+        assert trade.matched_at == datetime(2026, 4, 24, 14, 22, 24, tzinfo=UTC)
+        assert trade.created_at == datetime(2026, 4, 24, 14, 22, 24, 198666, tzinfo=UTC)
+
 
 class TestBuildListBuilderTradesRequest:
     def test_returns_endpoint_path(self) -> None:
