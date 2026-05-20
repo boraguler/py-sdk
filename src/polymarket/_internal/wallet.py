@@ -7,7 +7,11 @@ from eth_abi.packed import encode_packed
 from eth_utils.address import to_checksum_address
 from eth_utils.crypto import keccak
 
-from polymarket._internal.eoa.rpc import JsonRpcClient, is_json_rpc_contract_revert
+from polymarket._internal.eoa.rpc import (
+    JsonRpcClient,
+    SyncJsonRpcClient,
+    is_json_rpc_contract_revert,
+)
 from polymarket.environments import WalletDerivation
 from polymarket.errors import UserInputError
 
@@ -106,6 +110,29 @@ async def derive_current_deposit_wallet_address(
     return derive_uups_deposit_wallet_address(signer, config)
 
 
+def get_deposit_wallet_factory_beacon_sync(rpc: SyncJsonRpcClient, factory: str) -> str:
+    try:
+        data = rpc.eth_call(to=factory, data=_FACTORY_BEACON_SELECTOR)
+    except Exception as error:
+        if is_json_rpc_contract_revert(error):
+            return _ZERO_ADDRESS
+        raise
+    return _decode_address_return_data(data)
+
+
+def is_beacon_deposit_wallet_factory_sync(rpc: SyncJsonRpcClient, factory: str) -> bool:
+    beacon = get_deposit_wallet_factory_beacon_sync(rpc, factory)
+    return beacon.lower() != _ZERO_ADDRESS
+
+
+def derive_current_deposit_wallet_address_sync(
+    rpc: SyncJsonRpcClient, signer: str, config: WalletDerivation
+) -> str:
+    if is_beacon_deposit_wallet_factory_sync(rpc, config.deposit_wallet_factory):
+        return derive_beacon_deposit_wallet_address(signer, config)
+    return derive_uups_deposit_wallet_address(signer, config)
+
+
 def classify_wallet_type(*, signer: str, wallet: str, config: WalletDerivation) -> WalletType:
     try:
         signer_checksum = to_checksum_address(signer)
@@ -190,10 +217,13 @@ __all__ = [
     "classify_wallet_type",
     "derive_beacon_deposit_wallet_address",
     "derive_current_deposit_wallet_address",
+    "derive_current_deposit_wallet_address_sync",
     "derive_proxy_wallet_address",
     "derive_safe_wallet_address",
     "derive_uups_deposit_wallet_address",
     "get_deposit_wallet_factory_beacon",
+    "get_deposit_wallet_factory_beacon_sync",
     "is_beacon_deposit_wallet_factory",
+    "is_beacon_deposit_wallet_factory_sync",
     "signature_type_for",
 ]

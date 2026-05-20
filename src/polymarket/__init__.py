@@ -117,6 +117,9 @@ from polymarket.pagination import AsyncPaginator, Page, Paginator
 from polymarket.transactions import (
     EoaTransactionHandle,
     GaslessTransactionHandle,
+    SyncEoaTransactionHandle,
+    SyncGaslessTransactionHandle,
+    SyncTransactionHandle,
     TransactionHandle,
 )
 from polymarket.types import EvmAddress, HexString, TransactionHash
@@ -223,6 +226,9 @@ __all__ = [
     "SplitActivity",
     "SportsMarketTypes",
     "SportsMetadata",
+    "SyncEoaTransactionHandle",
+    "SyncGaslessTransactionHandle",
+    "SyncTransactionHandle",
     "Tag",
     "TagId",
     "TagReference",
