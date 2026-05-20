@@ -140,9 +140,19 @@ def test_secure_client_invalid_key_raises_user_input_error() -> None:
         SecureClient.create(private_key="not-a-valid-key", wallet=SIGNER_ADDRESS)
 
 
-def test_secure_client_requires_wallet() -> None:
-    with pytest.raises(UserInputError, match="wallet is required"):
-        SecureClient.create(private_key=PRIVATE_KEY, wallet="")
+def test_secure_client_wallet_defaults_to_signer_when_omitted() -> None:
+    from eth_account import Account
+    from eth_utils.address import to_checksum_address
+
+    expected = to_checksum_address(Account.from_key(PRIVATE_KEY).address)
+
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
+        assert client.wallet_type == "EOA"
+        assert str(client.wallet) == expected
 
 
 def test_async_secure_client_invalid_key_raises_user_input_error() -> None:

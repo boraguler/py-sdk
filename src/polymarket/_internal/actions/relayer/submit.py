@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from polymarket.clients._transport import AsyncTransport
+from polymarket.clients._transport import AsyncTransport, SyncTransport
 from polymarket.errors import RateLimitError, RequestRejectedError
 from polymarket.models.clob.relayer import RelayerExecuteResponse
 
@@ -20,6 +20,13 @@ async def submit_gasless(
     relayer: AsyncTransport, *, payload: dict[str, Any]
 ) -> RelayerExecuteResponse:
     data = await relayer.post_json("/submit", json=payload)
+    return RelayerExecuteResponse.parse_response(data)
+
+
+def submit_gasless_sync(
+    relayer: SyncTransport, *, payload: dict[str, Any]
+) -> RelayerExecuteResponse:
+    data = relayer.post_json("/submit", json=payload)
     return RelayerExecuteResponse.parse_response(data)
 
 
@@ -43,4 +50,5 @@ __all__ = [
     "GASLESS_SUBMIT_RETRY_ATTEMPTS",
     "is_retryable_submit_error",
     "submit_gasless",
+    "submit_gasless_sync",
 ]

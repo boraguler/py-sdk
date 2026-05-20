@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from eth_account.signers.local import LocalAccount
 
-from polymarket._internal.eoa.rpc import JsonRpcClient
+from polymarket._internal.eoa.rpc import JsonRpcClient, SyncJsonRpcClient
 from polymarket._internal.wallet import WalletType
 from polymarket.auth import ApiKey
 from polymarket.clients._transport import AsyncTransport, SyncTransport
@@ -28,6 +28,9 @@ class SyncSecureClientContext(SyncClientContext):
     secure_clob: SyncTransport
     wallet: EvmAddress
     wallet_type: WalletType
+    relayer: SyncTransport
+    api_key: ApiKey | None
+    rpc: SyncJsonRpcClient
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,7 @@ import time
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Self, cast
+from typing import TYPE_CHECKING, Literal, Self, cast, overload
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -59,6 +59,28 @@ from polymarket._internal.actions.orders.typed_data import (
     build_order_typed_data,
 )
 from polymarket._internal.actions.orders.types import OrderDraft
+from polymarket._internal.actions.relayer.auth import make_relayer_header_resolver_sync
+from polymarket._internal.actions.relayer.calls import (
+    MAX_UINT256,
+    TransactionCall,
+    ctf_redeem_positions_call,
+    erc20_approval_call,
+    erc20_transfer_call,
+    erc1155_set_approval_for_all_call,
+    merge_positions_call,
+    split_position_call,
+)
+from polymarket._internal.actions.relayer.deployed import fetch_deployed_sync
+from polymarket._internal.actions.relayer.gasless import (
+    prepare_gasless_transaction_sync,
+    submit_deposit_wallet_create_sync,
+)
+from polymarket._internal.actions.relayer.positions import (
+    expect_binary_positions,
+    expect_negative_risk_flag,
+    resolve_binary_positions_condition_id,
+    resolve_merge_amount,
+)
 from polymarket._internal.context import SyncSecureClientContext
 from polymarket._internal.dispatch import (
     sync_dispatch,
@@ -66,12 +88,25 @@ from polymarket._internal.dispatch import (
     sync_paginate_offset,
     sync_paginate_page_based,
 )
+from polymarket._internal.eoa.broadcast import broadcast_eoa_call_sync
+from polymarket._internal.eoa.rpc import SyncJsonRpcClient
 from polymarket._internal.hmac import build_hmac_signature
 from polymarket._internal.l1_auth import sign_api_key_auth
-from polymarket._internal.wallet import WalletType, classify_wallet_type, signature_type_for
+from polymarket._internal.wallet import (
+    WalletType,
+    classify_wallet_type,
+    derive_current_deposit_wallet_address_sync,
+    signature_type_for,
+)
+from polymarket.auth import ApiKey
 from polymarket.clients._transport import SyncHeaderResolver, SyncTransport
 from polymarket.environments import PRODUCTION, Environment
-from polymarket.errors import RequestRejectedError, SigningError, UserInputError
+from polymarket.errors import (
+    RequestRejectedError,
+    SigningError,
+    UnexpectedResponseError,
+    UserInputError,
+)
 from polymarket.models import (
     ApiKeyCreds,
     AssetType,
@@ -104,6 +139,7 @@ from polymarket.models.clob import BuilderTrade
 from polymarket.models.clob.cancel import CancelOrdersResponse
 from polymarket.models.clob.order_response import OrderResponse
 from polymarket.models.clob.orders import MarketOrderType, SignedOrder
+from polymarket.models.clob.relayer import RelayerTransactionType
 from polymarket.models.clob.rewards import (
     CurrentReward,
     MarketReward,
@@ -133,6 +169,7 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import Page, Paginator
+from polymarket.transactions import SyncEoaTransactionHandle, SyncTransactionHandle
 from polymarket.types import EvmAddress, HexString
 
 if TYPE_CHECKING:
@@ -180,19 +217,16 @@ class SecureClient:
         cls,
         *,
         private_key: str,
-        wallet: str,
+        wallet: str | None = None,
         environment: Environment = PRODUCTION,
         credentials: ApiKeyCreds | None = None,
+        api_key: ApiKey | None = None,
         nonce: int = 0,
         validate_credentials: bool = True,
         logger: logging.Logger | None = None,
     ) -> Self:
         if not private_key:
             raise UserInputError("private_key is required")
-        if not wallet:
-            raise UserInputError(
-                "wallet is required. Pass the signer address itself to authenticate as an EOA."
-            )
         _validate_nonce(nonce)
         if credentials is not None and nonce != 0:
             raise UserInputError("nonce cannot be combined with credentials.")
@@ -201,6 +235,42 @@ class SecureClient:
         except (ValueError, TypeError) as error:
             raise UserInputError(f"Invalid private_key: {error}") from error
 
+        resolved_wallet = wallet if wallet else signer.address
+
+        bootstrap_clob = SyncTransport(base_url=environment.clob_url, logger=logger)
+        try:
+            resolved_credentials = _bootstrap_credentials_sync(
+                environment=environment,
+                signer=signer,
+                clob=bootstrap_clob,
+                provided=credentials,
+                nonce=nonce,
+                validate=validate_credentials,
+                logger=logger,
+            )
+        finally:
+            bootstrap_clob.close()
+
+        return cls._construct_for_wallet(
+            signer=signer,
+            wallet=resolved_wallet,
+            environment=environment,
+            credentials=resolved_credentials,
+            api_key=api_key,
+            logger=logger,
+        )
+
+    @classmethod
+    def _construct_for_wallet(
+        cls,
+        *,
+        signer: LocalAccount,
+        wallet: str,
+        environment: Environment,
+        credentials: ApiKeyCreds,
+        api_key: ApiKey | None,
+        logger: logging.Logger | None,
+    ) -> Self:
         try:
             wallet_checksum = to_checksum_address(wallet)
         except ValueError as error:
@@ -215,26 +285,27 @@ class SecureClient:
         gamma = SyncTransport(base_url=environment.gamma_url, logger=logger)
         data = SyncTransport(base_url=environment.data_url, logger=logger)
         clob = SyncTransport(base_url=environment.clob_url, logger=logger)
-
+        relayer_resolver = (
+            make_relayer_header_resolver_sync(api_key) if api_key is not None else None
+        )
+        relayer = SyncTransport(
+            base_url=environment.relayer_url,
+            logger=logger,
+            header_resolver=relayer_resolver,
+        )
         try:
-            resolved_credentials = _bootstrap_credentials_sync(
-                environment=environment,
-                signer=signer,
-                clob=clob,
-                provided=credentials,
-                nonce=nonce,
-                validate=validate_credentials,
-                logger=logger,
-            )
             secure_clob = SyncTransport(
                 base_url=environment.clob_url,
                 logger=logger,
-                header_resolver=_make_l2_header_resolver_sync(signer, resolved_credentials),
+                header_resolver=_make_l2_header_resolver_sync(signer, credentials),
             )
+            rpc_transport = SyncTransport(base_url=environment.rpc_url, logger=logger)
+            rpc = SyncJsonRpcClient(rpc_transport)
         except BaseException:
             gamma.close()
             data.close()
             clob.close()
+            relayer.close()
             raise
 
         ctx = SyncSecureClientContext(
@@ -243,10 +314,13 @@ class SecureClient:
             data=data,
             clob=clob,
             signer=signer,
-            credentials=resolved_credentials,
+            credentials=credentials,
             secure_clob=secure_clob,
             wallet=branded_wallet,
             wallet_type=wallet_type,
+            relayer=relayer,
+            api_key=api_key,
+            rpc=rpc,
         )
         return cls(ctx=ctx, _create_token=_CREATE_TOKEN, logger=logger)
 
@@ -293,7 +367,13 @@ class SecureClient:
                 try:
                     ctx.clob.close()
                 finally:
-                    ctx.secure_clob.close()
+                    try:
+                        ctx.secure_clob.close()
+                    finally:
+                        try:
+                            ctx.relayer.close()
+                        finally:
+                            ctx.rpc.close()
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user
@@ -1169,6 +1249,27 @@ class SecureClient:
             builder_code=builder_code,
         )
 
+    @overload
+    def create_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["BUY"],
+        amount: Decimal | int | float | str,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> SignedOrder: ...
+    @overload
+    def create_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["SELL"],
+        shares: Decimal | int | float | str,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> SignedOrder: ...
     def create_market_order(
         self,
         *,
@@ -1212,6 +1313,27 @@ class SecureClient:
         )
         return self.post_order(signed)
 
+    @overload
+    def place_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["BUY"],
+        amount: Decimal | int | float | str,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> OrderResponse: ...
+    @overload
+    def place_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["SELL"],
+        shares: Decimal | int | float | str,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> OrderResponse: ...
     def place_market_order(
         self,
         *,
@@ -1409,6 +1531,315 @@ class SecureClient:
         return _rewards_actions.parse_reward_percentages(
             self._ctx.secure_clob.get_json(path, params=params)
         )
+
+    def approve_erc20(
+        self,
+        *,
+        token_address: str,
+        spender_address: str,
+        amount: int | Literal["max"],
+        metadata: str | None = None,
+    ) -> SyncTransactionHandle:
+        try:
+            token = cast(EvmAddress, to_checksum_address(token_address))
+        except ValueError as error:
+            raise UserInputError(f"Invalid token_address: {error}") from error
+        try:
+            spender = cast(EvmAddress, to_checksum_address(spender_address))
+        except ValueError as error:
+            raise UserInputError(f"Invalid spender_address: {error}") from error
+        resolved_amount = MAX_UINT256 if amount == "max" else amount
+        call = erc20_approval_call(token_address=token, spender=spender, amount=resolved_amount)
+        resolved_metadata = (
+            metadata if metadata is not None else f"Approve {amount} of {token} to {spender}"
+        )
+        return self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    def approve_erc1155_for_all(
+        self,
+        *,
+        token_address: str,
+        operator_address: str,
+        approved: bool = True,
+        metadata: str | None = None,
+    ) -> SyncTransactionHandle:
+        try:
+            token = cast(EvmAddress, to_checksum_address(token_address))
+        except ValueError as error:
+            raise UserInputError(f"Invalid token_address: {error}") from error
+        try:
+            operator = cast(EvmAddress, to_checksum_address(operator_address))
+        except ValueError as error:
+            raise UserInputError(f"Invalid operator_address: {error}") from error
+        call = erc1155_set_approval_for_all_call(
+            token_address=token, operator=operator, approved=approved
+        )
+        verb = "Approve" if approved else "Revoke"
+        resolved_metadata = metadata if metadata is not None else f"{verb} {operator} on {token}"
+        return self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    def transfer_erc20(
+        self,
+        *,
+        token_address: str,
+        recipient_address: str,
+        amount: int,
+        metadata: str | None = None,
+    ) -> SyncTransactionHandle:
+        try:
+            token = cast(EvmAddress, to_checksum_address(token_address))
+        except ValueError as error:
+            raise UserInputError(f"Invalid token_address: {error}") from error
+        try:
+            recipient = cast(EvmAddress, to_checksum_address(recipient_address))
+        except ValueError as error:
+            raise UserInputError(f"Invalid recipient_address: {error}") from error
+        call = erc20_transfer_call(token_address=token, recipient=recipient, amount=amount)
+        resolved_metadata = (
+            metadata if metadata is not None else f"Transfer {amount} of {token} to {recipient}"
+        )
+        return self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    def setup_trading_approvals(self) -> SyncTransactionHandle:
+        env = self._ctx.environment
+        collateral = cast(EvmAddress, env.collateral_token)
+        conditional = cast(EvmAddress, env.conditional_tokens)
+        calls = [
+            erc20_approval_call(
+                token_address=collateral,
+                spender=cast(EvmAddress, env.standard_exchange),
+                amount=MAX_UINT256,
+            ),
+            erc20_approval_call(
+                token_address=collateral,
+                spender=cast(EvmAddress, env.neg_risk_exchange),
+                amount=MAX_UINT256,
+            ),
+            erc20_approval_call(
+                token_address=collateral,
+                spender=cast(EvmAddress, env.neg_risk_adapter),
+                amount=MAX_UINT256,
+            ),
+            erc20_approval_call(
+                token_address=collateral,
+                spender=cast(EvmAddress, env.collateral_adapter),
+                amount=MAX_UINT256,
+            ),
+            erc20_approval_call(
+                token_address=collateral,
+                spender=cast(EvmAddress, env.neg_risk_collateral_adapter),
+                amount=MAX_UINT256,
+            ),
+            erc1155_set_approval_for_all_call(
+                token_address=conditional,
+                operator=cast(EvmAddress, env.standard_exchange),
+                approved=True,
+            ),
+            erc1155_set_approval_for_all_call(
+                token_address=conditional,
+                operator=cast(EvmAddress, env.neg_risk_exchange),
+                approved=True,
+            ),
+            erc1155_set_approval_for_all_call(
+                token_address=conditional,
+                operator=cast(EvmAddress, env.neg_risk_adapter),
+                approved=True,
+            ),
+            erc1155_set_approval_for_all_call(
+                token_address=conditional,
+                operator=cast(EvmAddress, env.collateral_adapter),
+                approved=True,
+            ),
+            erc1155_set_approval_for_all_call(
+                token_address=conditional,
+                operator=cast(EvmAddress, env.neg_risk_collateral_adapter),
+                approved=True,
+            ),
+            erc1155_set_approval_for_all_call(
+                token_address=conditional,
+                operator=cast(EvmAddress, env.auto_redeem_operator),
+                approved=True,
+            ),
+        ]
+        if self._ctx.wallet_type == "EOA":
+            for call in calls[:-1]:
+                handle = self._broadcast_eoa_call(call)
+                handle.wait()
+            return self._broadcast_eoa_call(calls[-1])
+        return prepare_gasless_transaction_sync(
+            self._ctx, calls=calls, metadata="Trading setup approvals"
+        )
+
+    def setup_gasless_wallet(self) -> Self:
+        ctx = self._ctx
+        if ctx.api_key is None:
+            raise UserInputError(
+                "setup_gasless_wallet requires a Builder API Key or Relayer API Key. "
+                "Pass api_key= when constructing the client."
+            )
+        if ctx.wallet_type != "EOA":
+            return type(self)._construct_for_wallet(
+                signer=ctx.signer,
+                wallet=str(ctx.wallet),
+                environment=ctx.environment,
+                credentials=ctx.credentials,
+                api_key=ctx.api_key,
+                logger=self._logger,
+            )
+        deposit_address = cast(
+            EvmAddress,
+            derive_current_deposit_wallet_address_sync(
+                ctx.rpc, ctx.signer.address, ctx.environment.wallet_derivation
+            ),
+        )
+        ready = fetch_deployed_sync(
+            ctx.relayer,
+            address=str(deposit_address),
+            type=RelayerTransactionType.WALLET,
+        )
+        if not ready:
+            handle = submit_deposit_wallet_create_sync(ctx, metadata="Deploy Deposit Wallet")
+            handle.wait()
+        return type(self)._construct_for_wallet(
+            signer=ctx.signer,
+            wallet=str(deposit_address),
+            environment=ctx.environment,
+            credentials=ctx.credentials,
+            api_key=ctx.api_key,
+            logger=self._logger,
+        )
+
+    def is_gasless_ready(self) -> bool:
+        ctx = self._ctx
+        if ctx.wallet_type != "EOA":
+            type_param = (
+                RelayerTransactionType.WALLET if ctx.wallet_type == "DEPOSIT_WALLET" else None
+            )
+            return fetch_deployed_sync(ctx.relayer, address=str(ctx.wallet), type=type_param)
+        deposit_address = derive_current_deposit_wallet_address_sync(
+            ctx.rpc, ctx.signer.address, ctx.environment.wallet_derivation
+        )
+        return fetch_deployed_sync(
+            ctx.relayer, address=deposit_address, type=RelayerTransactionType.WALLET
+        )
+
+    def split_position(
+        self,
+        *,
+        condition_id: str,
+        amount: int,
+        metadata: str | None = None,
+    ) -> SyncTransactionHandle:
+        env = self._ctx.environment
+        neg_risk = self._resolve_market_neg_risk(condition_id)
+        call = split_position_call(
+            target=self._lifecycle_target_address(neg_risk),
+            collateral=cast(EvmAddress, env.collateral_token),
+            condition_id=condition_id,
+            amount=amount,
+        )
+        resolved_metadata = (
+            metadata
+            if metadata is not None
+            else f"Split {amount} positions for condition {condition_id}"
+        )
+        return self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    def merge_positions(
+        self,
+        *,
+        condition_id: str,
+        amount: int | Literal["max"],
+        metadata: str | None = None,
+    ) -> SyncTransactionHandle:
+        env = self._ctx.environment
+        binary = self._fetch_binary_positions(condition_id)
+        neg_risk = expect_negative_risk_flag(binary)
+        resolved_amount = resolve_merge_amount(binary, amount)
+        call = merge_positions_call(
+            target=self._lifecycle_target_address(neg_risk),
+            collateral=cast(EvmAddress, env.collateral_token),
+            condition_id=condition_id,
+            amount=resolved_amount,
+        )
+        resolved_metadata = (
+            metadata
+            if metadata is not None
+            else f"Merge {resolved_amount} positions for condition {condition_id}"
+        )
+        return self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    def redeem_positions(
+        self,
+        *,
+        condition_id: str | None = None,
+        market_id: str | None = None,
+        metadata: str | None = None,
+    ) -> SyncTransactionHandle:
+        if (condition_id is None) == (market_id is None):
+            raise UserInputError("Provide exactly one of condition_id or market_id")
+        env = self._ctx.environment
+        lookup_id = condition_id if condition_id is not None else market_id
+        assert lookup_id is not None
+        binary = self._fetch_binary_positions(lookup_id)
+        neg_risk = expect_negative_risk_flag(binary)
+        resolved_condition_id = resolve_binary_positions_condition_id(binary)
+        call = ctf_redeem_positions_call(
+            ctf=self._lifecycle_target_address(neg_risk),
+            collateral=cast(EvmAddress, env.collateral_token),
+            condition_id=resolved_condition_id,
+        )
+        resolved_metadata = (
+            metadata
+            if metadata is not None
+            else f"Redeem positions for condition {resolved_condition_id}"
+        )
+        return self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    def _lifecycle_target_address(self, neg_risk: bool) -> EvmAddress:
+        env = self._ctx.environment
+        return cast(
+            EvmAddress,
+            env.neg_risk_collateral_adapter if neg_risk else env.collateral_adapter,
+        )
+
+    def _broadcast_eoa_call(self, call: TransactionCall) -> SyncEoaTransactionHandle:
+        env = self._ctx.environment
+        return broadcast_eoa_call_sync(
+            rpc=self._ctx.rpc,
+            signer=self._ctx.signer,
+            call=call,
+            chain_id=env.chain_id,
+            max_polls=env.relayer_max_polls,
+            poll_delay_s=env.relayer_poll_frequency_ms / 1000,
+        )
+
+    def _dispatch_single_call(
+        self, call: TransactionCall, *, metadata: str
+    ) -> SyncTransactionHandle:
+        if self._ctx.wallet_type == "EOA":
+            return self._broadcast_eoa_call(call)
+        return prepare_gasless_transaction_sync(self._ctx, calls=[call], metadata=metadata)
+
+    def _resolve_market_neg_risk(self, condition_id: str) -> bool:
+        page = self.list_markets(condition_ids=[condition_id], page_size=2).first_page()
+        markets = page.items
+        if len(markets) != 1:
+            raise UserInputError(
+                f"Expected exactly one market for condition {condition_id}, got {len(markets)}"
+            )
+        market = markets[0]
+        if market.state.neg_risk is None:
+            raise UnexpectedResponseError(f"Missing negRisk flag for condition {condition_id}")
+        return market.state.neg_risk
+
+    def _fetch_binary_positions(self, market_id_or_condition_id: str):  # type: ignore[no-untyped-def]
+        page = self.list_positions(
+            user=str(self._ctx.wallet),
+            market=[market_id_or_condition_id],
+            size_threshold=0,
+        ).first_page()
+        return expect_binary_positions(page.items)
 
 
 def _bootstrap_credentials_sync(

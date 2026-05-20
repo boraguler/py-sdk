@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from polymarket import ApiKeyCreds, AsyncSecureClient, BuilderApiKey
+from polymarket import ApiKeyCreds, AsyncSecureClient, BuilderApiKey, SecureClient
 from polymarket.clients._transport import AsyncTransport
 
 PK_DEPLOY_WALLET = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -222,6 +222,100 @@ def install_rpc_handler(
     client._ctx = dataclasses.replace(client._ctx, rpc=JsonRpcClient(transport))
 
 
+def make_sync_eoa_client(*, with_api_key: bool = True) -> SecureClient:
+    from eth_account import Account
+
+    signer = Account.from_key(PK_DEPLOY_WALLET)
+    return SecureClient.create(
+        private_key=PK_DEPLOY_WALLET,
+        wallet=signer.address,
+        credentials=FAKE_CREDS,
+        api_key=BUILDER_AUTH if with_api_key else None,
+        validate_credentials=False,
+    )
+
+
+def make_sync_deposit_client() -> SecureClient:
+    from eth_account import Account
+
+    from polymarket._internal.wallet import derive_uups_deposit_wallet_address
+    from polymarket.environments import PRODUCTION
+
+    signer = Account.from_key(PK_DEPLOY_WALLET)
+    wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+    return SecureClient.create(
+        private_key=PK_DEPLOY_WALLET,
+        wallet=wallet,
+        credentials=FAKE_CREDS,
+        api_key=BUILDER_AUTH,
+        validate_credentials=False,
+    )
+
+
+def make_sync_proxy_client() -> SecureClient:
+    from eth_account import Account
+
+    from polymarket._internal.wallet import derive_proxy_wallet_address
+    from polymarket.environments import PRODUCTION
+
+    signer = Account.from_key(PK_PROXY_WALLET)
+    wallet = derive_proxy_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+    return SecureClient.create(
+        private_key=PK_PROXY_WALLET,
+        wallet=wallet,
+        credentials=FAKE_CREDS,
+        api_key=BUILDER_AUTH,
+        validate_credentials=False,
+    )
+
+
+def make_sync_safe_client() -> SecureClient:
+    from eth_account import Account
+
+    from polymarket._internal.wallet import derive_safe_wallet_address
+    from polymarket.environments import PRODUCTION
+
+    signer = Account.from_key(PK_SAFE_WALLET)
+    wallet = derive_safe_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+    return SecureClient.create(
+        private_key=PK_SAFE_WALLET,
+        wallet=wallet,
+        credentials=FAKE_CREDS,
+        api_key=BUILDER_AUTH,
+        validate_credentials=False,
+    )
+
+
+def install_sync_relayer_handler(
+    client: SecureClient,
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> None:
+    from polymarket.clients._transport import SyncTransport
+
+    transport = SyncTransport(
+        base_url="https://relayer.test",
+        client=httpx.Client(
+            base_url="https://relayer.test", transport=httpx.MockTransport(handler)
+        ),
+        header_resolver=client._ctx.relayer._header_resolver,
+    )
+    client._ctx = dataclasses.replace(client._ctx, relayer=transport)
+
+
+def install_sync_rpc_handler(
+    client: SecureClient,
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> None:
+    from polymarket._internal.eoa.rpc import SyncJsonRpcClient
+    from polymarket.clients._transport import SyncTransport
+
+    transport = SyncTransport(
+        base_url="https://rpc.test",
+        client=httpx.Client(base_url="https://rpc.test", transport=httpx.MockTransport(handler)),
+    )
+    client._ctx = dataclasses.replace(client._ctx, rpc=SyncJsonRpcClient(transport))
+
+
 def legacy_factory_rpc_handler() -> Callable[[httpx.Request], httpx.Response]:
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content.decode("utf-8"))
@@ -271,6 +365,8 @@ __all__ = [
     "install_relayer_handler",
     "install_relayer_routes",
     "install_rpc_handler",
+    "install_sync_relayer_handler",
+    "install_sync_rpc_handler",
     "legacy_factory_rpc_handler",
     "make_deposit_client",
     "make_eoa_client",
@@ -278,5 +374,9 @@ __all__ = [
     "make_proxy_client",
     "make_rpc_handler",
     "make_safe_client",
+    "make_sync_deposit_client",
+    "make_sync_eoa_client",
+    "make_sync_proxy_client",
+    "make_sync_safe_client",
     "request_json",
 ]

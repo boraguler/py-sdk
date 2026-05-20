@@ -169,14 +169,14 @@ def test_create_rejects_bool_nonce() -> None:
         )
 
 
-def test_create_rejects_missing_wallet() -> None:
-    with pytest.raises(UserInputError, match="wallet is required"):
-        SecureClient.create(
-            private_key=PRIVATE_KEY,
-            wallet="",
-            credentials=FAKE_CREDS,
-            validate_credentials=False,
-        )
+def test_create_defaults_wallet_to_signer_when_omitted() -> None:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
+        assert client.wallet_type == "EOA"
+        assert str(client.wallet) == SIGNER_ADDRESS
 
 
 def test_create_rejects_invalid_wallet_address() -> None:

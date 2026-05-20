@@ -3,7 +3,7 @@ from __future__ import annotations
 import json as _json
 from typing import Any, cast
 
-from polymarket.clients._transport import AsyncTransport
+from polymarket.clients._transport import AsyncTransport, SyncTransport
 from polymarket.errors import RequestRejectedError, UnexpectedResponseError, UserInputError
 
 _JSON_RPC_REVERT_CODES = frozenset({3, -32_000, -32_003, -32_015, -32_603})
@@ -119,6 +119,86 @@ class JsonRpcClient:
         return cast(dict[str, Any], result)
 
 
+class SyncJsonRpcClient:
+    def __init__(self, transport: SyncTransport) -> None:
+        self._transport = transport
+        self._id = 0
+        self._verified_chain_id: int | None = None
+
+    def close(self) -> None:
+        self._transport.close()
+
+    def verify_chain_id(self, expected: int) -> None:
+        if self._verified_chain_id is not None:
+            if self._verified_chain_id != expected:
+                raise UserInputError(
+                    f"RPC chain id {self._verified_chain_id} does not match "
+                    f"environment.chain_id {expected}. Configure rpc_url for the correct chain."
+                )
+            return
+        actual = self.eth_chain_id()
+        if actual != expected:
+            raise UserInputError(
+                f"RPC chain id {actual} does not match environment.chain_id {expected}. "
+                "Configure rpc_url for the correct chain."
+            )
+        self._verified_chain_id = actual
+
+    def _call(self, method: str, params: list[Any]) -> Any:
+        self._id += 1
+        envelope = {
+            "jsonrpc": "2.0",
+            "id": self._id,
+            "method": method,
+            "params": params,
+        }
+        raw = self._transport.post_json("", json=envelope)
+        if not isinstance(raw, dict):
+            raise UnexpectedResponseError(f"JSON-RPC {method} returned a non-object response")
+        response = cast(dict[str, Any], raw)
+        if "error" in response:
+            err: Any = response["error"]
+            code, message, data = _extract_error_fields(err)
+            raise JsonRpcCallError(method=method, code=code, message=message, data=data)
+        return response.get("result")
+
+    def eth_chain_id(self) -> int:
+        result = self._call("eth_chainId", [])
+        return _hex_to_int(result, "eth_chainId")
+
+    def eth_call(self, *, to: str, data: str, block: str = "latest") -> str:
+        result = self._call("eth_call", [{"to": to, "data": data}, block])
+        if not isinstance(result, str) or not _is_rpc_hex_string(result):
+            raise UnexpectedResponseError("eth_call did not return a hex string")
+        return result
+
+    def eth_get_transaction_count(self, address: str, block: str = "pending") -> int:
+        result = self._call("eth_getTransactionCount", [address, block])
+        return _hex_to_int(result, "eth_getTransactionCount")
+
+    def eth_gas_price(self) -> int:
+        result = self._call("eth_gasPrice", [])
+        return _hex_to_int(result, "eth_gasPrice")
+
+    def eth_estimate_gas(self, tx: dict[str, Any]) -> int:
+        result = self._call("eth_estimateGas", [tx])
+        return _hex_to_int(result, "eth_estimateGas")
+
+    def eth_send_raw_transaction(self, signed_hex: str) -> str:
+        result = self._call("eth_sendRawTransaction", [signed_hex])
+        if not isinstance(result, str):
+            raise UnexpectedResponseError("eth_sendRawTransaction did not return a hex string")
+        return result
+
+    def eth_get_transaction_receipt(self, tx_hash: str) -> dict[str, Any] | None:
+        result = self._call("eth_getTransactionReceipt", [tx_hash])
+        if result is None:
+            return None
+        if not isinstance(result, dict):
+            raise UnexpectedResponseError("eth_getTransactionReceipt did not return an object")
+        return cast(dict[str, Any], result)
+
+
 def _extract_error_fields(err: object) -> tuple[int, str, object]:
     if isinstance(err, dict):
         err_dict = cast(dict[str, object], err)
@@ -146,4 +226,9 @@ def _hex_to_int(value: Any, method: str) -> int:
         raise UnexpectedResponseError(f"{method} returned malformed hex: {error}") from error
 
 
-__all__ = ["JsonRpcCallError", "JsonRpcClient", "is_json_rpc_contract_revert"]
+__all__ = [
+    "JsonRpcCallError",
+    "JsonRpcClient",
+    "SyncJsonRpcClient",
+    "is_json_rpc_contract_revert",
+]
