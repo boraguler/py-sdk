@@ -72,7 +72,7 @@ PRODUCTION = Environment(
     data_url="https://data-api.polymarket.com",
     rtds_ws_url="wss://ws-live-data.polymarket.com",
     sports_ws_url="wss://sports-api.polymarket.com/ws",
-    rpc_url="https://polygon-rpc.com",
+    rpc_url="https://polygon.drpc.org",
 )
 
 __all__ = ["Environment", "PRODUCTION", "WalletDerivation"]
