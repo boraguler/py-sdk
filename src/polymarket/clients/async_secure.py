@@ -1364,7 +1364,49 @@ class AsyncSecureClient:
         draft = await prepare_limit_order_draft(self._ctx, params)
         return await self._sign_order(draft, post_only=params.post_only)
 
+    @overload
     async def create_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["BUY"],
+        amount: Decimal | int | float | str,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> SignedOrder: ...
+    @overload
+    async def create_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["SELL"],
+        shares: Decimal | int | float | str,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> SignedOrder: ...
+    async def create_market_order(
+        self,
+        *,
+        token_id: str,
+        side: OrderSide,
+        amount: Decimal | int | float | str | None = None,
+        shares: Decimal | int | float | str | None = None,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> SignedOrder:
+        return await self._prepare_and_sign_market_order(
+            token_id=token_id,
+            side=side,
+            amount=amount,
+            shares=shares,
+            max_spend=max_spend,
+            order_type=order_type,
+            builder_code=builder_code,
+        )
+
+    async def _prepare_and_sign_market_order(
         self,
         *,
         token_id: str,
@@ -1409,6 +1451,27 @@ class AsyncSecureClient:
         )
         return await self.post_order(signed)
 
+    @overload
+    async def place_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["BUY"],
+        amount: Decimal | int | float | str,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> OrderResponse: ...
+    @overload
+    async def place_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["SELL"],
+        shares: Decimal | int | float | str,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> OrderResponse: ...
     async def place_market_order(
         self,
         *,
@@ -1420,7 +1483,7 @@ class AsyncSecureClient:
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> OrderResponse:
-        signed = await self.create_market_order(
+        signed = await self._prepare_and_sign_market_order(
             token_id=token_id,
             side=side,
             amount=amount,
