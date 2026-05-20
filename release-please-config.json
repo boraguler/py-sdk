@@ -4,8 +4,9 @@
       "release-type": "python",
       "package-name": "polymarket-client",
       "changelog-path": "CHANGELOG.md",
+      "versioning": "prerelease",
       "prerelease": true,
-      "prerelease-type": "beta"
+      "prerelease-type": "b"
     }
   }
 }
