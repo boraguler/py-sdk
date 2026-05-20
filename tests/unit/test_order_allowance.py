@@ -4,13 +4,10 @@ import dataclasses
 from typing import Any
 
 import httpx
-import pytest
 
 from polymarket import ApiKeyCreds, AsyncSecureClient
-from polymarket._internal.actions.orders.allowance import ensure_order_allowance
-from polymarket._internal.actions.orders.types import OrderDraft
+from polymarket._internal.actions.orders.allowance import fetch_current_order_allowance
 from polymarket.clients._transport import AsyncTransport
-from polymarket.errors import InsufficientAllowanceError
 from polymarket.models.types import TokenId
 from polymarket.types import EvmAddress
 
@@ -18,21 +15,6 @@ PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff8
 SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
 EXCHANGE = EvmAddress("0xE111180000d2663C0091e4f400237545B87B996B")
-
-
-def _draft(*, side: str, offered: int) -> OrderDraft:
-    return OrderDraft(
-        chain_id=137,
-        exchange_address=EXCHANGE,
-        expiration=0,
-        funder_address=EvmAddress(SIGNER_ADDRESS),
-        offered_amount=offered,
-        order_type="GTC",
-        side=side,  # type: ignore[arg-type]
-        signer=EvmAddress(SIGNER_ADDRESS),
-        requested_amount=1_000_000,
-        token_id=TokenId("8501497"),
-    )
 
 
 def _install_secure_clob(client: AsyncSecureClient, payload: dict[str, Any]) -> None:
@@ -58,65 +40,78 @@ async def _make_client() -> AsyncSecureClient:
     )
 
 
-def test_ensure_order_allowance_passes_when_collateral_sufficient_for_buy() -> None:
-    async def run() -> None:
+def test_fetch_current_order_allowance_returns_buy_spender_balance() -> None:
+    async def run() -> int:
         client = await _make_client()
         try:
             _install_secure_clob(
                 client,
-                {"balance": "100000000", "allowances": {EXCHANGE: "100000000"}},
+                {"balance": "0", "allowances": {EXCHANGE: "5000000"}},
             )
-            await ensure_order_allowance(client._ctx, _draft(side="BUY", offered=1_000_000))
+            return await fetch_current_order_allowance(
+                client._ctx,
+                side="BUY",
+                token_id=TokenId("8501497"),
+                spender=EXCHANGE,
+            )
         finally:
             await client.close()
 
-    asyncio.run(run())
+    assert asyncio.run(run()) == 5_000_000
 
 
-def test_ensure_order_allowance_raises_when_collateral_short_for_buy() -> None:
-    async def run() -> None:
+def test_fetch_current_order_allowance_returns_sell_spender_balance() -> None:
+    async def run() -> int:
         client = await _make_client()
         try:
             _install_secure_clob(
                 client,
-                {"balance": "100", "allowances": {EXCHANGE: "100"}},
+                {"balance": "0", "allowances": {EXCHANGE: "777"}},
             )
-            await ensure_order_allowance(client._ctx, _draft(side="BUY", offered=1_000_000))
+            return await fetch_current_order_allowance(
+                client._ctx,
+                side="SELL",
+                token_id=TokenId("8501497"),
+                spender=EXCHANGE,
+            )
         finally:
             await client.close()
 
-    with pytest.raises(InsufficientAllowanceError, match="Insufficient"):
-        asyncio.run(run())
+    assert asyncio.run(run()) == 777
 
 
-def test_ensure_order_allowance_passes_when_conditional_sufficient_for_sell() -> None:
-    async def run() -> None:
+def test_fetch_current_order_allowance_returns_zero_when_spender_absent() -> None:
+    async def run() -> int:
+        client = await _make_client()
+        try:
+            _install_secure_clob(client, {"balance": "0", "allowances": {}})
+            return await fetch_current_order_allowance(
+                client._ctx,
+                side="BUY",
+                token_id=TokenId("8501497"),
+                spender=EXCHANGE,
+            )
+        finally:
+            await client.close()
+
+    assert asyncio.run(run()) == 0
+
+
+def test_fetch_current_order_allowance_spender_lookup_is_case_insensitive() -> None:
+    async def run() -> int:
         client = await _make_client()
         try:
             _install_secure_clob(
                 client,
-                {"balance": "100000000", "allowances": {EXCHANGE: "100000000"}},
+                {"balance": "0", "allowances": {EXCHANGE.lower(): "42"}},
             )
-            await ensure_order_allowance(client._ctx, _draft(side="SELL", offered=1_000_000))
+            return await fetch_current_order_allowance(
+                client._ctx,
+                side="BUY",
+                token_id=TokenId("8501497"),
+                spender=EXCHANGE,
+            )
         finally:
             await client.close()
 
-    asyncio.run(run())
-
-
-def test_ensure_order_allowance_spender_lookup_is_case_insensitive() -> None:
-    async def run() -> None:
-        client = await _make_client()
-        try:
-            _install_secure_clob(
-                client,
-                {
-                    "balance": "100000000",
-                    "allowances": {EXCHANGE.lower(): "100000000"},
-                },
-            )
-            await ensure_order_allowance(client._ctx, _draft(side="BUY", offered=1_000_000))
-        finally:
-            await client.close()
-
-    asyncio.run(run())
+    assert asyncio.run(run()) == 42

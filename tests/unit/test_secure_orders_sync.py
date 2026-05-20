@@ -9,7 +9,7 @@ import pytest
 
 from polymarket import ApiKeyCreds, SecureClient
 from polymarket.clients._transport import SyncTransport
-from polymarket.errors import InsufficientAllowanceError, UserInputError
+from polymarket.errors import UserInputError
 from polymarket.models.clob.order_response import AcceptedOrder
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
@@ -123,11 +123,19 @@ def test_create_limit_order_signs_and_returns_signed_order() -> None:
     assert signed.post_only is False
 
 
-def test_create_limit_order_raises_when_allowance_insufficient() -> None:
-    with pytest.raises(InsufficientAllowanceError), _make_client() as client:
+def test_create_limit_order_does_not_preflight_allowance() -> None:
+    secure_captured: list[httpx.Request] = []
+
+    with _make_client() as client:
         _install_clob(client, _routed_handler([], _public_routes()))
-        _install_secure_clob(client, _routed_handler([], _secure_routes(has_allowance=False)))
+        _install_secure_clob(
+            client, _routed_handler(secure_captured, _secure_routes(has_allowance=False))
+        )
         client.create_limit_order(token_id="8501497", price="0.5", size="10", side="BUY")
+
+    paths = [urlparse(str(r.url)).path for r in secure_captured]
+    assert "/balance-allowance" not in paths
+    assert "/balance-allowance/update" not in paths
 
 
 def test_place_limit_order_posts_after_signing() -> None:

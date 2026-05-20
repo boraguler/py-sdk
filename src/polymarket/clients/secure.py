@@ -38,7 +38,6 @@ from polymarket._internal.actions.gamma import (
 )
 from polymarket._internal.actions.orders import cancel as _cancel_actions
 from polymarket._internal.actions.orders import post as _post_actions
-from polymarket._internal.actions.orders.allowance import ensure_order_allowance_sync
 from polymarket._internal.actions.orders.estimate import (
     estimate_market_price_sync as _estimate_market_price_sync,
 )
@@ -53,6 +52,9 @@ from polymarket._internal.actions.orders.market import (
 from polymarket._internal.actions.orders.orders import (
     create_signed_order,
     create_unsigned_order,
+)
+from polymarket._internal.actions.orders.place import (
+    post_order_with_allowance_recovery_sync,
 )
 from polymarket._internal.actions.orders.typed_data import (
     build_order_signature,
@@ -1329,7 +1331,7 @@ class SecureClient:
             expiration=expiration,
             builder_code=builder_code,
         )
-        return self.post_order(signed)
+        return post_order_with_allowance_recovery_sync(self, signed)
 
     @overload
     def place_market_order(
@@ -1372,7 +1374,7 @@ class SecureClient:
             order_type=order_type,
             builder_code=builder_code,
         )
-        return self.post_order(signed)
+        return post_order_with_allowance_recovery_sync(self, signed)
 
     def get_builder_fee_rates(self, builder_code: str) -> BuilderFeeRates:
         from polymarket._internal.actions.orders.market_data import fetch_builder_fee_rates_sync
@@ -1470,7 +1472,6 @@ class SecureClient:
         return self._sign_order(draft, post_only=False)
 
     def _sign_order(self, draft: OrderDraft, *, post_only: bool) -> SignedOrder:
-        ensure_order_allowance_sync(self._ctx, draft)
         unsigned = create_unsigned_order(
             draft, wallet=self._ctx.wallet, wallet_type=self._ctx.wallet_type
         )
