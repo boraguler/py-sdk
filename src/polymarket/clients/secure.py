@@ -1,14 +1,18 @@
 """Synchronous secure Polymarket client."""
 
 import logging
-from collections.abc import Sequence
+import time
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import Self, cast
+from typing import TYPE_CHECKING, Self, cast
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
+from eth_utils.address import to_checksum_address
 
+from polymarket._internal.actions import account as _account_actions
+from polymarket._internal.actions import auth as _auth_actions
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
@@ -29,10 +33,29 @@ from polymarket._internal.actions.gamma import (
     Recurrence,
     TagMatch,
 )
+from polymarket._internal.actions.orders import cancel as _cancel_actions
+from polymarket._internal.actions.orders import post as _post_actions
+from polymarket._internal.actions.orders.allowance import ensure_order_allowance_sync
 from polymarket._internal.actions.orders.estimate import (
     estimate_market_price_sync as _estimate_market_price_sync,
 )
-from polymarket._internal.actions.orders.types import MarketOrderType
+from polymarket._internal.actions.orders.limit import (
+    prepare_limit_order_draft_sync,
+    validate_limit_order_params,
+)
+from polymarket._internal.actions.orders.market import (
+    prepare_market_order_draft_sync,
+    validate_market_order_params,
+)
+from polymarket._internal.actions.orders.orders import (
+    create_signed_order,
+    create_unsigned_order,
+)
+from polymarket._internal.actions.orders.typed_data import (
+    build_order_signature,
+    build_order_typed_data,
+)
+from polymarket._internal.actions.orders.types import OrderDraft
 from polymarket._internal.context import SyncSecureClientContext
 from polymarket._internal.dispatch import (
     sync_dispatch,
@@ -40,15 +63,25 @@ from polymarket._internal.dispatch import (
     sync_paginate_offset,
     sync_paginate_page_based,
 )
-from polymarket.clients._transport import SyncTransport
+from polymarket._internal.hmac import build_hmac_signature
+from polymarket._internal.l1_auth import sign_api_key_auth
+from polymarket._internal.wallet import WalletType, classify_wallet_type, signature_type_for
+from polymarket.clients._transport import SyncHeaderResolver, SyncTransport
 from polymarket.environments import PRODUCTION, Environment
-from polymarket.errors import RequestRejectedError, UserInputError
+from polymarket.errors import RequestRejectedError, SigningError, UserInputError
 from polymarket.models import (
+    ApiKeyCreds,
+    AssetType,
+    BalanceAllowance,
+    BuilderFeeRates,
+    ClobTrade,
     Comment,
     Event,
     LastTradePrice,
     LastTradePriceForToken,
     Market,
+    Notification,
+    OpenOrder,
     OrderBook,
     OrderSide,
     PriceHistoryInterval,
@@ -64,7 +97,17 @@ from polymarket.models import (
     TagReference,
     Team,
 )
-from polymarket.models.clob.rewards import CurrentReward, MarketReward
+from polymarket.models.clob.cancel import CancelOrdersResponse
+from polymarket.models.clob.order_response import OrderResponse
+from polymarket.models.clob.orders import MarketOrderType, SignedOrder
+from polymarket.models.clob.rewards import (
+    CurrentReward,
+    MarketReward,
+    RewardsPercentages,
+    TotalUserEarning,
+    UserEarning,
+    UserRewardsEarning,
+)
 from polymarket.models.data import (
     Activity,
     BuilderVolumeEntry,
@@ -86,67 +129,142 @@ from polymarket.models.data import (
 )
 from polymarket.models.types import ConditionId
 from polymarket.pagination import Page, Paginator
+from polymarket.types import EvmAddress, HexString
+
+if TYPE_CHECKING:
+    from polymarket.clients.public import PublicClient
 
 _CREATE_TOKEN = object()
+
+
+def _validate_nonce(nonce: object) -> None:
+    if isinstance(nonce, bool) or not isinstance(nonce, int):
+        raise UserInputError("nonce must be a non-negative integer.")
+    if nonce < 0:
+        raise UserInputError("nonce must be a non-negative integer.")
 
 
 class SecureClient:
     def __init__(
         self,
         *,
-        private_key: str,
-        environment: Environment = PRODUCTION,
-        logger: logging.Logger | None = None,
+        ctx: SyncSecureClientContext,
         _create_token: object | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         if _create_token is not _CREATE_TOKEN:
             raise RuntimeError("Use SecureClient.create(...) to create a secure client")
-        if not private_key:
-            raise UserInputError("private_key is required")
+        self._ended = False
+        self._ctx_inner = ctx
+        self._logger = logger
 
-        try:
-            signer = cast(LocalAccount, Account.from_key(private_key))
-        except (ValueError, TypeError) as error:
-            raise UserInputError(f"Invalid private_key: {error}") from error
+    @property
+    def _ctx(self) -> SyncSecureClientContext:
+        if self._ended:
+            raise RuntimeError(
+                "SecureClient has ended authentication; use the returned PublicClient "
+                "or create a new SecureClient."
+            )
+        return self._ctx_inner
 
-        self._ctx = SyncSecureClientContext(
-            environment=environment,
-            gamma=SyncTransport(base_url=environment.gamma_url, logger=logger),
-            data=SyncTransport(base_url=environment.data_url, logger=logger),
-            clob=SyncTransport(base_url=environment.clob_url, logger=logger),
-            signer=signer,
-        )
+    @_ctx.setter
+    def _ctx(self, value: SyncSecureClientContext) -> None:
+        self._ctx_inner = value
 
     @classmethod
     def create(
         cls,
         *,
         private_key: str,
+        wallet: str,
         environment: Environment = PRODUCTION,
+        credentials: ApiKeyCreds | None = None,
+        nonce: int = 0,
+        validate_credentials: bool = True,
         logger: logging.Logger | None = None,
     ) -> Self:
-        client = cls(
-            private_key=private_key,
-            environment=environment,
-            logger=logger,
-            _create_token=_CREATE_TOKEN,
-        )
+        if not private_key:
+            raise UserInputError("private_key is required")
+        if not wallet:
+            raise UserInputError(
+                "wallet is required. Pass the signer address itself to authenticate as an EOA."
+            )
+        _validate_nonce(nonce)
+        if credentials is not None and nonce != 0:
+            raise UserInputError("nonce cannot be combined with credentials.")
         try:
-            return client._login()
+            signer = cast(LocalAccount, Account.from_key(private_key))
+        except (ValueError, TypeError) as error:
+            raise UserInputError(f"Invalid private_key: {error}") from error
+
+        try:
+            wallet_checksum = to_checksum_address(wallet)
+        except ValueError as error:
+            raise UserInputError(f"Invalid wallet address: {error}") from error
+        wallet_type = classify_wallet_type(
+            signer=signer.address,
+            wallet=wallet_checksum,
+            config=environment.wallet_derivation,
+        )
+        branded_wallet = cast(EvmAddress, wallet_checksum)
+
+        gamma = SyncTransport(base_url=environment.gamma_url, logger=logger)
+        data = SyncTransport(base_url=environment.data_url, logger=logger)
+        clob = SyncTransport(base_url=environment.clob_url, logger=logger)
+
+        try:
+            resolved_credentials = _bootstrap_credentials_sync(
+                environment=environment,
+                signer=signer,
+                clob=clob,
+                provided=credentials,
+                nonce=nonce,
+                validate=validate_credentials,
+                logger=logger,
+            )
+            secure_clob = SyncTransport(
+                base_url=environment.clob_url,
+                logger=logger,
+                header_resolver=_make_l2_header_resolver_sync(signer, resolved_credentials),
+            )
         except BaseException:
-            client.close()
+            gamma.close()
+            data.close()
+            clob.close()
             raise
 
-    def _login(self) -> Self:
-        return self
+        ctx = SyncSecureClientContext(
+            environment=environment,
+            gamma=gamma,
+            data=data,
+            clob=clob,
+            signer=signer,
+            credentials=resolved_credentials,
+            secure_clob=secure_clob,
+            wallet=branded_wallet,
+            wallet_type=wallet_type,
+        )
+        return cls(ctx=ctx, _create_token=_CREATE_TOKEN, logger=logger)
 
     @property
     def environment(self) -> Environment:
         return self._ctx.environment
 
     @property
-    def wallet(self) -> str:
-        return self._ctx.signer.address
+    def wallet(self) -> EvmAddress:
+        return self._ctx.wallet
+
+    @property
+    def signer(self) -> EvmAddress:
+        return cast(EvmAddress, self._ctx.signer.address)
+
+    @property
+    def wallet_type(self) -> WalletType:
+        return self._ctx.wallet_type
+
+    @property
+    def credentials(self) -> ApiKeyCreds:
+        return self._ctx.credentials
 
     def __enter__(self) -> Self:
         return self
@@ -161,16 +279,20 @@ class SecureClient:
 
     def close(self) -> None:
         """Close the underlying network transports."""
+        ctx = self._ctx_inner
         try:
-            self._ctx.gamma.close()
+            ctx.gamma.close()
         finally:
             try:
-                self._ctx.data.close()
+                ctx.data.close()
             finally:
-                self._ctx.clob.close()
+                try:
+                    ctx.clob.close()
+                finally:
+                    ctx.secure_clob.close()
 
-    def _user_or_signer(self, user: str | None) -> str:
-        return self._ctx.signer.address if user is None else user
+    def _user_or_wallet(self, user: str | None) -> str:
+        return self._ctx.wallet if user is None else user
 
     def get_market(
         self,
@@ -333,13 +455,13 @@ class SecureClient:
     ) -> tuple[PortfolioValue, ...]:
         return sync_dispatch(
             self._ctx,
-            _data_actions.get_portfolio_values_spec(user=self._user_or_signer(user), market=market),
+            _data_actions.get_portfolio_values_spec(user=self._user_or_wallet(user), market=market),
         )
 
     def get_traded_market_count(self, *, user: str | None = None) -> TradedMarketCount:
         return sync_dispatch(
             self._ctx,
-            _data_actions.get_traded_market_count_spec(user=self._user_or_signer(user)),
+            _data_actions.get_traded_market_count_spec(user=self._user_or_wallet(user)),
         )
 
     def get_builder_volumes(
@@ -364,7 +486,7 @@ class SecureClient:
         page_size: int = 20,
     ) -> Paginator[Position]:
         spec = _data_actions.list_positions_spec(
-            user=self._user_or_signer(user),
+            user=self._user_or_wallet(user),
             market=market,
             event_id=event_id,
             size_threshold=size_threshold,
@@ -388,7 +510,7 @@ class SecureClient:
         page_size: int = 20,
     ) -> Paginator[ClosedPosition]:
         spec = _data_actions.list_closed_positions_spec(
-            user=self._user_or_signer(user),
+            user=self._user_or_wallet(user),
             market=market,
             event_id=event_id,
             title=title,
@@ -429,7 +551,7 @@ class SecureClient:
         page_size: int = 20,
     ) -> Paginator[Trade]:
         spec = _data_actions.list_trades_spec(
-            user=self._user_or_signer(user),
+            user=self._user_or_wallet(user),
             market=market,
             event_id=event_id,
             side=side,
@@ -454,7 +576,7 @@ class SecureClient:
         page_size: int = 20,
     ) -> Paginator[Activity]:
         spec = _data_actions.list_activity_spec(
-            user=self._user_or_signer(user),
+            user=self._user_or_wallet(user),
             market=market,
             event_id=event_id,
             activity_types=activity_types,
@@ -477,7 +599,7 @@ class SecureClient:
 
     def download_accounting_snapshot(self, *, user: str | None = None) -> bytes:
         path, params = _data_actions.build_accounting_snapshot_request(
-            user=self._user_or_signer(user)
+            user=self._user_or_wallet(user)
         )
         return self._ctx.data.get_bytes(path, params=params)
 
@@ -897,3 +1019,437 @@ class SecureClient:
             )
 
         return Paginator(fetch=fetch)
+
+    def fetch_api_keys(self) -> tuple[str, ...]:
+        return _auth_actions.fetch_api_keys_sync(self._ctx.secure_clob)
+
+    def delete_api_key(self) -> None:
+        _auth_actions.delete_api_key_sync(self._ctx.secure_clob)
+
+    def end_authentication(self) -> "PublicClient":
+        from polymarket.clients.public import PublicClient
+
+        environment = self._ctx.environment
+        try:
+            self.delete_api_key()
+        except RequestRejectedError as error:
+            if error.status not in (401, 404):
+                raise
+        finally:
+            self.close()
+            self._ended = True
+        return PublicClient(environment=environment)
+
+    def get_closed_only_mode(self) -> bool:
+        path, params = _account_actions.build_closed_only_mode_request()
+        return _account_actions.parse_closed_only_mode(
+            self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    def list_open_orders(
+        self,
+        *,
+        token_id: str | None = None,
+        id: str | None = None,
+        market: str | None = None,
+    ) -> Paginator[OpenOrder]:
+        def fetch(cursor: str | None) -> Page[OpenOrder]:
+            path, params = _account_actions.build_list_open_orders_request(
+                token_id=token_id, id=id, market=market, cursor=cursor
+            )
+            payload = self._ctx.secure_clob.get_json(path, params=params)
+            return _account_actions.parse_open_orders_page(payload)
+
+        return Paginator(fetch=fetch)
+
+    def get_order(self, *, order_id: str) -> OpenOrder:
+        path, params = _account_actions.build_get_order_request(order_id=order_id)
+        return _account_actions.parse_open_order(
+            self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    def list_account_trades(
+        self,
+        *,
+        token_id: str | None = None,
+        id: str | None = None,
+        market: str | None = None,
+        maker_address: str | None = None,
+        after: str | None = None,
+        before: str | None = None,
+    ) -> Paginator[ClobTrade]:
+        def fetch(cursor: str | None) -> Page[ClobTrade]:
+            path, params = _account_actions.build_list_account_trades_request(
+                token_id=token_id,
+                id=id,
+                market=market,
+                maker_address=maker_address,
+                after=after,
+                before=before,
+                cursor=cursor,
+            )
+            payload = self._ctx.secure_clob.get_json(path, params=params)
+            return _account_actions.parse_account_trades_page(payload)
+
+        return Paginator(fetch=fetch)
+
+    def get_notifications(self) -> tuple[Notification, ...]:
+        path, params = _account_actions.build_notifications_request(
+            signature_type=signature_type_for(self._ctx.wallet_type)
+        )
+        return _account_actions.parse_notifications(
+            self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    def drop_notifications(self, *, ids: Sequence[int | str]) -> None:
+        path, params = _account_actions.build_drop_notifications_request(
+            ids=ids, signature_type=signature_type_for(self._ctx.wallet_type)
+        )
+        self._ctx.secure_clob.delete(path, params=params)
+
+    def get_balance_allowance(
+        self, *, asset_type: AssetType, token_id: str | None = None
+    ) -> BalanceAllowance:
+        path, params = _account_actions.build_balance_allowance_request(
+            asset_type=asset_type,
+            token_id=token_id,
+            signature_type=signature_type_for(self._ctx.wallet_type),
+        )
+        return _account_actions.parse_balance_allowance(
+            self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    def create_limit_order(
+        self,
+        *,
+        token_id: str,
+        price: Decimal | int | float | str,
+        size: Decimal | int | float | str,
+        side: OrderSide,
+        post_only: bool = False,
+        expiration: int | None = None,
+        builder_code: str | None = None,
+    ) -> SignedOrder:
+        return self._prepare_and_sign_limit_order(
+            token_id=token_id,
+            price=price,
+            size=size,
+            side=side,
+            post_only=post_only,
+            expiration=expiration,
+            builder_code=builder_code,
+        )
+
+    def create_market_order(
+        self,
+        *,
+        token_id: str,
+        side: OrderSide,
+        amount: Decimal | int | float | str | None = None,
+        shares: Decimal | int | float | str | None = None,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> SignedOrder:
+        return self._prepare_and_sign_market_order(
+            token_id=token_id,
+            side=side,
+            amount=amount,
+            shares=shares,
+            max_spend=max_spend,
+            order_type=order_type,
+            builder_code=builder_code,
+        )
+
+    def place_limit_order(
+        self,
+        *,
+        token_id: str,
+        price: Decimal | int | float | str,
+        size: Decimal | int | float | str,
+        side: OrderSide,
+        post_only: bool = False,
+        expiration: int | None = None,
+        builder_code: str | None = None,
+    ) -> OrderResponse:
+        signed = self._prepare_and_sign_limit_order(
+            token_id=token_id,
+            price=price,
+            size=size,
+            side=side,
+            post_only=post_only,
+            expiration=expiration,
+            builder_code=builder_code,
+        )
+        return self.post_order(signed)
+
+    def place_market_order(
+        self,
+        *,
+        token_id: str,
+        side: OrderSide,
+        amount: Decimal | int | float | str | None = None,
+        shares: Decimal | int | float | str | None = None,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> OrderResponse:
+        signed = self._prepare_and_sign_market_order(
+            token_id=token_id,
+            side=side,
+            amount=amount,
+            shares=shares,
+            max_spend=max_spend,
+            order_type=order_type,
+            builder_code=builder_code,
+        )
+        return self.post_order(signed)
+
+    def get_builder_fee_rates(self, builder_code: str) -> BuilderFeeRates:
+        from polymarket._internal.actions.orders.market_data import fetch_builder_fee_rates_sync
+
+        return fetch_builder_fee_rates_sync(self._ctx, builder_code=builder_code)
+
+    def post_order(self, signed_order: SignedOrder) -> OrderResponse:
+        path, payload = _post_actions.build_post_order_request(
+            signed_order, owner_api_key=self._ctx.credentials.key
+        )
+        return _post_actions.parse_order_response(
+            self._ctx.secure_clob.post_json(path, json=payload)
+        )
+
+    def post_orders(self, signed_orders: Sequence[SignedOrder]) -> tuple[OrderResponse, ...]:
+        path, payload = _post_actions.build_post_orders_request(
+            signed_orders, owner_api_key=self._ctx.credentials.key
+        )
+        return _post_actions.parse_order_responses(
+            self._ctx.secure_clob.post_json(path, json=payload)
+        )
+
+    def cancel_order(self, *, order_id: str) -> CancelOrdersResponse:
+        path, body = _cancel_actions.build_cancel_order_request(order_id=order_id)
+        return _cancel_actions.parse_cancel_orders_response(
+            self._ctx.secure_clob.delete_json(path, json=body)
+        )
+
+    def cancel_orders(self, *, order_ids: Sequence[str]) -> CancelOrdersResponse:
+        path, body = _cancel_actions.build_cancel_orders_request(order_ids=order_ids)
+        return _cancel_actions.parse_cancel_orders_response(
+            self._ctx.secure_clob.delete_json(path, json=body)
+        )
+
+    def cancel_all(self) -> CancelOrdersResponse:
+        path, body = _cancel_actions.build_cancel_all_request()
+        return _cancel_actions.parse_cancel_orders_response(
+            self._ctx.secure_clob.delete_json(path, json=body)
+        )
+
+    def cancel_market_orders(
+        self, *, market: str | None = None, token_id: str | None = None
+    ) -> CancelOrdersResponse:
+        path, body = _cancel_actions.build_cancel_market_orders_request(
+            market=market, token_id=token_id
+        )
+        return _cancel_actions.parse_cancel_orders_response(
+            self._ctx.secure_clob.delete_json(path, json=body)
+        )
+
+    def _prepare_and_sign_limit_order(
+        self,
+        *,
+        token_id: str,
+        price: Decimal | int | float | str,
+        size: Decimal | int | float | str,
+        side: OrderSide,
+        post_only: bool,
+        expiration: int | None,
+        builder_code: str | None,
+    ) -> SignedOrder:
+        params = validate_limit_order_params(
+            token_id=token_id,
+            price=price,
+            size=size,
+            side=side,
+            post_only=post_only,
+            expiration=expiration,
+            builder_code=builder_code,
+        )
+        draft = prepare_limit_order_draft_sync(self._ctx, params)
+        return self._sign_order(draft, post_only=params.post_only)
+
+    def _prepare_and_sign_market_order(
+        self,
+        *,
+        token_id: str,
+        side: OrderSide,
+        amount: Decimal | int | float | str | None,
+        shares: Decimal | int | float | str | None,
+        max_spend: Decimal | int | float | str | None,
+        order_type: MarketOrderType,
+        builder_code: str | None,
+    ) -> SignedOrder:
+        params = validate_market_order_params(
+            token_id=token_id,
+            side=side,
+            amount=amount,
+            shares=shares,
+            max_spend=max_spend,
+            order_type=order_type,
+            builder_code=builder_code,
+        )
+        draft = prepare_market_order_draft_sync(self._ctx, params)
+        return self._sign_order(draft, post_only=False)
+
+    def _sign_order(self, draft: OrderDraft, *, post_only: bool) -> SignedOrder:
+        ensure_order_allowance_sync(self._ctx, draft)
+        unsigned = create_unsigned_order(
+            draft, wallet=self._ctx.wallet, wallet_type=self._ctx.wallet_type
+        )
+        typed_data = build_order_typed_data(unsigned)
+        try:
+            signed_message = self._ctx.signer.sign_typed_data(full_message=typed_data)
+        except Exception as error:
+            raise SigningError(f"Failed to sign order: {error}") from error
+        raw_hex = signed_message.signature.hex()
+        signature_hex = HexString(raw_hex if raw_hex.startswith("0x") else "0x" + raw_hex)
+        final_signature = build_order_signature(unsigned, signature_hex)
+        return create_signed_order(unsigned, final_signature, post_only=post_only)
+
+    def get_order_scoring(self, *, order_id: str) -> bool:
+        path, params = _rewards_actions.build_get_order_scoring_request(order_id=order_id)
+        return _rewards_actions.parse_order_scoring(
+            self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    def get_orders_scoring(self, *, order_ids: Sequence[str]) -> dict[str, bool]:
+        path, body = _rewards_actions.build_get_orders_scoring_request(order_ids=order_ids)
+        return _rewards_actions.parse_orders_scoring(
+            self._ctx.secure_clob.post_json(path, json=body)
+        )
+
+    def list_user_earnings_for_day(self, *, date: str) -> Paginator[UserEarning]:
+        def fetch(cursor: str | None) -> Page[UserEarning]:
+            path, params = _rewards_actions.build_list_user_earnings_for_day_request(
+                date=date,
+                signature_type=signature_type_for(self._ctx.wallet_type),
+                cursor=cursor,
+            )
+            return _rewards_actions.parse_user_earnings_page(
+                self._ctx.secure_clob.get_json(path, params=params)
+            )
+
+        return Paginator(fetch=fetch)
+
+    def get_total_earnings_for_user_for_day(self, *, date: str) -> tuple[TotalUserEarning, ...]:
+        path, params = _rewards_actions.build_total_user_earnings_for_day_request(
+            date=date, signature_type=signature_type_for(self._ctx.wallet_type)
+        )
+        return _rewards_actions.parse_total_user_earnings(
+            self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    def list_user_earnings_and_markets_config(
+        self,
+        *,
+        date: str,
+        no_competition: bool | None = None,
+        order_by: str | None = None,
+        position: str | None = None,
+        page_size: int | None = None,
+    ) -> Paginator[UserRewardsEarning]:
+        def fetch(cursor: str | None) -> Page[UserRewardsEarning]:
+            path, params = _rewards_actions.build_list_user_earnings_and_markets_config_request(
+                date=date,
+                signature_type=signature_type_for(self._ctx.wallet_type),
+                no_competition=no_competition,
+                order_by=order_by,
+                position=position,
+                page_size=page_size,
+                cursor=cursor,
+            )
+            return _rewards_actions.parse_user_rewards_earnings_page(
+                self._ctx.secure_clob.get_json(path, params=params)
+            )
+
+        return Paginator(fetch=fetch)
+
+    def get_reward_percentages(self) -> RewardsPercentages:
+        path, params = _rewards_actions.build_get_reward_percentages_request(
+            signature_type=signature_type_for(self._ctx.wallet_type)
+        )
+        return _rewards_actions.parse_reward_percentages(
+            self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+
+def _bootstrap_credentials_sync(
+    *,
+    environment: Environment,
+    signer: LocalAccount,
+    clob: SyncTransport,
+    provided: ApiKeyCreds | None,
+    nonce: int,
+    validate: bool,
+    logger: logging.Logger | None,
+) -> ApiKeyCreds:
+    if provided is not None and (
+        not validate
+        or _credentials_are_active_sync(
+            environment=environment,
+            signer=signer,
+            credentials=provided,
+            logger=logger,
+        )
+    ):
+        return provided
+
+    signature = sign_api_key_auth(
+        signer, chain_id=environment.chain_id, timestamp=int(time.time()), nonce=nonce
+    )
+    return _auth_actions.create_or_derive_api_key_sync(clob, signature)
+
+
+def _credentials_are_active_sync(
+    *,
+    environment: Environment,
+    signer: LocalAccount,
+    credentials: ApiKeyCreds,
+    logger: logging.Logger | None,
+) -> bool:
+    probe = SyncTransport(
+        base_url=environment.clob_url,
+        logger=logger,
+        header_resolver=_make_l2_header_resolver_sync(signer, credentials),
+    )
+    try:
+        keys = _auth_actions.fetch_api_keys_sync(probe)
+    except RequestRejectedError as error:
+        if error.status == 401:
+            return False
+        raise
+    finally:
+        probe.close()
+    return credentials.key in keys
+
+
+def _make_l2_header_resolver_sync(
+    signer: LocalAccount, credentials: ApiKeyCreds
+) -> SyncHeaderResolver:
+    def resolver(method: str, path: str, body: str | None) -> Mapping[str, str]:
+        timestamp = int(time.time())
+        signature = build_hmac_signature(
+            secret=credentials.secret,
+            timestamp=timestamp,
+            method=method,
+            path=path,
+            body=body,
+        )
+        return {
+            "POLY_ADDRESS": signer.address,
+            "POLY_API_KEY": credentials.key,
+            "POLY_PASSPHRASE": credentials.passphrase,
+            "POLY_SIGNATURE": signature,
+            "POLY_TIMESTAMP": str(timestamp),
+        }
+
+    return resolver

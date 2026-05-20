@@ -45,7 +45,12 @@ def test_async_public_client_supports_context_manager() -> None:
 
 
 def test_secure_client_factory_uses_production_by_default() -> None:
-    client = SecureClient.create(private_key=PRIVATE_KEY)
+    client = SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    )
     try:
         assert client.environment.name == "production"
     finally:
@@ -53,12 +58,19 @@ def test_secure_client_factory_uses_production_by_default() -> None:
 
 
 def test_secure_client_requires_factory() -> None:
+    from polymarket._internal.context import SyncSecureClientContext
+
     with pytest.raises(RuntimeError, match="SecureClient.create"):
-        SecureClient(private_key=PRIVATE_KEY)
+        SecureClient(ctx=cast(SyncSecureClientContext, object()))
 
 
 def test_secure_client_supports_context_manager() -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         assert client.environment.name == "production"
 
 
@@ -98,7 +110,12 @@ def test_async_secure_client_supports_context_manager() -> None:
 
 
 def test_secure_client_exposes_signer_wallet() -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         assert client.wallet == PRIVATE_KEY_ADDRESS
 
 
@@ -120,7 +137,12 @@ def test_async_secure_client_exposes_signer_wallet() -> None:
 
 def test_secure_client_invalid_key_raises_user_input_error() -> None:
     with pytest.raises(UserInputError, match="Invalid private_key"):
-        SecureClient.create(private_key="not-a-valid-key")
+        SecureClient.create(private_key="not-a-valid-key", wallet=SIGNER_ADDRESS)
+
+
+def test_secure_client_requires_wallet() -> None:
+    with pytest.raises(UserInputError, match="wallet is required"):
+        SecureClient.create(private_key=PRIVATE_KEY, wallet="")
 
 
 def test_async_secure_client_invalid_key_raises_user_input_error() -> None:

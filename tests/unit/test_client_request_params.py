@@ -116,7 +116,12 @@ def test_async_public_list_trades_passes_event_id() -> None:
 
 def test_secure_list_trades_passes_event_id() -> None:
     captured: list[httpx.Request] = []
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync(client, _capture(captured))
         client.list_trades(event_id=[7]).first_page()
 
@@ -173,7 +178,12 @@ def test_async_public_list_activity_passes_event_id() -> None:
 
 def test_secure_list_activity_passes_event_id() -> None:
     captured: list[httpx.Request] = []
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync(client, _capture(captured))
         client.list_activity(event_id=[12, 13]).first_page()
 
@@ -218,7 +228,12 @@ def test_public_list_positions_passes_event_id() -> None:
 
 def test_secure_list_positions_passes_event_id() -> None:
     captured: list[httpx.Request] = []
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync(client, _capture(captured))
         client.list_positions(event_id=[5]).first_page()
 
@@ -244,7 +259,12 @@ def test_secure_list_trades_rejects_market_and_event_id_together() -> None:
     from polymarket.errors import UserInputError
 
     with (
-        SecureClient.create(private_key=PRIVATE_KEY) as client,
+        SecureClient.create(
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
+        ) as client,
         pytest.raises(UserInputError, match="Provide market or event_id"),
     ):
         client.list_trades(market=["0xM"], event_id=[1])

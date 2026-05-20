@@ -22,6 +22,10 @@ class SyncClientContext:
 @dataclass(frozen=True, slots=True)
 class SyncSecureClientContext(SyncClientContext):
     signer: LocalAccount
+    credentials: ApiKeyCreds
+    secure_clob: SyncTransport
+    wallet: EvmAddress
+    wallet_type: WalletType
 
 
 @dataclass(frozen=True, slots=True)

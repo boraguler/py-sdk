@@ -38,9 +38,21 @@ async def fetch_neg_risk(ctx: AsyncClientContext, *, token_id: str) -> bool:
     return _parse_neg_risk(data)
 
 
+def fetch_neg_risk_sync(ctx: SyncClientContext, *, token_id: str) -> bool:
+    validated = require_nonempty("token_id", token_id)
+    data = ctx.clob.get_json("/neg-risk", params={"token_id": validated})
+    return _parse_neg_risk(data)
+
+
 async def resolve_condition_by_token(ctx: AsyncClientContext, *, token_id: TokenId) -> ConditionId:
     validated = require_nonempty("token_id", token_id)
     data = await ctx.clob.get_json(f"/markets-by-token/{validated}")
+    return _parse_condition_by_token(data)
+
+
+def resolve_condition_by_token_sync(ctx: SyncClientContext, *, token_id: TokenId) -> ConditionId:
+    validated = require_nonempty("token_id", token_id)
+    data = ctx.clob.get_json(f"/markets-by-token/{validated}")
     return _parse_condition_by_token(data)
 
 
@@ -52,6 +64,14 @@ async def fetch_platform_fee_info(
     return _parse_platform_fee_info(data)
 
 
+def fetch_platform_fee_info_sync(
+    ctx: SyncClientContext, *, condition_id: ConditionId
+) -> PlatformFeeInfo:
+    validated = require_nonempty("condition_id", condition_id)
+    data = ctx.clob.get_json(f"/clob-markets/{validated}")
+    return _parse_platform_fee_info(data)
+
+
 async def fetch_builder_fee_rates(ctx: AsyncClientContext, *, builder_code: str) -> BuilderFeeRates:
     validated = validate_builder_code(builder_code)
     if validated == BYTES32_ZERO:
@@ -59,6 +79,16 @@ async def fetch_builder_fee_rates(ctx: AsyncClientContext, *, builder_code: str)
             "builder_code must be a real builder; zero (0x000…000) represents no attribution."
         )
     data = await ctx.clob.get_json(f"/fees/builder-fees/{validated}")
+    return BuilderFeeRates.parse_response(data)
+
+
+def fetch_builder_fee_rates_sync(ctx: SyncClientContext, *, builder_code: str) -> BuilderFeeRates:
+    validated = validate_builder_code(builder_code)
+    if validated == BYTES32_ZERO:
+        raise UserInputError(
+            "builder_code must be a real builder; zero (0x000…000) represents no attribution."
+        )
+    data = ctx.clob.get_json(f"/fees/builder-fees/{validated}")
     return BuilderFeeRates.parse_response(data)
 
 
@@ -144,9 +174,13 @@ def _coerce_decimal(value: object, field: str) -> Decimal:
 __all__ = [
     "PlatformFeeInfo",
     "fetch_builder_fee_rates",
+    "fetch_builder_fee_rates_sync",
     "fetch_neg_risk",
+    "fetch_neg_risk_sync",
     "fetch_platform_fee_info",
+    "fetch_platform_fee_info_sync",
     "fetch_tick_size",
     "fetch_tick_size_sync",
     "resolve_condition_by_token",
+    "resolve_condition_by_token_sync",
 ]

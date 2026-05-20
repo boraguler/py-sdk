@@ -7,7 +7,12 @@ from polymarket._internal.actions.orders.context import (
     resolve_exchange_address,
     resolve_rounding_config,
 )
-from polymarket._internal.actions.orders.market_data import fetch_neg_risk, fetch_tick_size
+from polymarket._internal.actions.orders.market_data import (
+    fetch_neg_risk,
+    fetch_neg_risk_sync,
+    fetch_tick_size,
+    fetch_tick_size_sync,
+)
 from polymarket._internal.actions.orders.math import (
     decimal_places,
     parse_amount,
@@ -16,7 +21,7 @@ from polymarket._internal.actions.orders.math import (
     round_up,
 )
 from polymarket._internal.actions.orders.types import OrderDraft
-from polymarket._internal.context import AsyncSecureClientContext
+from polymarket._internal.context import AsyncSecureClientContext, SyncSecureClientContext
 from polymarket._internal.validation import require_nonempty, validate_builder_code
 from polymarket.errors import UserInputError
 from polymarket.models.types import OrderSide, TokenId
@@ -99,6 +104,30 @@ async def prepare_limit_order_draft(
     )
 
 
+def prepare_limit_order_draft_sync(
+    ctx: SyncSecureClientContext, params: PrepareLimitOrderParams
+) -> OrderDraft:
+    tick_size = fetch_tick_size_sync(ctx, token_id=params.token_id)
+    neg_risk = fetch_neg_risk_sync(ctx, token_id=params.token_id)
+    price = _resolve_price(params.price, tick_size)
+    offered, requested = _compute_limit_order_amounts(
+        price=price, size=params.size, side=params.side, tick_size=tick_size
+    )
+    return OrderDraft(
+        chain_id=ctx.environment.chain_id,
+        exchange_address=resolve_exchange_address(ctx.environment, neg_risk),
+        expiration=params.expiration if params.expiration is not None else 0,
+        funder_address=ctx.wallet,
+        offered_amount=offered,
+        order_type="GTC" if params.expiration is None else "GTD",
+        side=params.side,
+        signer=EvmAddress(ctx.signer.address),
+        requested_amount=requested,
+        token_id=params.token_id,
+        builder_code=params.builder_code,
+    )
+
+
 def _compute_limit_order_amounts(
     *, price: Decimal, size: Decimal, side: OrderSide, tick_size: Decimal
 ) -> tuple[int, int]:
@@ -139,5 +168,6 @@ def _resolve_price(price: Decimal, tick_size: Decimal) -> Decimal:
 __all__ = [
     "PrepareLimitOrderParams",
     "prepare_limit_order_draft",
+    "prepare_limit_order_draft_sync",
     "validate_limit_order_params",
 ]

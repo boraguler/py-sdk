@@ -5,7 +5,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeAlias
 
 import httpx
 
@@ -16,6 +16,9 @@ from polymarket.errors import (
     TransportError,
     UnexpectedResponseError,
 )
+
+SyncHeaderResolver: TypeAlias = Callable[[str, str, str | None], Mapping[str, str]]
+HeaderResolver: TypeAlias = Callable[[str, str, str | None], Awaitable[Mapping[str, str]]]
 
 _DEFAULT_LIMITS = httpx.Limits(
     max_connections=100,
@@ -41,6 +44,7 @@ class SyncTransport:
         options: TransportOptions | None = None,
         logger: logging.Logger | None = None,
         client: httpx.Client | None = None,
+        header_resolver: SyncHeaderResolver | None = None,
     ) -> None:
         opts = options or TransportOptions()
         self._owns_client = client is None
@@ -52,14 +56,16 @@ class SyncTransport:
             event_hooks=dict(opts.event_hooks) if opts.event_hooks else None,
         )
         self._logger = logger
+        self._header_resolver = header_resolver
 
     def get_json(
         self,
         path: str,
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
-        response = self._request("GET", path, params=params)
+        response = self._request("GET", path, params=params, headers=headers)
         return _read_json(response)
 
     def get_bytes(
@@ -67,19 +73,42 @@ class SyncTransport:
         path: str,
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> bytes:
-        response = self._request("GET", path, params=params)
+        response = self._request("GET", path, params=params, headers=headers)
         return response.content
 
     def post_json(
         self,
         path: str,
         *,
-        json: object,
+        json: object | None = None,
         params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
-        response = self._request("POST", path, params=params, json=json)
+        response = self._request("POST", path, params=params, json=json, headers=headers)
         return _read_json(response)
+
+    def delete_json(
+        self,
+        path: str,
+        *,
+        json: object | None = None,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> Any:
+        response = self._request("DELETE", path, params=params, json=json, headers=headers)
+        return _read_json(response)
+
+    def delete(
+        self,
+        path: str,
+        *,
+        json: object | None = None,
+        params: Mapping[str, QueryParamValue | None] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
+        self._request("DELETE", path, params=params, json=json, headers=headers)
 
     def close(self) -> None:
         if self._owns_client:
@@ -92,10 +121,30 @@ class SyncTransport:
         *,
         params: Mapping[str, QueryParamValue | None] | None = None,
         json: object | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> httpx.Response:
+        body_str: str | None = None
+        content: bytes | None = None
+        merged_headers: dict[str, str] = dict(headers) if headers else {}
+
+        if json is not None:
+            body_str = _json.dumps(json, separators=(",", ":"))
+            content = body_str.encode("utf-8")
+            merged_headers.setdefault("Content-Type", "application/json")
+
+        if self._header_resolver is not None:
+            resolved = self._header_resolver(method, path, body_str)
+            merged_headers.update(resolved)
+
         started = time.perf_counter()
         try:
-            response = self._client.request(method, path, params=_clean_params(params), json=json)
+            response = self._client.request(
+                method,
+                path,
+                params=_clean_params(params),
+                content=content,
+                headers=merged_headers or None,
+            )
         except httpx.HTTPError as error:
             _log_failure(self._logger, method, path, error, started)
             raise TransportError(str(error) or "Request failed") from error
@@ -103,9 +152,6 @@ class SyncTransport:
         _log_response(self._logger, method, path, response, started)
         _raise_for_response_status(response)
         return response
-
-
-HeaderResolver = Callable[[str, str, str | None], Awaitable[Mapping[str, str]]]
 
 
 class AsyncTransport:

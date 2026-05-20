@@ -6,14 +6,22 @@ from polymarket._internal.actions.orders.context import (
     resolve_exchange_address,
     resolve_rounding_config,
 )
-from polymarket._internal.actions.orders.estimate import resolve_estimated_market_price
+from polymarket._internal.actions.orders.estimate import (
+    resolve_estimated_market_price,
+    resolve_estimated_market_price_sync,
+)
 from polymarket._internal.actions.orders.market_data import (
     PlatformFeeInfo,
     fetch_builder_fee_rates,
+    fetch_builder_fee_rates_sync,
     fetch_neg_risk,
+    fetch_neg_risk_sync,
     fetch_platform_fee_info,
+    fetch_platform_fee_info_sync,
     fetch_tick_size,
+    fetch_tick_size_sync,
     resolve_condition_by_token,
+    resolve_condition_by_token_sync,
 )
 from polymarket._internal.actions.orders.math import (
     decimal_places,
@@ -22,7 +30,7 @@ from polymarket._internal.actions.orders.math import (
     round_up,
 )
 from polymarket._internal.actions.orders.types import BYTES32_ZERO, MarketOrderType, OrderDraft
-from polymarket._internal.context import AsyncSecureClientContext
+from polymarket._internal.context import AsyncSecureClientContext, SyncSecureClientContext
 from polymarket._internal.validation import require_nonempty, validate_builder_code
 from polymarket.errors import UserInputError
 from polymarket.models.types import OrderSide, TokenId
@@ -122,6 +130,40 @@ async def prepare_market_order_draft(
     )
 
 
+def prepare_market_order_draft_sync(
+    ctx: SyncSecureClientContext, params: PrepareMarketOrderParams
+) -> OrderDraft:
+    tick_size = fetch_tick_size_sync(ctx, token_id=params.token_id)
+    notional = params.amount if params.side == "BUY" else params.shares
+    assert notional is not None
+    price = resolve_estimated_market_price_sync(
+        ctx,
+        token_id=params.token_id,
+        side=params.side,
+        notional=notional,
+        order_type=params.order_type,
+        tick_size=tick_size,
+    )
+    neg_risk = fetch_neg_risk_sync(ctx, token_id=params.token_id)
+    resolved_amount = _resolve_buy_amount_for_fees_sync(ctx, params, price=price)
+    offered, requested = _compute_market_order_amounts(
+        amount=resolved_amount, price=price, side=params.side, tick_size=tick_size
+    )
+    return OrderDraft(
+        chain_id=ctx.environment.chain_id,
+        exchange_address=resolve_exchange_address(ctx.environment, neg_risk),
+        expiration=0,
+        funder_address=ctx.wallet,
+        offered_amount=offered,
+        order_type=params.order_type,
+        side=params.side,
+        signer=EvmAddress(ctx.signer.address),
+        requested_amount=requested,
+        token_id=params.token_id,
+        builder_code=params.builder_code,
+    )
+
+
 def _compute_market_order_amounts(
     *, amount: Decimal, price: Decimal, side: OrderSide, tick_size: Decimal
 ) -> tuple[int, int]:
@@ -156,6 +198,26 @@ async def _resolve_buy_amount_for_fees(
     )
 
 
+def _resolve_buy_amount_for_fees_sync(
+    ctx: SyncSecureClientContext, params: PrepareMarketOrderParams, *, price: Decimal
+) -> Decimal:
+    if params.side != "BUY" or params.max_spend is None or params.amount is None:
+        return params.amount if params.amount is not None else params.shares  # type: ignore[return-value]
+    condition_id = resolve_condition_by_token_sync(ctx, token_id=params.token_id)
+    fee_info = fetch_platform_fee_info_sync(ctx, condition_id=condition_id)
+    builder_taker_fee_rate = Decimal(0)
+    if params.builder_code is not None and params.builder_code != BYTES32_ZERO:
+        rates = fetch_builder_fee_rates_sync(ctx, builder_code=params.builder_code)
+        builder_taker_fee_rate = rates.taker
+    return adjust_buy_amount_for_fees(
+        amount=params.amount,
+        price=price,
+        max_spend=params.max_spend,
+        fee=fee_info,
+        builder_taker_fee_rate=builder_taker_fee_rate,
+    )
+
+
 def adjust_buy_amount_for_fees(
     *,
     amount: Decimal,
@@ -177,5 +239,6 @@ __all__ = [
     "PrepareMarketOrderParams",
     "adjust_buy_amount_for_fees",
     "prepare_market_order_draft",
+    "prepare_market_order_draft_sync",
     "validate_market_order_params",
 ]
