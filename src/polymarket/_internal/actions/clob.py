@@ -16,28 +16,30 @@ from polymarket.models.clob import (
     PriceHistoryPoint,
     PriceRequest,
 )
-from polymarket.models.clob._validators import DecimalString
+from polymarket.models.clob._validators import (
+    _DecimalFromString,  # pyright: ignore[reportPrivateUsage]
+)
 from polymarket.models.types import OrderSide
 
 
 class _MidpointResponse(BaseModel):
-    mid: DecimalString
+    mid: _DecimalFromString
 
 
 class _PriceResponse(BaseModel):
-    price: DecimalString
+    price: _DecimalFromString
 
 
 class _SpreadResponse(BaseModel):
-    spread: DecimalString
+    spread: _DecimalFromString
 
 
 _PRICE_HISTORY_INTERVALS: frozenset[str] = frozenset({"max", "1w", "1d", "6h", "1h"})
 _VALID_ORDER_SIDES: frozenset[str] = frozenset({"BUY", "SELL"})
 
-_MidpointsAdapter = TypeAdapter(dict[str, DecimalString])
-_SpreadsAdapter = TypeAdapter(dict[str, DecimalString])
-_PricesAdapter = TypeAdapter(dict[str, dict[OrderSide, DecimalString]])
+_MidpointsAdapter = TypeAdapter(dict[str, _DecimalFromString])
+_SpreadsAdapter = TypeAdapter(dict[str, _DecimalFromString])
+_PricesAdapter = TypeAdapter(dict[str, dict[OrderSide, _DecimalFromString]])
 _OrderBookListAdapter = TypeAdapter(tuple[OrderBook, ...])
 _LastTradePriceListAdapter = TypeAdapter(tuple[LastTradePriceForToken, ...])
 _PriceHistoryListAdapter = TypeAdapter(tuple[PriceHistoryPoint, ...])

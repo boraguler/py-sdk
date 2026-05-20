@@ -3,7 +3,10 @@ from typing import Any, Literal, cast
 from pydantic import Field, TypeAdapter, model_validator
 
 from polymarket.models.base import BaseModel
-from polymarket.models.clob._validators import DecimalishString, EpochMsOrIsoTimestamp
+from polymarket.models.clob._validators import (
+    EpochMsOrIsoTimestamp,
+    _DecimalFromNumberOrString,  # pyright: ignore[reportPrivateUsage]
+)
 from polymarket.models.gamma.comment import (
     Comment,
     CommentMedia,
@@ -85,7 +88,7 @@ CommentsEvent = (
 class PriceUpdatePayload(BaseModel):
     symbol: str
     timestamp: int
-    value: DecimalishString
+    value: _DecimalFromNumberOrString
 
 
 class CryptoPricesBinanceEvent(BaseModel):
@@ -107,7 +110,7 @@ CryptoPricesEvent = CryptoPricesBinanceEvent | CryptoPricesChainlinkEvent
 
 class EquityPriceUpdatePayload(BaseModel):
     symbol: str
-    value: DecimalishString
+    value: _DecimalFromNumberOrString
     timestamp: int
     received_at: int | None = None
     is_carried_forward: bool | None = None
@@ -126,7 +129,7 @@ class EquityPriceUpdatePayload(BaseModel):
 
 class EquityPriceSnapshotEntry(BaseModel):
     timestamp: int
-    value: DecimalishString
+    value: _DecimalFromNumberOrString
 
 
 class EquityPriceSubscribePayload(BaseModel):
