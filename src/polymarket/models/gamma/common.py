@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
@@ -359,6 +359,32 @@ def parse_optional_datetime(value: object) -> datetime | None:
     raise ValueError(msg)
 
 
+def parse_optional_date(value: object) -> date | None:
+    if value in (None, ""):
+        return None
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, date):
+        return value
+
+    if isinstance(value, str):
+        if len(value) == 10 and value[4] == "-" and value[7] == "-":
+            try:
+                return date.fromisoformat(value)
+            except ValueError as error:
+                msg = f"invalid date: {value!r}"
+                raise ValueError(msg) from error
+        parsed = parse_optional_datetime(value)
+        if parsed is None:
+            return None
+        return parsed.date()
+
+    msg = "expected a date"
+    raise ValueError(msg)
+
+
 def parse_epoch_seconds_optional(value: object) -> datetime | None:
     if value is None or value == "":
         return None
@@ -391,8 +417,9 @@ __all__ = [
     "parse_decimal",
     "parse_dicts",
     "parse_epoch_seconds_optional",
-    "parse_optional_decimal",
+    "parse_optional_date",
     "parse_optional_datetime",
+    "parse_optional_decimal",
     "parse_sequence",
     "parse_string_sequence",
 ]
