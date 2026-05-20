@@ -117,6 +117,44 @@ def _parse_epoch_seconds_or_ms_timestamp(value: object) -> object:
         raise ValueError(msg) from error
 
 
+def _parse_epoch_or_iso_timestamp(value: object) -> object:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, bool):
+        msg = f"expected timestamp, got bool {value!r}"
+        raise ValueError(msg)
+    if isinstance(value, int):
+        magnitude = value
+    elif isinstance(value, str):
+        if value.isdecimal():
+            magnitude = int(value)
+        else:
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError as error:
+                msg = f"invalid timestamp: {value!r}"
+                raise ValueError(msg) from error
+    else:
+        msg = f"expected epoch or ISO timestamp, got {type(value).__name__}"
+        raise ValueError(msg)
+    seconds = magnitude / 1000 if magnitude >= _EPOCH_MS_THRESHOLD else magnitude
+    try:
+        return datetime.fromtimestamp(seconds, tz=UTC)
+    except (OverflowError, OSError, ValueError) as error:
+        msg = f"invalid epoch timestamp: {value!r}"
+        raise ValueError(msg) from error
+
+
+def _require_epoch_or_iso_timestamp(value: object) -> object:
+    parsed = _parse_epoch_or_iso_timestamp(value)
+    if parsed is None:
+        msg = f"expected timestamp, got {value!r}"
+        raise ValueError(msg)
+    return parsed
+
+
 def _parse_epoch_seconds_timestamp(value: object) -> object:
     if value is None or value == "":
         return None
@@ -159,6 +197,8 @@ EpochMsTimestamp = Annotated[datetime | None, BeforeValidator(_parse_epoch_ms_ti
 EpochMsOrIsoTimestamp = Annotated[
     datetime | None, BeforeValidator(_parse_epoch_ms_or_iso_timestamp)
 ]
+EpochOrIsoTimestamp = Annotated[datetime | None, BeforeValidator(_parse_epoch_or_iso_timestamp)]
+RequiredEpochOrIsoTimestamp = Annotated[datetime, BeforeValidator(_require_epoch_or_iso_timestamp)]
 EpochSecondsTimestamp = Annotated[datetime | None, BeforeValidator(_parse_epoch_seconds_timestamp)]
 EpochSecondsOrMsTimestamp = Annotated[
     datetime | None, BeforeValidator(_parse_epoch_seconds_or_ms_timestamp)
@@ -169,7 +209,9 @@ ExpirationTimestamp = Annotated[datetime | None, BeforeValidator(_parse_expirati
 __all__ = [
     "EpochMsOrIsoTimestamp",
     "EpochMsTimestamp",
+    "EpochOrIsoTimestamp",
     "EpochSecondsOrMsTimestamp",
     "EpochSecondsTimestamp",
     "ExpirationTimestamp",
+    "RequiredEpochOrIsoTimestamp",
 ]

@@ -6,6 +6,12 @@ from typing import Any, cast
 from pydantic import Field, model_validator
 
 from polymarket.models.base import BaseModel
+from polymarket.models.clob._validators import (
+    EpochOrIsoTimestamp,
+    RequiredEpochOrIsoTimestamp,
+    _DecimalFromString,  # pyright: ignore[reportPrivateUsage]
+)
+from polymarket.models.types import OrderSide, TokenId
 
 _BUILDER_FEES_BPS = Decimal(10_000)
 
@@ -33,4 +39,30 @@ class BuilderFeeRates(BaseModel):
         return data
 
 
-__all__ = ["BuilderFeeRates"]
+class BuilderTrade(BaseModel):
+    id: str
+    trade_type: str = Field(validation_alias="tradeType")
+    taker_order_hash: str = Field(validation_alias="takerOrderHash")
+    builder: str
+    market: str
+    token_id: TokenId = Field(validation_alias="assetId")
+    side: OrderSide
+    size: _DecimalFromString
+    size_usdc: _DecimalFromString = Field(validation_alias="sizeUsdc")
+    price: _DecimalFromString
+    status: str
+    outcome: str
+    outcome_index: int = Field(validation_alias="outcomeIndex")
+    owner: str
+    maker: str
+    transaction_hash: str = Field(validation_alias="transactionHash")
+    matched_at: RequiredEpochOrIsoTimestamp = Field(validation_alias="matchTime")
+    bucket_index: int = Field(validation_alias="bucketIndex")
+    fee: _DecimalFromString
+    fee_usdc: _DecimalFromString = Field(validation_alias="feeUsdc")
+    error_msg: str | None = Field(default=None, validation_alias="err_msg")
+    created_at: EpochOrIsoTimestamp = Field(default=None, validation_alias="createdAt")
+    updated_at: EpochOrIsoTimestamp = Field(default=None, validation_alias="updatedAt")
+
+
+__all__ = ["BuilderFeeRates", "BuilderTrade"]

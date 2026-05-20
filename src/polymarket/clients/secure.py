@@ -13,6 +13,7 @@ from eth_utils.address import to_checksum_address
 
 from polymarket._internal.actions import account as _account_actions
 from polymarket._internal.actions import auth as _auth_actions
+from polymarket._internal.actions import builders as _builders_actions
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
@@ -99,6 +100,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
+from polymarket.models.clob import BuilderTrade
 from polymarket.models.clob.cancel import CancelOrdersResponse
 from polymarket.models.clob.order_response import OrderResponse
 from polymarket.models.clob.orders import MarketOrderType, SignedOrder
@@ -472,6 +474,31 @@ class SecureClient:
         return sync_dispatch(
             self._ctx, _data_actions.get_builder_volumes_spec(time_period=time_period)
         )
+
+    def list_builder_trades(
+        self,
+        *,
+        builder_code: str,
+        market: str | None = None,
+        token_id: str | None = None,
+        id: str | None = None,
+        after: str | None = None,
+        before: str | None = None,
+    ) -> Paginator[BuilderTrade]:
+        def fetch(cursor: str | None) -> Page[BuilderTrade]:
+            path, params = _builders_actions.build_list_builder_trades_request(
+                builder_code=builder_code,
+                market=market,
+                token_id=token_id,
+                id=id,
+                after=after,
+                before=before,
+                cursor=cursor,
+            )
+            payload = self._ctx.clob.get_json(path, params=params)
+            return _builders_actions.parse_builder_trades_page(payload)
+
+        return Paginator(fetch=fetch)
 
     def list_positions(
         self,
