@@ -5,7 +5,7 @@ import time
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Literal, Self, cast
+from typing import TYPE_CHECKING, Literal, Self, cast, overload
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -215,7 +215,7 @@ class SecureClient:
         cls,
         *,
         private_key: str,
-        wallet: str,
+        wallet: str | None = None,
         environment: Environment = PRODUCTION,
         credentials: ApiKeyCreds | None = None,
         api_key: ApiKey | None = None,
@@ -225,10 +225,6 @@ class SecureClient:
     ) -> Self:
         if not private_key:
             raise UserInputError("private_key is required")
-        if not wallet:
-            raise UserInputError(
-                "wallet is required. Pass the signer address itself to authenticate as an EOA."
-            )
         _validate_nonce(nonce)
         if credentials is not None and nonce != 0:
             raise UserInputError("nonce cannot be combined with credentials.")
@@ -236,6 +232,8 @@ class SecureClient:
             signer = cast(LocalAccount, Account.from_key(private_key))
         except (ValueError, TypeError) as error:
             raise UserInputError(f"Invalid private_key: {error}") from error
+
+        resolved_wallet = wallet if wallet else signer.address
 
         bootstrap_clob = SyncTransport(base_url=environment.clob_url, logger=logger)
         try:
@@ -253,7 +251,7 @@ class SecureClient:
 
         return cls._construct_for_wallet(
             signer=signer,
-            wallet=wallet,
+            wallet=resolved_wallet,
             environment=environment,
             credentials=resolved_credentials,
             api_key=api_key,
@@ -1224,6 +1222,27 @@ class SecureClient:
             builder_code=builder_code,
         )
 
+    @overload
+    def create_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["BUY"],
+        amount: Decimal | int | float | str,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> SignedOrder: ...
+    @overload
+    def create_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["SELL"],
+        shares: Decimal | int | float | str,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> SignedOrder: ...
     def create_market_order(
         self,
         *,
@@ -1267,6 +1286,27 @@ class SecureClient:
         )
         return self.post_order(signed)
 
+    @overload
+    def place_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["BUY"],
+        amount: Decimal | int | float | str,
+        max_spend: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> OrderResponse: ...
+    @overload
+    def place_market_order(
+        self,
+        *,
+        token_id: str,
+        side: Literal["SELL"],
+        shares: Decimal | int | float | str,
+        order_type: MarketOrderType = "FAK",
+        builder_code: str | None = None,
+    ) -> OrderResponse: ...
     def place_market_order(
         self,
         *,
