@@ -8,7 +8,6 @@ from polymarket._internal.actions.relayer.calls import (
     erc20_transfer_call,
     erc1155_set_approval_for_all_call,
     merge_positions_call,
-    neg_risk_redeem_positions_call,
     split_position_call,
 )
 
@@ -22,6 +21,5 @@ __all__ = [
     "erc20_approval_call",
     "erc20_transfer_call",
     "merge_positions_call",
-    "neg_risk_redeem_positions_call",
     "split_position_call",
 ]

@@ -25,7 +25,6 @@ _CTF_MERGE_POSITIONS_SELECTOR = _selector(
     "mergePositions(address,bytes32,bytes32,uint256[],uint256)"
 )
 _CTF_REDEEM_POSITIONS_SELECTOR = _selector("redeemPositions(address,bytes32,bytes32,uint256[])")
-_NEG_RISK_REDEEM_POSITIONS_SELECTOR = _selector("redeemPositions(bytes32,uint256[])")
 _SAFE_MULTISEND_SELECTOR = _selector("multiSend(bytes)")
 _PROXY_FACTORY_SELECTOR = _selector("proxy((uint8,address,uint256,bytes)[])")
 _INNER_OPERATION_CALL = 0
@@ -84,13 +83,17 @@ def split_position_call(
     collateral: EvmAddress,
     condition_id: str,
     amount: int,
-    neg_risk: bool = False,
 ) -> TransactionCall:
     _expect_uint256(amount, "Split amount")
-    partition: list[int] = [] if neg_risk else list(_BINARY_PARTITION)
     payload = _CTF_SPLIT_POSITION_SELECTOR + abi_encode(
         ["address", "bytes32", "bytes32", "uint256[]", "uint256"],
-        [str(collateral), _ZERO_BYTES32, _condition_id_bytes(condition_id), partition, amount],
+        [
+            str(collateral),
+            _ZERO_BYTES32,
+            _condition_id_bytes(condition_id),
+            list(_BINARY_PARTITION),
+            amount,
+        ],
     )
     return TransactionCall(to=target, data=cast(HexString, "0x" + payload.hex()))
 
@@ -101,13 +104,17 @@ def merge_positions_call(
     collateral: EvmAddress,
     condition_id: str,
     amount: int,
-    neg_risk: bool = False,
 ) -> TransactionCall:
     _expect_uint256(amount, "Merge amount")
-    partition: list[int] = [] if neg_risk else list(_BINARY_PARTITION)
     payload = _CTF_MERGE_POSITIONS_SELECTOR + abi_encode(
         ["address", "bytes32", "bytes32", "uint256[]", "uint256"],
-        [str(collateral), _ZERO_BYTES32, _condition_id_bytes(condition_id), partition, amount],
+        [
+            str(collateral),
+            _ZERO_BYTES32,
+            _condition_id_bytes(condition_id),
+            list(_BINARY_PARTITION),
+            amount,
+        ],
     )
     return TransactionCall(to=target, data=cast(HexString, "0x" + payload.hex()))
 
@@ -128,21 +135,6 @@ def ctf_redeem_positions_call(
         ],
     )
     return TransactionCall(to=ctf, data=cast(HexString, "0x" + payload.hex()))
-
-
-def neg_risk_redeem_positions_call(
-    *,
-    neg_risk_adapter: EvmAddress,
-    condition_id: str,
-    amounts: tuple[int, int],
-) -> TransactionCall:
-    for amount in amounts:
-        _expect_uint256(amount, "Redeem amount")
-    payload = _NEG_RISK_REDEEM_POSITIONS_SELECTOR + abi_encode(
-        ["bytes32", "uint256[]"],
-        [_condition_id_bytes(condition_id), list(amounts)],
-    )
-    return TransactionCall(to=neg_risk_adapter, data=cast(HexString, "0x" + payload.hex()))
 
 
 def _expect_uint256(amount: int, label: str) -> None:
@@ -206,6 +198,5 @@ __all__ = [
     "erc20_approval_call",
     "erc20_transfer_call",
     "merge_positions_call",
-    "neg_risk_redeem_positions_call",
     "split_position_call",
 ]

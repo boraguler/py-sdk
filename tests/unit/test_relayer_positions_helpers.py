@@ -2,9 +2,10 @@ from decimal import Decimal
 
 import pytest
 
+# pyright: reportPrivateUsage=false
 from polymarket._internal.actions.relayer.positions import (
+    _derive_binary_position_amounts,
     calculate_max_merge_amount,
-    derive_neg_risk_redeem_amounts,
     expect_binary_positions,
     expect_negative_risk_flag,
     resolve_binary_positions_condition_id,
@@ -105,23 +106,23 @@ def test_expect_negative_risk_flag_rejects_mixed_flags() -> None:
         expect_negative_risk_flag((yes_pos, no_pos))
 
 
-def test_derive_neg_risk_redeem_amounts_converts_to_base_units() -> None:
+def test_derive_binary_position_amounts_converts_to_base_units() -> None:
     yes_pos = _pos(outcome_index=0, size=Decimal("111.0"))
     no_pos = _pos(outcome_index=1, size=Decimal("0"))
-    amounts = derive_neg_risk_redeem_amounts((yes_pos, no_pos))
+    amounts = _derive_binary_position_amounts((yes_pos, no_pos))
     assert amounts == (111_000_000, 0)
 
 
-def test_derive_neg_risk_redeem_amounts_none_size_is_zero() -> None:
+def test_derive_binary_position_amounts_none_size_is_zero() -> None:
     yes_pos = _pos(outcome_index=0, size=None)
     no_pos = _pos(outcome_index=1, size=Decimal("3.5"))
-    amounts = derive_neg_risk_redeem_amounts((yes_pos, no_pos))
+    amounts = _derive_binary_position_amounts((yes_pos, no_pos))
     assert amounts == (0, 3_500_000)
 
 
-def test_derive_neg_risk_redeem_amounts_missing_outcome_is_zero() -> None:
+def test_derive_binary_position_amounts_missing_outcome_is_zero() -> None:
     no_pos = _pos(outcome_index=1, size=Decimal("3.5"))
-    amounts = derive_neg_risk_redeem_amounts((None, no_pos))
+    amounts = _derive_binary_position_amounts((None, no_pos))
     assert amounts == (0, 3_500_000)
 
 
@@ -173,7 +174,7 @@ def test_resolve_binary_positions_condition_id_returns_first_present() -> None:
     assert resolve_binary_positions_condition_id((None, no_pos)) == _CONDITION_ID
 
 
-def test_derive_neg_risk_redeem_amounts_rejects_non_finite_size() -> None:
+def test_derive_binary_position_amounts_rejects_non_finite_size() -> None:
     yes_pos = Position.model_construct(
         condition_id=_CONDITION_ID,
         outcome_index=0,
@@ -182,10 +183,10 @@ def test_derive_neg_risk_redeem_amounts_rejects_non_finite_size() -> None:
     )
     no_pos = _pos(outcome_index=1, size=Decimal("0"), negative_risk=True)
     with pytest.raises(UnexpectedResponseError, match="finite number"):
-        derive_neg_risk_redeem_amounts((yes_pos, no_pos))
+        _derive_binary_position_amounts((yes_pos, no_pos))
 
 
-def test_derive_neg_risk_redeem_amounts_rejects_infinity() -> None:
+def test_derive_binary_position_amounts_rejects_infinity() -> None:
     yes_pos = Position.model_construct(
         condition_id=_CONDITION_ID,
         outcome_index=0,
@@ -194,4 +195,4 @@ def test_derive_neg_risk_redeem_amounts_rejects_infinity() -> None:
     )
     no_pos = _pos(outcome_index=1, size=Decimal("0"), negative_risk=True)
     with pytest.raises(UnexpectedResponseError, match="finite number"):
-        derive_neg_risk_redeem_amounts((yes_pos, no_pos))
+        _derive_binary_position_amounts((yes_pos, no_pos))

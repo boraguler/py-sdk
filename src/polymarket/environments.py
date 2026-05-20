@@ -21,6 +21,8 @@ class Environment:
     collateral_token: str
     conditional_tokens: str
     neg_risk_adapter: str
+    collateral_adapter: str
+    neg_risk_collateral_adapter: str
     standard_exchange: str
     neg_risk_exchange: str
     auto_redeem_operator: str
@@ -53,6 +55,8 @@ PRODUCTION = Environment(
     collateral_token="0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
     conditional_tokens="0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
     neg_risk_adapter="0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296",
+    collateral_adapter="0xAdA100Db00Ca00073811820692005400218FcE1f",
+    neg_risk_collateral_adapter="0xadA2005600Dec949baf300f4C6120000bDB6eAab",
     standard_exchange="0xE111180000d2663C0091e4f400237545B87B996B",
     neg_risk_exchange="0xe2222d279d744050d28e00520010520000310F59",
     auto_redeem_operator="0xF3cFb6a6eBFeB51876289Eb235719EB1C65252B0",

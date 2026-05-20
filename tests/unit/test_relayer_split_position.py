@@ -38,7 +38,7 @@ def _make_market_stub(neg_risk: bool | None):
     return _Market(neg_risk)
 
 
-def test_split_position_ctf_target_when_neg_risk_false() -> None:
+def test_split_position_uses_collateral_adapter_when_neg_risk_false() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
@@ -70,11 +70,11 @@ def test_split_position_ctf_target_when_neg_risk_false() -> None:
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     body = request_json(submit_calls[0])
     inner = body["depositWalletParams"]["calls"][0]
-    assert inner["target"].lower() == PRODUCTION.conditional_tokens.lower()
+    assert inner["target"].lower() == PRODUCTION.collateral_adapter.lower()
     assert body["metadata"] == f"Split 1000000 positions for condition {_CONDITION_ID}"
 
 
-def test_split_position_neg_risk_target_when_neg_risk_true() -> None:
+def test_split_position_uses_neg_risk_collateral_adapter_when_neg_risk_true() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
@@ -106,7 +106,7 @@ def test_split_position_neg_risk_target_when_neg_risk_true() -> None:
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     body = request_json(submit_calls[0])
     inner = body["depositWalletParams"]["calls"][0]
-    assert inner["target"].lower() == PRODUCTION.neg_risk_adapter.lower()
+    assert inner["target"].lower() == PRODUCTION.neg_risk_collateral_adapter.lower()
 
 
 def test_split_position_rejects_when_market_lookup_finds_nothing() -> None:

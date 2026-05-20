@@ -57,7 +57,7 @@ def _setup_relayer(client: Any, captured: list[httpx.Request], tx_id: str) -> No
     )
 
 
-def test_redeem_positions_ctf_path_uses_conditional_tokens() -> None:
+def test_redeem_positions_uses_collateral_adapter_when_neg_risk_false() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
@@ -78,12 +78,12 @@ def test_redeem_positions_ctf_path_uses_conditional_tokens() -> None:
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     body = request_json(submit_calls[0])
     inner = body["depositWalletParams"]["calls"][0]
-    assert inner["target"].lower() == PRODUCTION.conditional_tokens.lower()
+    assert inner["target"].lower() == PRODUCTION.collateral_adapter.lower()
     ctf_selector = "0x" + keccak(b"redeemPositions(address,bytes32,bytes32,uint256[])")[:4].hex()
     assert inner["data"].startswith(ctf_selector)
 
 
-def test_redeem_positions_neg_risk_path_uses_adapter_with_amounts() -> None:
+def test_redeem_positions_uses_neg_risk_collateral_adapter_when_neg_risk_true() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
@@ -104,11 +104,9 @@ def test_redeem_positions_neg_risk_path_uses_adapter_with_amounts() -> None:
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     body = request_json(submit_calls[0])
     inner = body["depositWalletParams"]["calls"][0]
-    assert inner["target"].lower() == PRODUCTION.neg_risk_adapter.lower()
-    nr_selector = "0x" + keccak(b"redeemPositions(bytes32,uint256[])")[:4].hex()
-    assert inner["data"].startswith(nr_selector)
-    yes_word_hex = inner["data"][-128:-64]
-    assert int(yes_word_hex, 16) == 111_000_000
+    assert inner["target"].lower() == PRODUCTION.neg_risk_collateral_adapter.lower()
+    ctf_selector = "0x" + keccak(b"redeemPositions(address,bytes32,bytes32,uint256[])")[:4].hex()
+    assert inner["data"].startswith(ctf_selector)
 
 
 def test_redeem_positions_rejects_both_condition_id_and_market_id() -> None:

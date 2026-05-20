@@ -18,7 +18,7 @@ def _selector(sig: str) -> str:
     return "0x" + keccak(sig.encode("ascii"))[:4].hex()
 
 
-def test_setup_trading_approvals_bundles_seven_calls_for_deposit_wallet() -> None:
+def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
@@ -49,21 +49,40 @@ def test_setup_trading_approvals_bundles_seven_calls_for_deposit_wallet() -> Non
     body = request_json(submit_calls[0])
     assert body["type"] == "WALLET"
     inner = body["depositWalletParams"]["calls"]
-    assert len(inner) == 7
+    assert len(inner) == 11
 
     erc20_sel = _selector("approve(address,uint256)")
     erc1155_sel = _selector("setApprovalForAll(address,bool)")
-    assert inner[0]["target"].lower() == PRODUCTION.collateral_token.lower()
-    assert inner[0]["data"].startswith(erc20_sel)
-    assert inner[1]["target"].lower() == PRODUCTION.collateral_token.lower()
-    assert inner[1]["data"].startswith(erc20_sel)
-    assert inner[2]["target"].lower() == PRODUCTION.collateral_token.lower()
-    assert inner[2]["data"].startswith(erc20_sel)
-    assert inner[3]["target"].lower() == PRODUCTION.conditional_tokens.lower()
-    assert inner[3]["data"].startswith(erc1155_sel)
-    assert inner[6]["target"].lower() == PRODUCTION.conditional_tokens.lower()
-    assert inner[6]["data"].startswith(erc1155_sel)
-    assert PRODUCTION.auto_redeem_operator[2:].lower() in inner[6]["data"].lower()
+    # ERC20 approvals: standard_exchange, neg_risk_exchange, neg_risk_adapter,
+    # collateral_adapter, neg_risk_collateral_adapter
+    for index, spender in enumerate(
+        [
+            PRODUCTION.standard_exchange,
+            PRODUCTION.neg_risk_exchange,
+            PRODUCTION.neg_risk_adapter,
+            PRODUCTION.collateral_adapter,
+            PRODUCTION.neg_risk_collateral_adapter,
+        ]
+    ):
+        assert inner[index]["target"].lower() == PRODUCTION.collateral_token.lower()
+        assert inner[index]["data"].startswith(erc20_sel)
+        assert spender[2:].lower() in inner[index]["data"].lower()
+    # ERC1155 approvals: standard_exchange, neg_risk_exchange, neg_risk_adapter,
+    # collateral_adapter, neg_risk_collateral_adapter, auto_redeem_operator
+    for offset, operator in enumerate(
+        [
+            PRODUCTION.standard_exchange,
+            PRODUCTION.neg_risk_exchange,
+            PRODUCTION.neg_risk_adapter,
+            PRODUCTION.collateral_adapter,
+            PRODUCTION.neg_risk_collateral_adapter,
+            PRODUCTION.auto_redeem_operator,
+        ]
+    ):
+        index = 5 + offset
+        assert inner[index]["target"].lower() == PRODUCTION.conditional_tokens.lower()
+        assert inner[index]["data"].startswith(erc1155_sel)
+        assert operator[2:].lower() in inner[index]["data"].lower()
     assert body["metadata"] == "Trading setup approvals"
 
 

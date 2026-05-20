@@ -9,7 +9,6 @@ from polymarket._internal.actions.relayer.calls import (
     erc20_transfer_call,
     erc1155_set_approval_for_all_call,
     merge_positions_call,
-    neg_risk_redeem_positions_call,
     split_position_call,
 )
 from polymarket.errors import UserInputError
@@ -80,13 +79,12 @@ def test_erc1155_set_approval_for_all_call_revoke() -> None:
     assert call.data == expected
 
 
-def test_split_position_call_ctf_binary_partition() -> None:
+def test_split_position_call_binary_partition() -> None:
     call = split_position_call(
         target=_CTF,
         collateral=_USDC,
         condition_id=_CONDITION_ID,
         amount=1_000_000,
-        neg_risk=False,
     )
     expected = (
         "0x"
@@ -99,28 +97,6 @@ def test_split_position_call_ctf_binary_partition() -> None:
         ).hex()
     )
     assert call.to == _CTF
-    assert call.data == expected
-
-
-def test_split_position_call_neg_risk_empty_partition() -> None:
-    call = split_position_call(
-        target=_NEG_RISK_ADAPTER,
-        collateral=_USDC,
-        condition_id=_CONDITION_ID,
-        amount=42,
-        neg_risk=True,
-    )
-    expected = (
-        "0x"
-        + (
-            _sel("splitPosition(address,bytes32,bytes32,uint256[],uint256)")
-            + abi_encode(
-                ["address", "bytes32", "bytes32", "uint256[]", "uint256"],
-                [str(_USDC), _ZERO_BYTES32, _cond_bytes(_CONDITION_ID), [], 42],
-            )
-        ).hex()
-    )
-    assert call.to == _NEG_RISK_ADAPTER
     assert call.data == expected
 
 
@@ -156,13 +132,12 @@ def test_split_position_call_rejects_non_hex_condition_id() -> None:
         )
 
 
-def test_merge_positions_call_ctf_binary_partition() -> None:
+def test_merge_positions_call_binary_partition() -> None:
     call = merge_positions_call(
         target=_CTF,
         collateral=_USDC,
         condition_id=_CONDITION_ID,
         amount=5,
-        neg_risk=False,
     )
     expected = (
         "0x"
@@ -171,27 +146,6 @@ def test_merge_positions_call_ctf_binary_partition() -> None:
             + abi_encode(
                 ["address", "bytes32", "bytes32", "uint256[]", "uint256"],
                 [str(_USDC), _ZERO_BYTES32, _cond_bytes(_CONDITION_ID), [1, 2], 5],
-            )
-        ).hex()
-    )
-    assert call.data == expected
-
-
-def test_merge_positions_call_neg_risk_empty_partition() -> None:
-    call = merge_positions_call(
-        target=_NEG_RISK_ADAPTER,
-        collateral=_USDC,
-        condition_id=_CONDITION_ID,
-        amount=5,
-        neg_risk=True,
-    )
-    expected = (
-        "0x"
-        + (
-            _sel("mergePositions(address,bytes32,bytes32,uint256[],uint256)")
-            + abi_encode(
-                ["address", "bytes32", "bytes32", "uint256[]", "uint256"],
-                [str(_USDC), _ZERO_BYTES32, _cond_bytes(_CONDITION_ID), [], 5],
             )
         ).hex()
     )
@@ -212,36 +166,6 @@ def test_ctf_redeem_positions_call_golden_calldata() -> None:
     )
     assert call.to == _CTF
     assert call.data == expected
-
-
-def test_neg_risk_redeem_positions_call_golden_calldata() -> None:
-    amounts = (111_000_000, 0)
-    call = neg_risk_redeem_positions_call(
-        neg_risk_adapter=_NEG_RISK_ADAPTER,
-        condition_id=_CONDITION_ID,
-        amounts=amounts,
-    )
-    expected = (
-        "0x"
-        + (
-            _sel("redeemPositions(bytes32,uint256[])")
-            + abi_encode(
-                ["bytes32", "uint256[]"],
-                [_cond_bytes(_CONDITION_ID), list(amounts)],
-            )
-        ).hex()
-    )
-    assert call.to == _NEG_RISK_ADAPTER
-    assert call.data == expected
-
-
-def test_neg_risk_redeem_positions_call_rejects_negative_amount() -> None:
-    with pytest.raises(UserInputError, match="non-negative"):
-        neg_risk_redeem_positions_call(
-            neg_risk_adapter=_NEG_RISK_ADAPTER,
-            condition_id=_CONDITION_ID,
-            amounts=(-1, 0),
-        )
 
 
 def test_erc20_approval_call_max_amount() -> None:

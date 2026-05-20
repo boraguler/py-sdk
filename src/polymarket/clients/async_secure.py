@@ -64,7 +64,6 @@ from polymarket._internal.actions.relayer.calls import (
     erc20_transfer_call,
     erc1155_set_approval_for_all_call,
     merge_positions_call,
-    neg_risk_redeem_positions_call,
     split_position_call,
 )
 from polymarket._internal.actions.relayer.deployed import fetch_deployed
@@ -73,7 +72,6 @@ from polymarket._internal.actions.relayer.gasless import (
     submit_deposit_wallet_create,
 )
 from polymarket._internal.actions.relayer.positions import (
-    derive_neg_risk_redeem_amounts,
     expect_binary_positions,
     expect_negative_risk_flag,
     resolve_binary_positions_condition_id,
@@ -1524,6 +1522,16 @@ class AsyncSecureClient:
                 spender=cast(EvmAddress, env.neg_risk_adapter),
                 amount=MAX_UINT256,
             ),
+            erc20_approval_call(
+                token_address=collateral,
+                spender=cast(EvmAddress, env.collateral_adapter),
+                amount=MAX_UINT256,
+            ),
+            erc20_approval_call(
+                token_address=collateral,
+                spender=cast(EvmAddress, env.neg_risk_collateral_adapter),
+                amount=MAX_UINT256,
+            ),
             erc1155_set_approval_for_all_call(
                 token_address=conditional,
                 operator=cast(EvmAddress, env.standard_exchange),
@@ -1537,6 +1545,16 @@ class AsyncSecureClient:
             erc1155_set_approval_for_all_call(
                 token_address=conditional,
                 operator=cast(EvmAddress, env.neg_risk_adapter),
+                approved=True,
+            ),
+            erc1155_set_approval_for_all_call(
+                token_address=conditional,
+                operator=cast(EvmAddress, env.collateral_adapter),
+                approved=True,
+            ),
+            erc1155_set_approval_for_all_call(
+                token_address=conditional,
+                operator=cast(EvmAddress, env.neg_risk_collateral_adapter),
                 approved=True,
             ),
             erc1155_set_approval_for_all_call(
@@ -1636,13 +1654,11 @@ class AsyncSecureClient:
     ) -> TransactionHandle:
         env = self._ctx.environment
         neg_risk = await self._resolve_market_neg_risk(condition_id)
-        target = cast(EvmAddress, env.neg_risk_adapter if neg_risk else env.conditional_tokens)
         call = split_position_call(
-            target=target,
+            target=self._lifecycle_target_address(neg_risk),
             collateral=cast(EvmAddress, env.collateral_token),
             condition_id=condition_id,
             amount=amount,
-            neg_risk=neg_risk,
         )
         resolved_metadata = (
             metadata
@@ -1662,13 +1678,11 @@ class AsyncSecureClient:
         binary = await self._fetch_binary_positions(condition_id)
         neg_risk = expect_negative_risk_flag(binary)
         resolved_amount = resolve_merge_amount(binary, amount)
-        target = cast(EvmAddress, env.neg_risk_adapter if neg_risk else env.conditional_tokens)
         call = merge_positions_call(
-            target=target,
+            target=self._lifecycle_target_address(neg_risk),
             collateral=cast(EvmAddress, env.collateral_token),
             condition_id=condition_id,
             amount=resolved_amount,
-            neg_risk=neg_risk,
         )
         resolved_metadata = (
             metadata
@@ -1692,25 +1706,24 @@ class AsyncSecureClient:
         binary = await self._fetch_binary_positions(lookup_id)
         neg_risk = expect_negative_risk_flag(binary)
         resolved_condition_id = resolve_binary_positions_condition_id(binary)
-        if neg_risk:
-            amounts = derive_neg_risk_redeem_amounts(binary)
-            call = neg_risk_redeem_positions_call(
-                neg_risk_adapter=cast(EvmAddress, env.neg_risk_adapter),
-                condition_id=resolved_condition_id,
-                amounts=amounts,
-            )
-        else:
-            call = ctf_redeem_positions_call(
-                ctf=cast(EvmAddress, env.conditional_tokens),
-                collateral=cast(EvmAddress, env.collateral_token),
-                condition_id=resolved_condition_id,
-            )
+        call = ctf_redeem_positions_call(
+            ctf=self._lifecycle_target_address(neg_risk),
+            collateral=cast(EvmAddress, env.collateral_token),
+            condition_id=resolved_condition_id,
+        )
         resolved_metadata = (
             metadata
             if metadata is not None
             else f"Redeem positions for condition {resolved_condition_id}"
         )
         return await self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    def _lifecycle_target_address(self, neg_risk: bool) -> EvmAddress:
+        env = self._ctx.environment
+        return cast(
+            EvmAddress,
+            env.neg_risk_collateral_adapter if neg_risk else env.collateral_adapter,
+        )
 
     async def _resolve_market_neg_risk(self, condition_id: str) -> bool:
         page = await self.list_markets(condition_ids=[condition_id], page_size=2).first_page()

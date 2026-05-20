@@ -9,7 +9,6 @@ def test_public_calls_module_re_exports() -> None:
     assert hasattr(calls, "split_position_call")
     assert hasattr(calls, "merge_positions_call")
     assert hasattr(calls, "ctf_redeem_positions_call")
-    assert hasattr(calls, "neg_risk_redeem_positions_call")
     assert hasattr(calls, "encode_proxy_call")
     assert hasattr(calls, "encode_safe_multisend_call")
 

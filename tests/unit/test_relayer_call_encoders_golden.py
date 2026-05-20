@@ -5,7 +5,6 @@ from polymarket._internal.actions.relayer.calls import (
     erc20_transfer_call,
     erc1155_set_approval_for_all_call,
     merge_positions_call,
-    neg_risk_redeem_positions_call,
     split_position_call,
 )
 from polymarket.types import EvmAddress
@@ -57,13 +56,12 @@ def test_erc1155_set_approval_for_all_false_known_vector() -> None:
     )
 
 
-def test_split_position_ctf_known_vector() -> None:
+def test_split_position_known_vector() -> None:
     call = split_position_call(
         target=_CTF,
         collateral=_USDC,
         condition_id=_CONDITION_ID,
         amount=1_000_000,
-        neg_risk=False,
     )
     assert call.data == (
         "0x72ce4275"
@@ -78,32 +76,12 @@ def test_split_position_ctf_known_vector() -> None:
     )
 
 
-def test_split_position_neg_risk_known_vector() -> None:
-    call = split_position_call(
-        target=_NEG_RISK_ADAPTER,
-        collateral=_USDC,
-        condition_id=_CONDITION_ID,
-        amount=1_000_000,
-        neg_risk=True,
-    )
-    assert call.data == (
-        "0x72ce4275"
-        "0000000000000000000000002791bca1f2de4661ed88a30c99a7a9449aa84174"
-        "0000000000000000000000000000000000000000000000000000000000000000"
-        "1111111111111111111111111111111111111111111111111111111111111111"
-        "00000000000000000000000000000000000000000000000000000000000000a0"
-        "00000000000000000000000000000000000000000000000000000000000f4240"
-        "0000000000000000000000000000000000000000000000000000000000000000"
-    )
-
-
-def test_merge_positions_ctf_known_vector() -> None:
+def test_merge_positions_known_vector() -> None:
     call = merge_positions_call(
         target=_CTF,
         collateral=_USDC,
         condition_id=_CONDITION_ID,
         amount=1_000_000,
-        neg_risk=False,
     )
     assert call.data == (
         "0x9e7212ad"
@@ -129,20 +107,4 @@ def test_ctf_redeem_positions_known_vector() -> None:
         "0000000000000000000000000000000000000000000000000000000000000002"
         "0000000000000000000000000000000000000000000000000000000000000001"
         "0000000000000000000000000000000000000000000000000000000000000002"
-    )
-
-
-def test_neg_risk_redeem_positions_known_vector() -> None:
-    call = neg_risk_redeem_positions_call(
-        neg_risk_adapter=_NEG_RISK_ADAPTER,
-        condition_id=_CONDITION_ID,
-        amounts=(111_000_000, 0),
-    )
-    assert call.data == (
-        "0xdbeccb23"
-        "1111111111111111111111111111111111111111111111111111111111111111"
-        "0000000000000000000000000000000000000000000000000000000000000040"
-        "0000000000000000000000000000000000000000000000000000000000000002"
-        "00000000000000000000000000000000000000000000000000000000069db9c0"
-        "0000000000000000000000000000000000000000000000000000000000000000"
     )

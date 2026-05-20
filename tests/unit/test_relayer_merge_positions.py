@@ -77,7 +77,7 @@ def test_merge_positions_resolves_max_to_min_of_yes_no() -> None:
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     body = request_json(submit_calls[0])
     inner = body["depositWalletParams"]["calls"][0]
-    assert inner["target"].lower() == PRODUCTION.conditional_tokens.lower()
+    assert inner["target"].lower() == PRODUCTION.collateral_adapter.lower()
     assert "Merge 60000000 positions" in body["metadata"]
 
 
@@ -99,7 +99,7 @@ def test_merge_positions_rejects_amount_above_max() -> None:
     asyncio.run(run())
 
 
-def test_merge_positions_neg_risk_uses_adapter_target() -> None:
+def test_merge_positions_neg_risk_uses_neg_risk_collateral_adapter_target() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
@@ -120,7 +120,7 @@ def test_merge_positions_neg_risk_uses_adapter_target() -> None:
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     body = request_json(submit_calls[0])
     inner = body["depositWalletParams"]["calls"][0]
-    assert inner["target"].lower() == PRODUCTION.neg_risk_adapter.lower()
+    assert inner["target"].lower() == PRODUCTION.neg_risk_collateral_adapter.lower()
 
 
 def test_merge_positions_rejects_when_no_positions() -> None:

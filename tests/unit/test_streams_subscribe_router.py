@@ -67,6 +67,8 @@ def _env_with(
         collateral_token=PRODUCTION.collateral_token,
         conditional_tokens=PRODUCTION.conditional_tokens,
         neg_risk_adapter=PRODUCTION.neg_risk_adapter,
+        collateral_adapter=PRODUCTION.collateral_adapter,
+        neg_risk_collateral_adapter=PRODUCTION.neg_risk_collateral_adapter,
         standard_exchange=PRODUCTION.standard_exchange,
         neg_risk_exchange=PRODUCTION.neg_risk_exchange,
         auto_redeem_operator=PRODUCTION.auto_redeem_operator,

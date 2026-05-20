@@ -64,7 +64,7 @@ def resolve_binary_positions_condition_id(positions: BinaryPositions) -> str:
     return first.condition_id
 
 
-def derive_neg_risk_redeem_amounts(positions: BinaryPositions) -> tuple[int, int]:
+def _derive_binary_position_amounts(positions: BinaryPositions) -> tuple[int, int]:
     yes_position, no_position = positions
     return (
         _to_position_amount(yes_position, expected_outcome_index=0),
@@ -73,7 +73,7 @@ def derive_neg_risk_redeem_amounts(positions: BinaryPositions) -> tuple[int, int
 
 
 def calculate_max_merge_amount(positions: BinaryPositions) -> int:
-    yes_amount, no_amount = derive_neg_risk_redeem_amounts(positions)
+    yes_amount, no_amount = _derive_binary_position_amounts(positions)
     return min(yes_amount, no_amount)
 
 
@@ -118,7 +118,6 @@ def _to_position_amount(position: Position | None, *, expected_outcome_index: Li
 __all__ = [
     "BinaryPositions",
     "calculate_max_merge_amount",
-    "derive_neg_risk_redeem_amounts",
     "expect_binary_positions",
     "expect_negative_risk_flag",
     "resolve_binary_positions_condition_id",
