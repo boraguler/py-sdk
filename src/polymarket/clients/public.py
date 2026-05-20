@@ -2,11 +2,14 @@
 
 import logging
 from collections.abc import Sequence
+from decimal import Decimal
 from types import TracebackType
 from typing import Self
 
+from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
+from polymarket._internal.actions import rewards as _rewards_actions
 from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
@@ -23,6 +26,10 @@ from polymarket._internal.actions.gamma import (
     Recurrence,
     TagMatch,
 )
+from polymarket._internal.actions.orders.estimate import (
+    estimate_market_price_sync as _estimate_market_price_sync,
+)
+from polymarket._internal.actions.orders.types import MarketOrderType
 from polymarket._internal.context import SyncClientContext
 from polymarket._internal.dispatch import (
     sync_dispatch,
@@ -36,7 +43,14 @@ from polymarket.errors import RequestRejectedError
 from polymarket.models import (
     Comment,
     Event,
+    LastTradePrice,
+    LastTradePriceForToken,
     Market,
+    OrderBook,
+    OrderSide,
+    PriceHistoryInterval,
+    PriceHistoryPoint,
+    PriceRequest,
     PublicProfile,
     RelatedTag,
     SearchResults,
@@ -47,6 +61,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
+from polymarket.models.clob.rewards import CurrentReward, MarketReward
 from polymarket.models.data import (
     Activity,
     BuilderVolumeEntry,
@@ -66,7 +81,8 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
-from polymarket.pagination import Paginator
+from polymarket.models.types import ConditionId
+from polymarket.pagination import Page, Paginator
 
 
 class PublicClient:
@@ -737,3 +753,107 @@ class PublicClient:
             sort=sort,
         )
         return sync_paginate_page_based(self._ctx, spec, page_size=page_size)
+
+    def get_midpoint(self, *, token_id: str) -> Decimal:
+        path, params = _clob_actions.build_midpoint_request(token_id=token_id)
+        return _clob_actions.parse_midpoint(self._ctx.clob.get_json(path, params=params))
+
+    def get_midpoints(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        path, body = _clob_actions.build_midpoints_request(token_ids=token_ids)
+        return _clob_actions.parse_midpoints(self._ctx.clob.post_json(path, json=body))
+
+    def get_price(self, *, token_id: str, side: OrderSide) -> Decimal:
+        path, params = _clob_actions.build_price_request(token_id=token_id, side=side)
+        return _clob_actions.parse_price(self._ctx.clob.get_json(path, params=params))
+
+    def get_prices(
+        self, *, requests: Sequence[PriceRequest]
+    ) -> dict[str, dict[OrderSide, Decimal]]:
+        path, body = _clob_actions.build_prices_request(requests=requests)
+        return _clob_actions.parse_prices(self._ctx.clob.post_json(path, json=body))
+
+    def get_order_book(self, *, token_id: str) -> OrderBook:
+        path, params = _clob_actions.build_order_book_request(token_id=token_id)
+        return _clob_actions.parse_order_book(self._ctx.clob.get_json(path, params=params))
+
+    def get_order_books(self, *, token_ids: Sequence[str]) -> tuple[OrderBook, ...]:
+        path, body = _clob_actions.build_order_books_request(token_ids=token_ids)
+        return _clob_actions.parse_order_books(self._ctx.clob.post_json(path, json=body))
+
+    def get_spread(self, *, token_id: str) -> Decimal:
+        path, params = _clob_actions.build_spread_request(token_id=token_id)
+        return _clob_actions.parse_spread(self._ctx.clob.get_json(path, params=params))
+
+    def get_spreads(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        path, body = _clob_actions.build_spreads_request(token_ids=token_ids)
+        return _clob_actions.parse_spreads(self._ctx.clob.post_json(path, json=body))
+
+    def get_last_trade_price(self, *, token_id: str) -> LastTradePrice:
+        path, params = _clob_actions.build_last_trade_price_request(token_id=token_id)
+        return _clob_actions.parse_last_trade_price(self._ctx.clob.get_json(path, params=params))
+
+    def get_last_trade_prices(
+        self, *, token_ids: Sequence[str]
+    ) -> tuple[LastTradePriceForToken, ...]:
+        path, body = _clob_actions.build_last_trade_prices_request(token_ids=token_ids)
+        return _clob_actions.parse_last_trade_prices(self._ctx.clob.post_json(path, json=body))
+
+    def get_price_history(
+        self,
+        *,
+        token_id: str,
+        start_ts: int | None = None,
+        end_ts: int | None = None,
+        fidelity: int | None = None,
+        interval: PriceHistoryInterval | None = None,
+    ) -> tuple[PriceHistoryPoint, ...]:
+        path, params = _clob_actions.build_price_history_request(
+            token_id=token_id,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            fidelity=fidelity,
+            interval=interval,
+        )
+        return _clob_actions.parse_price_history(self._ctx.clob.get_json(path, params=params))
+
+    def estimate_market_price(
+        self,
+        *,
+        token_id: str,
+        side: OrderSide,
+        amount: Decimal | int | float | str | None = None,
+        shares: Decimal | int | float | str | None = None,
+        order_type: MarketOrderType = "FOK",
+    ) -> Decimal:
+        return _estimate_market_price_sync(
+            self._ctx,
+            token_id=token_id,
+            side=side,
+            amount=amount,
+            shares=shares,
+            order_type=order_type,
+        )
+
+    def list_current_rewards(self, *, sponsored: bool | None = None) -> Paginator[CurrentReward]:
+        def fetch(cursor: str | None) -> Page[CurrentReward]:
+            path, params = _rewards_actions.build_list_current_rewards_request(
+                sponsored=sponsored, cursor=cursor
+            )
+            return _rewards_actions.parse_current_rewards_page(
+                self._ctx.clob.get_json(path, params=params)
+            )
+
+        return Paginator(fetch=fetch)
+
+    def list_market_rewards(
+        self, *, condition_id: str, sponsored: bool | None = None
+    ) -> Paginator[MarketReward]:
+        def fetch(cursor: str | None) -> Page[MarketReward]:
+            path, params = _rewards_actions.build_list_market_rewards_request(
+                condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor
+            )
+            return _rewards_actions.parse_market_rewards_page(
+                self._ctx.clob.get_json(path, params=params)
+            )
+
+        return Paginator(fetch=fetch)

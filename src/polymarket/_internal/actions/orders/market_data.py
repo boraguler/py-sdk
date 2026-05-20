@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import cast
 
 from polymarket._internal.actions.orders.types import BYTES32_ZERO
-from polymarket._internal.context import AsyncClientContext
+from polymarket._internal.context import AsyncClientContext, SyncClientContext
 from polymarket._internal.validation import require_nonempty, validate_builder_code
 from polymarket.errors import UnexpectedResponseError, UserInputError
 from polymarket.models.clob.builder import BuilderFeeRates
@@ -23,6 +23,12 @@ class PlatformFeeInfo:
 async def fetch_tick_size(ctx: AsyncClientContext, *, token_id: str) -> Decimal:
     validated = require_nonempty("token_id", token_id)
     data = await ctx.clob.get_json("/tick-size", params={"token_id": validated})
+    return _parse_tick_size(data)
+
+
+def fetch_tick_size_sync(ctx: SyncClientContext, *, token_id: str) -> Decimal:
+    validated = require_nonempty("token_id", token_id)
+    data = ctx.clob.get_json("/tick-size", params={"token_id": validated})
     return _parse_tick_size(data)
 
 
@@ -141,5 +147,6 @@ __all__ = [
     "fetch_neg_risk",
     "fetch_platform_fee_info",
     "fetch_tick_size",
+    "fetch_tick_size_sync",
     "resolve_condition_by_token",
 ]
