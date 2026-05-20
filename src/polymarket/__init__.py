@@ -1,3 +1,5 @@
+from polymarket.auth import BuilderApiKey, RelayerApiKey
+from polymarket.calls import TransactionCall
 from polymarket.clients import AsyncPublicClient, AsyncSecureClient, PublicClient, SecureClient
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import (
@@ -36,6 +38,7 @@ from polymarket.models import (
     EarningBreakdown,
     Event,
     EventId,
+    GaslessTransaction,
     Holder,
     LastTradePrice,
     LastTradePriceForToken,
@@ -80,6 +83,7 @@ from polymarket.models import (
     ReferralRewardActivity,
     RejectedOrder,
     RelatedTag,
+    RelayerTransactionState,
     ResolutionRequestId,
     RewardActivity,
     RewardsPercentages,
@@ -102,6 +106,7 @@ from polymarket.models import (
     TradeActivity,
     TradedMarketCount,
     TraderLeaderboardEntry,
+    TransactionOutcome,
     UnknownActivity,
     UserEarning,
     UserRewardsConfig,
@@ -109,6 +114,11 @@ from polymarket.models import (
     YieldActivity,
 )
 from polymarket.pagination import AsyncPaginator, Page, Paginator
+from polymarket.transactions import (
+    EoaTransactionHandle,
+    GaslessTransactionHandle,
+    TransactionHandle,
+)
 from polymarket.types import EvmAddress, HexString, TransactionHash
 from polymarket.version import __version__
 
@@ -123,6 +133,7 @@ __all__ = [
     "AsyncPublicClient",
     "AsyncSecureClient",
     "BalanceAllowance",
+    "BuilderApiKey",
     "BuilderFeeRates",
     "BuilderVolumeEntry",
     "BuilderVolumeTimePeriod",
@@ -137,10 +148,13 @@ __all__ = [
     "CurrentReward",
     "CurrentRewardConfig",
     "EarningBreakdown",
+    "EoaTransactionHandle",
     "Environment",
     "Event",
     "EventId",
     "EvmAddress",
+    "GaslessTransaction",
+    "GaslessTransactionHandle",
     "HexString",
     "Holder",
     "InsufficientAllowanceError",
@@ -193,6 +207,8 @@ __all__ = [
     "ReferralRewardActivity",
     "RejectedOrder",
     "RelatedTag",
+    "RelayerApiKey",
+    "RelayerTransactionState",
     "RequestRejectedError",
     "ResolutionRequestId",
     "RewardActivity",
@@ -219,8 +235,11 @@ __all__ = [
     "TradeActivity",
     "TradedMarketCount",
     "TraderLeaderboardEntry",
+    "TransactionCall",
     "TransactionFailedError",
+    "TransactionHandle",
     "TransactionHash",
+    "TransactionOutcome",
     "TransportError",
     "UnexpectedResponseError",
     "UnknownActivity",
