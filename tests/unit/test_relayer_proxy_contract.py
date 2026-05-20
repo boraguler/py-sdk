@@ -10,6 +10,7 @@ from _relayer_helpers import (
     SPENDER,
     TOKEN,
     install_relayer_routes,
+    install_rpc_handler,
     make_proxy_client,
     request_json,
 )
@@ -82,8 +83,20 @@ def test_proxy_signs_relay_address_returned_from_relay_payload() -> None:
     assert body["signatureParams"]["relay"] != "0x" + "00" * 20
 
 
-def test_proxy_signs_default_gas_limit_when_no_rpc_configured() -> None:
+def test_proxy_signs_default_gas_limit_when_rpc_estimate_fails() -> None:
     captured: list[httpx.Request] = []
+
+    def rpc_handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": body["id"],
+                "error": {"code": -32_603, "message": "upstream unavailable"},
+            },
+            request=request,
+        )
 
     async def run() -> None:
         client = await make_proxy_client()
@@ -95,6 +108,7 @@ def test_proxy_signs_default_gas_limit_when_no_rpc_configured() -> None:
                 "/submit": _submit_route(),
             },
         )
+        install_rpc_handler(client, rpc_handler)
         try:
             await client.approve_erc20(token_address=TOKEN, spender_address=SPENDER, amount=1)
         finally:

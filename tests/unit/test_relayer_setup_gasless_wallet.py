@@ -6,7 +6,10 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 from _relayer_helpers import (
+    beacon_factory_rpc_handler,
     install_relayer_handler,
+    install_rpc_handler,
+    legacy_factory_rpc_handler,
     make_deposit_client,
     make_eoa_client,
     make_proxy_client,
@@ -14,7 +17,10 @@ from _relayer_helpers import (
     request_json,
 )
 
-from polymarket._internal.wallet import derive_deposit_wallet_address
+from polymarket._internal.wallet import (
+    derive_beacon_deposit_wallet_address,
+    derive_uups_deposit_wallet_address,
+)
 from polymarket.environments import PRODUCTION
 from polymarket.errors import UserInputError
 
@@ -89,7 +95,9 @@ def test_setup_gasless_wallet_eoa_skips_deploy_when_already_deployed() -> None:
     async def run() -> tuple[str, str]:
         client = await make_eoa_client()
         eoa_address = client._ctx.signer.address
-        expected_deposit = derive_deposit_wallet_address(eoa_address, PRODUCTION.wallet_derivation)
+        expected_deposit = derive_uups_deposit_wallet_address(
+            eoa_address, PRODUCTION.wallet_derivation
+        )
 
         def handler(request: httpx.Request) -> httpx.Response:
             captured.append(request)
@@ -99,6 +107,7 @@ def test_setup_gasless_wallet_eoa_skips_deploy_when_already_deployed() -> None:
             return httpx.Response(404, request=request)
 
         install_relayer_handler(client, handler)
+        install_rpc_handler(client, legacy_factory_rpc_handler())
         try:
             new_client = await client.setup_gasless_wallet()
             try:
@@ -159,6 +168,7 @@ def test_setup_gasless_wallet_eoa_deploys_when_not_deployed() -> None:
             return httpx.Response(404, request=request)
 
         install_relayer_handler(client, handler)
+        install_rpc_handler(client, legacy_factory_rpc_handler())
         client._ctx = dataclasses.replace(
             client._ctx,
             environment=dataclasses.replace(client._ctx.environment, relayer_poll_frequency_ms=1),
@@ -185,6 +195,79 @@ def test_setup_gasless_wallet_eoa_deploys_when_not_deployed() -> None:
     assert body["metadata"] == "Deploy Deposit Wallet"
 
 
+def test_setup_gasless_wallet_eoa_uses_beacon_factory_when_available() -> None:
+    captured: list[httpx.Request] = []
+
+    async def run() -> tuple[str, str]:
+        client = await make_eoa_client()
+        eoa_address = client._ctx.signer.address
+        expected = derive_beacon_deposit_wallet_address(eoa_address, PRODUCTION.wallet_derivation)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(request)
+            path = urlparse(str(request.url)).path
+            if path == "/deployed":
+                return httpx.Response(200, json={"deployed": True}, request=request)
+            return httpx.Response(404, request=request)
+
+        install_relayer_handler(client, handler)
+        install_rpc_handler(
+            client,
+            beacon_factory_rpc_handler(PRODUCTION.wallet_derivation.deposit_wallet_beacon),
+        )
+        try:
+            new_client = await client.setup_gasless_wallet()
+            try:
+                return str(new_client.wallet), expected
+            finally:
+                await new_client.close()
+        finally:
+            await client.close()
+
+    actual, expected = asyncio.run(run())
+    assert actual == expected
+    deployed_calls = [r for r in captured if urlparse(str(r.url)).path == "/deployed"]
+    assert len(deployed_calls) == 1
+    qs = parse_qs(urlparse(str(deployed_calls[0].url)).query)
+    assert qs["address"] == [expected]
+
+
+def test_setup_gasless_wallet_eoa_propagates_generic_rpc_failure() -> None:
+    import pytest
+
+    from polymarket._internal.eoa.rpc import JsonRpcCallError
+
+    async def run() -> None:
+        client = await make_eoa_client()
+
+        def rpc_handler(request: httpx.Request) -> httpx.Response:
+            import json
+
+            body = json.loads(request.content.decode("utf-8"))
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": body["id"],
+                    "error": {"code": -32_603, "message": "upstream unavailable"},
+                },
+                request=request,
+            )
+
+        install_rpc_handler(client, rpc_handler)
+        install_relayer_handler(
+            client,
+            lambda r: httpx.Response(500, json={"error": "unused"}, request=r),
+        )
+        try:
+            await client.setup_gasless_wallet()
+        finally:
+            await client.close()
+
+    with pytest.raises(JsonRpcCallError, match="upstream unavailable"):
+        asyncio.run(run())
+
+
 def test_setup_gasless_wallet_returns_independent_client_with_fresh_transports() -> None:
     captured: list[httpx.Request] = []
 
@@ -199,6 +282,7 @@ def test_setup_gasless_wallet_returns_independent_client_with_fresh_transports()
             return httpx.Response(404, request=request)
 
         install_relayer_handler(client, handler)
+        install_rpc_handler(client, legacy_factory_rpc_handler())
         async with client:
             returned = await client.setup_gasless_wallet()
             async with returned:

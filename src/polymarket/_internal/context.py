@@ -47,7 +47,7 @@ class AsyncSecureClientContext(AsyncClientContext):
     wallet_type: WalletType
     relayer: AsyncTransport
     api_key: ApiKey | None
-    rpc: JsonRpcClient | None
+    rpc: JsonRpcClient
 
 
 __all__ = [

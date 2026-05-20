@@ -5,35 +5,17 @@ import dataclasses
 import httpx
 import pytest
 from _relayer_helpers import (
-    BUILDER_AUTH,
-    FAKE_CREDS,
-    PK_DEPLOY_WALLET,
-    make_eoa_client,
     make_eoa_client_with_rpc,
     make_rpc_handler,
 )
 
-from polymarket import AsyncSecureClient, TransactionCall
+from polymarket import TransactionCall
 from polymarket.errors import TimeoutError, TransactionFailedError, UserInputError
 from polymarket.transactions import EoaTransactionHandle
 from polymarket.types import EvmAddress
 
 _TOKEN = EvmAddress("0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB")
 _SPENDER = EvmAddress("0xE111180000d2663C0091e4f400237545B87B996B")
-
-
-def test_eoa_workflow_without_rpc_url_raises_user_input_error() -> None:
-    async def run() -> None:
-        client = await make_eoa_client()
-        try:
-            with pytest.raises(UserInputError, match="rpc_url"):
-                await client.approve_erc20(
-                    token_address=str(_TOKEN), spender_address=str(_SPENDER), amount=1
-                )
-        finally:
-            await client.close()
-
-    asyncio.run(run())
 
 
 def test_eoa_approve_erc20_signs_and_broadcasts() -> None:
@@ -215,26 +197,6 @@ def test_rpc_client_closes_with_client() -> None:
         client = await make_eoa_client_with_rpc(rpc_handler=handler)
         assert client._ctx.rpc is not None
         await client.close()
-
-    asyncio.run(run())
-
-
-def test_no_rpc_url_means_ctx_rpc_is_none() -> None:
-    from eth_account import Account
-
-    async def run() -> None:
-        signer = Account.from_key(PK_DEPLOY_WALLET)
-        client = await AsyncSecureClient.create(
-            private_key=PK_DEPLOY_WALLET,
-            wallet=signer.address,
-            credentials=FAKE_CREDS,
-            api_key=BUILDER_AUTH,
-            validate_credentials=False,
-        )
-        try:
-            assert client._ctx.rpc is None
-        finally:
-            await client.close()
 
     asyncio.run(run())
 

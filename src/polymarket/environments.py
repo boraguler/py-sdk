@@ -11,6 +11,7 @@ class WalletDerivation:
     safe_init_code_hash: str
     deposit_wallet_factory: str
     deposit_wallet_implementation: str
+    deposit_wallet_beacon: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -36,9 +37,9 @@ class Environment:
     data_url: str
     rtds_ws_url: str
     sports_ws_url: str
+    rpc_url: str
     relayer_max_polls: int = 100
     relayer_poll_frequency_ms: int = 2000
-    rpc_url: str | None = None
 
 
 PRODUCTION = Environment(
@@ -51,6 +52,7 @@ PRODUCTION = Environment(
         safe_init_code_hash="0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf",
         deposit_wallet_factory="0x00000000000Fb5C9ADea0298D729A0CB3823Cc07",
         deposit_wallet_implementation="0x58CA52ebe0DadfdF531Cde7062e76746de4Db1eB",
+        deposit_wallet_beacon="0x7A18EDfe055488A3128f01F563e5B479D92ffc3a",
     ),
     collateral_token="0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
     conditional_tokens="0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
@@ -70,6 +72,7 @@ PRODUCTION = Environment(
     data_url="https://data-api.polymarket.com",
     rtds_ws_url="wss://ws-live-data.polymarket.com",
     sports_ws_url="wss://sports-api.polymarket.com/ws",
+    rpc_url="https://polygon.drpc.org",
 )
 
 __all__ = ["Environment", "PRODUCTION", "WalletDerivation"]

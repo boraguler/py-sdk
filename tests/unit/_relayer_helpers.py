@@ -26,11 +26,11 @@ SPENDER = "0x000000000000000000000000000000000000dEaD"
 async def make_deposit_client() -> AsyncSecureClient:
     from eth_account import Account
 
-    from polymarket._internal.wallet import derive_deposit_wallet_address
+    from polymarket._internal.wallet import derive_uups_deposit_wallet_address
     from polymarket.environments import PRODUCTION
 
     signer = Account.from_key(PK_DEPLOY_WALLET)
-    wallet = derive_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+    wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
     return await AsyncSecureClient.create(
         private_key=PK_DEPLOY_WALLET,
         wallet=wallet,
@@ -207,6 +207,53 @@ def install_relayer_handler(
     client._ctx = dataclasses.replace(client._ctx, relayer=transport)
 
 
+def install_rpc_handler(
+    client: AsyncSecureClient,
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> None:
+    from polymarket._internal.eoa.rpc import JsonRpcClient
+
+    transport = AsyncTransport(
+        base_url="https://rpc.test",
+        client=httpx.AsyncClient(
+            base_url="https://rpc.test", transport=httpx.MockTransport(handler)
+        ),
+    )
+    client._ctx = dataclasses.replace(client._ctx, rpc=JsonRpcClient(transport))
+
+
+def legacy_factory_rpc_handler() -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": body["id"],
+                "error": {"code": 3, "message": "execution reverted"},
+            },
+            request=request,
+        )
+
+    return handler
+
+
+def beacon_factory_rpc_handler(beacon_address: str) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": body["id"],
+                "result": "0x" + beacon_address[2:].rjust(64, "0").lower(),
+            },
+            request=request,
+        )
+
+    return handler
+
+
 def request_json(request: httpx.Request) -> Any:
     return json.loads(request.content.decode("utf-8"))
 
@@ -220,8 +267,11 @@ __all__ = [
     "RELAY_PAYLOAD_DEFAULT_ADDRESS",
     "SPENDER",
     "TOKEN",
+    "beacon_factory_rpc_handler",
     "install_relayer_handler",
     "install_relayer_routes",
+    "install_rpc_handler",
+    "legacy_factory_rpc_handler",
     "make_deposit_client",
     "make_eoa_client",
     "make_eoa_client_with_rpc",

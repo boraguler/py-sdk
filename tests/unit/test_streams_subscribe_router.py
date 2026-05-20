@@ -63,6 +63,7 @@ def _env_with(
             safe_init_code_hash=PRODUCTION.wallet_derivation.safe_init_code_hash,
             deposit_wallet_factory=PRODUCTION.wallet_derivation.deposit_wallet_factory,
             deposit_wallet_implementation=PRODUCTION.wallet_derivation.deposit_wallet_implementation,
+            deposit_wallet_beacon=PRODUCTION.wallet_derivation.deposit_wallet_beacon,
         ),
         collateral_token=PRODUCTION.collateral_token,
         conditional_tokens=PRODUCTION.conditional_tokens,
@@ -82,6 +83,7 @@ def _env_with(
         data_url=PRODUCTION.data_url,
         rtds_ws_url=rtds_ws_url,
         sports_ws_url=sports_ws_url,
+        rpc_url=PRODUCTION.rpc_url,
     )
 
 

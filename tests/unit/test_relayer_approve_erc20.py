@@ -14,6 +14,7 @@ from _relayer_helpers import (
     TOKEN,
     install_relayer_handler,
     install_relayer_routes,
+    install_rpc_handler,
     make_deposit_client,
     make_proxy_client,
     make_safe_client,
@@ -28,12 +29,12 @@ from polymarket.transactions import TransactionHandle
 def test_approve_erc20_rejects_when_no_api_key() -> None:
     from eth_account import Account
 
-    from polymarket._internal.wallet import derive_deposit_wallet_address
+    from polymarket._internal.wallet import derive_uups_deposit_wallet_address
     from polymarket.environments import PRODUCTION
 
     async def run() -> None:
         signer = Account.from_key(PK_DEPLOY_WALLET)
-        wallet = derive_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+        wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
         client = await AsyncSecureClient.create(
             private_key=PK_DEPLOY_WALLET,
             wallet=wallet,
@@ -128,7 +129,21 @@ def test_approve_erc20_deposit_wallet_payload_shape() -> None:
 
 
 def test_approve_erc20_proxy_payload_shape() -> None:
+    import json as _json
+
     captured: list[httpx.Request] = []
+
+    def rpc_handler(request: httpx.Request) -> httpx.Response:
+        body = _json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": body["id"],
+                "error": {"code": -32_603, "message": "upstream unavailable"},
+            },
+            request=request,
+        )
 
     async def run() -> None:
         client = await make_proxy_client()
@@ -147,6 +162,7 @@ def test_approve_erc20_proxy_payload_shape() -> None:
                 },
             },
         )
+        install_rpc_handler(client, rpc_handler)
         try:
             await client.approve_erc20(
                 token_address=TOKEN,
@@ -401,14 +417,14 @@ def test_approve_erc20_works_with_relayer_api_key() -> None:
     from eth_account import Account
 
     from polymarket import RelayerApiKey
-    from polymarket._internal.wallet import derive_deposit_wallet_address
+    from polymarket._internal.wallet import derive_uups_deposit_wallet_address
     from polymarket.environments import PRODUCTION
 
     captured: list[httpx.Request] = []
 
     async def run() -> None:
         signer = Account.from_key(PK_DEPLOY_WALLET)
-        wallet = derive_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+        wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
         client = await AsyncSecureClient.create(
             private_key=PK_DEPLOY_WALLET,
             wallet=wallet,
