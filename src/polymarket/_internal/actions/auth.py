@@ -3,7 +3,7 @@ from typing import cast
 from pydantic import TypeAdapter, ValidationError
 
 from polymarket._internal.l1_auth import ApiKeyAuthSignature
-from polymarket.clients._transport import AsyncTransport
+from polymarket.clients._transport import AsyncTransport, SyncTransport
 from polymarket.errors import RequestRejectedError, UnexpectedResponseError
 from polymarket.models.clob import ApiKeyCreds
 
@@ -67,13 +67,52 @@ async def delete_api_key(secure_clob: AsyncTransport) -> None:
         )
 
 
+def create_api_key_sync(clob: SyncTransport, signature: ApiKeyAuthSignature) -> ApiKeyCreds:
+    payload = clob.post_json("/auth/api-key", headers=build_l1_auth_headers(signature))
+    return parse_api_key_creds(payload)
+
+
+def derive_api_key_sync(clob: SyncTransport, signature: ApiKeyAuthSignature) -> ApiKeyCreds:
+    payload = clob.get_json("/auth/derive-api-key", headers=build_l1_auth_headers(signature))
+    return parse_api_key_creds(payload)
+
+
+def create_or_derive_api_key_sync(
+    clob: SyncTransport, signature: ApiKeyAuthSignature
+) -> ApiKeyCreds:
+    try:
+        return create_api_key_sync(clob, signature)
+    except RequestRejectedError as error:
+        if error.status != 400:
+            raise
+    return derive_api_key_sync(clob, signature)
+
+
+def fetch_api_keys_sync(secure_clob: SyncTransport) -> tuple[str, ...]:
+    payload = secure_clob.get_json("/auth/api-keys")
+    return parse_api_keys_response(payload)
+
+
+def delete_api_key_sync(secure_clob: SyncTransport) -> None:
+    payload = secure_clob.delete_json("/auth/api-key")
+    if payload != "OK":
+        raise UnexpectedResponseError(
+            f"delete api key response did not match expected shape: {payload!r}"
+        )
+
+
 __all__ = [
     "build_l1_auth_headers",
     "create_api_key",
+    "create_api_key_sync",
     "create_or_derive_api_key",
+    "create_or_derive_api_key_sync",
     "delete_api_key",
+    "delete_api_key_sync",
     "derive_api_key",
+    "derive_api_key_sync",
     "fetch_api_keys",
+    "fetch_api_keys_sync",
     "parse_api_key_creds",
     "parse_api_keys_response",
 ]

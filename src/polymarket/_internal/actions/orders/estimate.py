@@ -3,24 +3,23 @@ from decimal import Decimal
 
 from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions.orders._numeric import coerce_positive_decimal
-from polymarket._internal.actions.orders.market_data import fetch_tick_size
+from polymarket._internal.actions.orders.market_data import fetch_tick_size, fetch_tick_size_sync
 from polymarket._internal.actions.orders.types import MarketOrderType
-from polymarket._internal.context import AsyncClientContext
+from polymarket._internal.context import AsyncClientContext, SyncClientContext
 from polymarket._internal.validation import require_nonempty
 from polymarket.errors import InsufficientLiquidityError, UnexpectedResponseError, UserInputError
 from polymarket.models.clob.order_book import OrderBookLevel
 from polymarket.models.types import OrderSide, TokenId
 
 
-async def estimate_market_price(
-    ctx: AsyncClientContext,
+def _validate_estimate_inputs(
     *,
     token_id: str,
     side: OrderSide,
-    amount: Decimal | int | float | str | None = None,
-    shares: Decimal | int | float | str | None = None,
-    order_type: MarketOrderType = "FOK",
-) -> Decimal:
+    amount: Decimal | int | float | str | None,
+    shares: Decimal | int | float | str | None,
+    order_type: MarketOrderType,
+) -> tuple[TokenId, Decimal]:
     validated_token = TokenId(require_nonempty("token_id", token_id))
     if side == "BUY":
         if amount is None:
@@ -38,8 +37,46 @@ async def estimate_market_price(
         raise UserInputError(f"side must be 'BUY' or 'SELL', got {side!r}.")
     if order_type not in ("FAK", "FOK"):
         raise UserInputError(f"order_type must be 'FAK' or 'FOK', got {order_type!r}.")
+    return validated_token, notional
+
+
+async def estimate_market_price(
+    ctx: AsyncClientContext,
+    *,
+    token_id: str,
+    side: OrderSide,
+    amount: Decimal | int | float | str | None = None,
+    shares: Decimal | int | float | str | None = None,
+    order_type: MarketOrderType = "FOK",
+) -> Decimal:
+    validated_token, notional = _validate_estimate_inputs(
+        token_id=token_id, side=side, amount=amount, shares=shares, order_type=order_type
+    )
     tick_size = await fetch_tick_size(ctx, token_id=validated_token)
     return await resolve_estimated_market_price(
+        ctx,
+        token_id=validated_token,
+        side=side,
+        notional=notional,
+        order_type=order_type,
+        tick_size=tick_size,
+    )
+
+
+def estimate_market_price_sync(
+    ctx: SyncClientContext,
+    *,
+    token_id: str,
+    side: OrderSide,
+    amount: Decimal | int | float | str | None = None,
+    shares: Decimal | int | float | str | None = None,
+    order_type: MarketOrderType = "FOK",
+) -> Decimal:
+    validated_token, notional = _validate_estimate_inputs(
+        token_id=token_id, side=side, amount=amount, shares=shares, order_type=order_type
+    )
+    tick_size = fetch_tick_size_sync(ctx, token_id=validated_token)
+    return resolve_estimated_market_price_sync(
         ctx,
         token_id=validated_token,
         side=side,
@@ -60,6 +97,28 @@ async def resolve_estimated_market_price(
 ) -> Decimal:
     path, params = _clob_actions.build_order_book_request(token_id=token_id)
     book = _clob_actions.parse_order_book(await ctx.clob.get_json(path, params=params))
+    if side == "BUY":
+        price = _calculate_buy_market_price(book.asks, notional, order_type)
+    else:
+        price = _calculate_sell_market_price(book.bids, notional, order_type)
+    if price < tick_size or price > Decimal(1) - tick_size:
+        raise UnexpectedResponseError(
+            f"Resolved market price {price} fell outside the valid range for tick size {tick_size}."
+        )
+    return price
+
+
+def resolve_estimated_market_price_sync(
+    ctx: SyncClientContext,
+    *,
+    token_id: TokenId,
+    side: OrderSide,
+    notional: Decimal,
+    order_type: MarketOrderType,
+    tick_size: Decimal,
+) -> Decimal:
+    path, params = _clob_actions.build_order_book_request(token_id=token_id)
+    book = _clob_actions.parse_order_book(ctx.clob.get_json(path, params=params))
     if side == "BUY":
         price = _calculate_buy_market_price(book.asks, notional, order_type)
     else:
@@ -101,4 +160,9 @@ def _calculate_sell_market_price(
     return bids[0].price
 
 
-__all__ = ["estimate_market_price", "resolve_estimated_market_price"]
+__all__ = [
+    "estimate_market_price",
+    "estimate_market_price_sync",
+    "resolve_estimated_market_price",
+    "resolve_estimated_market_price_sync",
+]

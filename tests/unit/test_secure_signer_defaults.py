@@ -53,7 +53,12 @@ def _captured() -> list[httpx.Request]:
 
 
 def test_secure_get_portfolio_values_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, _capturing_handler(captured, []))
         client.get_portfolio_values()
 
@@ -63,7 +68,12 @@ def test_secure_get_portfolio_values_defaults_to_signer(captured: list[httpx.Req
 def test_secure_get_portfolio_values_respects_explicit_user(
     captured: list[httpx.Request],
 ) -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, _capturing_handler(captured, []))
         client.get_portfolio_values(user=OTHER_WALLET)
 
@@ -76,7 +86,12 @@ def test_secure_get_portfolio_values_respects_explicit_user(
 def test_secure_get_traded_market_count_defaults_to_signer(
     captured: list[httpx.Request],
 ) -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(
             client, _capturing_handler(captured, {"user": SIGNER_ADDRESS, "traded": 0})
         )
@@ -88,7 +103,12 @@ def test_secure_get_traded_market_count_defaults_to_signer(
 def test_secure_get_traded_market_count_respects_explicit_user(
     captured: list[httpx.Request],
 ) -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(
             client, _capturing_handler(captured, {"user": OTHER_WALLET, "traded": 0})
         )
@@ -107,7 +127,12 @@ def test_secure_download_accounting_snapshot_defaults_to_signer(
         captured.append(request)
         return httpx.Response(200, content=b"PK\x03\x04", request=request)
 
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, httpx.MockTransport(handler))
         client.download_accounting_snapshot()
 
@@ -121,7 +146,12 @@ def test_secure_download_accounting_snapshot_respects_explicit_user(
         captured.append(request)
         return httpx.Response(200, content=b"PK\x03\x04", request=request)
 
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, httpx.MockTransport(handler))
         client.download_accounting_snapshot(user=OTHER_WALLET)
 
@@ -132,7 +162,12 @@ def test_secure_download_accounting_snapshot_respects_explicit_user(
 
 
 def test_secure_list_positions_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, _capturing_handler(captured, []))
         client.list_positions().first_page()
 
@@ -140,7 +175,12 @@ def test_secure_list_positions_defaults_to_signer(captured: list[httpx.Request])
 
 
 def test_secure_list_positions_respects_explicit_user(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, _capturing_handler(captured, []))
         client.list_positions(user=OTHER_WALLET).first_page()
 
@@ -151,7 +191,12 @@ def test_secure_list_positions_respects_explicit_user(captured: list[httpx.Reque
 
 
 def test_secure_list_closed_positions_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, _capturing_handler(captured, []))
         client.list_closed_positions().first_page()
 
@@ -162,7 +207,12 @@ def test_secure_list_closed_positions_defaults_to_signer(captured: list[httpx.Re
 
 
 def test_secure_list_trades_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, _capturing_handler(captured, []))
         client.list_trades().first_page()
 
@@ -173,7 +223,12 @@ def test_secure_list_trades_defaults_to_signer(captured: list[httpx.Request]) ->
 
 
 def test_secure_list_activity_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, _capturing_handler(captured, []))
         client.list_activity().first_page()
 
@@ -280,7 +335,12 @@ def test_secure_list_positions_rejects_explicit_empty_user(
 ) -> None:
     from polymarket.errors import UserInputError
 
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, _capturing_handler(captured, []))
         with pytest.raises(UserInputError, match="user is required"):
             client.list_positions(user="").first_page()
@@ -291,7 +351,12 @@ def test_secure_get_portfolio_values_rejects_explicit_empty_user(
 ) -> None:
     from polymarket.errors import UserInputError
 
-    with SecureClient.create(private_key=PRIVATE_KEY) as client:
+    with SecureClient.create(
+        private_key=PRIVATE_KEY,
+        wallet=SIGNER_ADDRESS,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
         _install_sync_data(client, _capturing_handler(captured, []))
         with pytest.raises(UserInputError, match="user is required"):
             client.get_portfolio_values(user="")
