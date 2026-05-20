@@ -194,8 +194,6 @@ async def _estimate_proxy_gas_limit(
     to: str,
     data: str,
 ) -> str:
-    if ctx.rpc is None:
-        return _PROXY_DEFAULT_GAS_LIMIT
     try:
         estimated = await ctx.rpc.eth_estimate_gas({"from": from_address, "to": to, "data": data})
     except Exception:

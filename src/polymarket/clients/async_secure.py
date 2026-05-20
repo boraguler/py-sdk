@@ -94,7 +94,7 @@ from polymarket._internal.streams.handle import AsyncSubscriptionHandle, Subscri
 from polymarket._internal.wallet import (
     WalletType,
     classify_wallet_type,
-    derive_deposit_wallet_address,
+    derive_current_deposit_wallet_address,
     signature_type_for,
 )
 from polymarket.auth import ApiKey
@@ -321,10 +321,8 @@ class AsyncSecureClient:
             logger=logger,
             header_resolver=_make_l2_header_resolver(signer, credentials),
         )
-        rpc: JsonRpcClient | None = None
-        if environment.rpc_url is not None:
-            rpc_transport = AsyncTransport(base_url=environment.rpc_url, logger=logger)
-            rpc = JsonRpcClient(rpc_transport)
+        rpc_transport = AsyncTransport(base_url=environment.rpc_url, logger=logger)
+        rpc = JsonRpcClient(rpc_transport)
 
         ctx = AsyncSecureClientContext(
             environment=environment,
@@ -532,8 +530,7 @@ class AsyncSecureClient:
                                         try:
                                             await ctx.relayer.close()
                                         finally:
-                                            if ctx.rpc is not None:
-                                                await ctx.rpc.close()
+                                            await ctx.rpc.close()
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user
@@ -1655,8 +1652,8 @@ class AsyncSecureClient:
             )
         deposit_address = cast(
             EvmAddress,
-            to_checksum_address(
-                derive_deposit_wallet_address(ctx.signer.address, ctx.environment.wallet_derivation)
+            await derive_current_deposit_wallet_address(
+                ctx.rpc, ctx.signer.address, ctx.environment.wallet_derivation
             ),
         )
         ready = await fetch_deployed(
@@ -1677,25 +1674,23 @@ class AsyncSecureClient:
         )
 
     async def is_gasless_ready(self) -> bool:
-        wallet_type = self._ctx.wallet_type
-        if wallet_type == "EOA":
-            return False
-        type_param = RelayerTransactionType.WALLET if wallet_type == "DEPOSIT_WALLET" else None
+        ctx = self._ctx
+        if ctx.wallet_type != "EOA":
+            type_param = (
+                RelayerTransactionType.WALLET if ctx.wallet_type == "DEPOSIT_WALLET" else None
+            )
+            return await fetch_deployed(ctx.relayer, address=str(ctx.wallet), type=type_param)
+        deposit_address = await derive_current_deposit_wallet_address(
+            ctx.rpc, ctx.signer.address, ctx.environment.wallet_derivation
+        )
         return await fetch_deployed(
-            self._ctx.relayer, address=str(self._ctx.wallet), type=type_param
+            ctx.relayer, address=deposit_address, type=RelayerTransactionType.WALLET
         )
 
     async def _broadcast_eoa_call(self, call: TransactionCall) -> EoaTransactionHandle:
-        rpc = self._ctx.rpc
-        if rpc is None:
-            raise UserInputError(
-                "EOA workflows require rpc_url set on the Environment. "
-                "Pass environment=dataclasses.replace(PRODUCTION, rpc_url='...') "
-                "at create(), or use setup_gasless_wallet() to switch to a Deposit Wallet."
-            )
         env = self._ctx.environment
         return await broadcast_eoa_call(
-            rpc=rpc,
+            rpc=self._ctx.rpc,
             signer=self._ctx.signer,
             call=call,
             chain_id=env.chain_id,

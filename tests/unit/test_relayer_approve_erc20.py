@@ -28,12 +28,12 @@ from polymarket.transactions import TransactionHandle
 def test_approve_erc20_rejects_when_no_api_key() -> None:
     from eth_account import Account
 
-    from polymarket._internal.wallet import derive_deposit_wallet_address
+    from polymarket._internal.wallet import derive_uups_deposit_wallet_address
     from polymarket.environments import PRODUCTION
 
     async def run() -> None:
         signer = Account.from_key(PK_DEPLOY_WALLET)
-        wallet = derive_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+        wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
         client = await AsyncSecureClient.create(
             private_key=PK_DEPLOY_WALLET,
             wallet=wallet,
@@ -401,14 +401,14 @@ def test_approve_erc20_works_with_relayer_api_key() -> None:
     from eth_account import Account
 
     from polymarket import RelayerApiKey
-    from polymarket._internal.wallet import derive_deposit_wallet_address
+    from polymarket._internal.wallet import derive_uups_deposit_wallet_address
     from polymarket.environments import PRODUCTION
 
     captured: list[httpx.Request] = []
 
     async def run() -> None:
         signer = Account.from_key(PK_DEPLOY_WALLET)
-        wallet = derive_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+        wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
         client = await AsyncSecureClient.create(
             private_key=PK_DEPLOY_WALLET,
             wallet=wallet,
