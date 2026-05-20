@@ -263,6 +263,7 @@ async def test_place_market_order_closes_inventory_or_buys_minimum_size(
         deposit_wallet_client, market=market, token_id=token_id
     )
     if position is not None:
+        assert position.size is not None, "expected non-null size on owned position"
         response = await deposit_wallet_client.place_market_order(
             token_id=token_id,
             side="SELL",
