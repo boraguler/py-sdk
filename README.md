@@ -4,16 +4,22 @@ Official Python SDK for Polymarket.
 
 The SDK gives Python developers one coherent, workflow-oriented interface for building on Polymarket, starting with public data access and expanding toward authenticated account, trading, builder attribution, and relayer-backed workflows.
 
+## Beta Status
+
+The Python SDK is currently in beta. We are working toward a stable public API and will use feedback during the beta period to refine the developer experience.
+
+We welcome bug reports, feature requests, and general feedback through GitHub Issues. Please use the provided issue templates so we can triage reports consistently.
+
 ## Installation
 
 ```bash
-uv add polymarket-client
+uv add --prerelease allow polymarket-client
 ```
 
 or:
 
 ```bash
-pip install polymarket-client
+pip install --pre polymarket-client
 ```
 
 ## Usage
