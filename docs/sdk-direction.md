@@ -33,7 +33,7 @@ We evaluated common Python SDKs in trading, exchange, and Web3 ecosystems. The m
 
 The sync and async clients should share request builders, models, auth/signing, serialization, validation, response parsing, and namespace structure. Their implementations should differ at the transport boundary: sync clients use sync transports, async clients use async transports.
 
-Write-heavy CLOB workflows may land on async clients first while we validate the Python interface for order placement, cancellation, signing, and related account operations. This is intentional planned tech debt, not a change to the default-client direction. Once the async shape is stable, follow-up work should extend the same workflows to the synchronous `PublicClient` and `SecureClient` without wrapping async implementations in `asyncio.run()`.
+Supported workflows should be available on both sync and async clients where practical. Sync implementations should use sync transports rather than wrapping async implementations in `asyncio.run()`.
 
 Clients that own network transports should support explicit cleanup. Synchronous clients should be usable as context managers:
 

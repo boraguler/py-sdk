@@ -2,7 +2,7 @@
 
 Official Python SDK for Polymarket.
 
-The SDK gives Python developers one coherent, workflow-oriented interface for building on Polymarket, starting with public data access and expanding toward authenticated account, trading, builder attribution, and relayer-backed workflows.
+The SDK gives Python developers one coherent, workflow-oriented interface for building on Polymarket across public data, authenticated account, trading, builder attribution, and wallet workflows.
 
 ## Beta Status
 
