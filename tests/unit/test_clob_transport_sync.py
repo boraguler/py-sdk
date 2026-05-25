@@ -61,7 +61,7 @@ def _body(request: httpx.Request) -> object:
 
 
 def _secure_client() -> SecureClient:
-    return SecureClient.create(
+    return SecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,

@@ -126,7 +126,7 @@ def test_async_secure_create_falls_back_to_derive_on_400() -> None:
 
 def test_async_secure_create_with_credentials_skips_auth_flow() -> None:
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -144,7 +144,7 @@ def test_fetch_api_keys_sends_l2_headers() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> tuple[str, ...]:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -173,7 +173,7 @@ def test_delete_api_key_succeeds_on_ok_response() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -193,7 +193,7 @@ def test_delete_api_key_succeeds_on_ok_response() -> None:
 
 def test_delete_api_key_raises_unexpected_response_on_non_ok_payload() -> None:
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -211,7 +211,7 @@ def test_delete_api_key_raises_unexpected_response_on_non_ok_payload() -> None:
 
 def test_fetch_api_keys_propagates_401_as_request_rejected() -> None:
     async def run() -> tuple[str, ...]:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -232,7 +232,7 @@ def test_async_secure_create_rejects_credentials_with_nonzero_nonce() -> None:
     from polymarket.errors import UserInputError
 
     async def run() -> None:
-        await AsyncSecureClient.create(
+        await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY, wallet=SIGNER_ADDRESS, credentials=FAKE_CREDS, nonce=1
         )
 
@@ -244,7 +244,11 @@ def test_async_secure_create_rejects_negative_nonce() -> None:
     from polymarket.errors import UserInputError
 
     async def run() -> None:
-        await AsyncSecureClient.create(private_key=PRIVATE_KEY, wallet=SIGNER_ADDRESS, nonce=-1)
+        await AsyncSecureClient._create_for_testing(
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            nonce=-1,
+        )
 
     with pytest.raises(UserInputError, match="non-negative integer"):
         asyncio.run(run())
@@ -254,7 +258,11 @@ def test_async_secure_create_rejects_bool_nonce() -> None:
     from polymarket.errors import UserInputError
 
     async def run() -> None:
-        await AsyncSecureClient.create(private_key=PRIVATE_KEY, wallet=SIGNER_ADDRESS, nonce=True)  # type: ignore[arg-type]
+        await AsyncSecureClient._create_for_testing(
+            private_key=PRIVATE_KEY,
+            wallet=SIGNER_ADDRESS,
+            nonce=True,  # type: ignore[arg-type]
+        )
 
     with pytest.raises(UserInputError, match="non-negative integer"):
         asyncio.run(run())
@@ -298,7 +306,7 @@ def test_l2_signature_includes_canonical_body_for_authenticated_post() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,

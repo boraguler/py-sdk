@@ -342,7 +342,7 @@ class TestAsyncSecureClientListBuilderTrades:
             )
 
         async def run() -> BuilderTrade:
-            client = await AsyncSecureClient.create(
+            client = await AsyncSecureClient._create_for_testing(
                 private_key=_PRIVATE_KEY,
                 wallet=_SIGNER,
                 credentials=_FAKE_CREDS,

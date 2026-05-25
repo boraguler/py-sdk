@@ -1,4 +1,6 @@
+# pyright: reportPrivateUsage=false
 import asyncio
+import inspect
 from typing import cast
 
 import pytest
@@ -45,7 +47,7 @@ def test_async_public_client_supports_context_manager() -> None:
 
 
 def test_secure_client_factory_uses_production_by_default() -> None:
-    client = SecureClient.create(
+    client = SecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -57,6 +59,11 @@ def test_secure_client_factory_uses_production_by_default() -> None:
         client.close()
 
 
+def test_secure_client_factory_signature_hides_test_validation_switch() -> None:
+    assert "validate_credentials" not in inspect.signature(SecureClient.create).parameters
+    assert "validate_credentials" not in inspect.signature(AsyncSecureClient.create).parameters
+
+
 def test_secure_client_requires_factory() -> None:
     from polymarket._internal.context import SyncSecureClientContext
 
@@ -65,7 +72,7 @@ def test_secure_client_requires_factory() -> None:
 
 
 def test_secure_client_supports_context_manager() -> None:
-    with SecureClient.create(
+    with SecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -76,7 +83,7 @@ def test_secure_client_supports_context_manager() -> None:
 
 def test_async_secure_client_factory_uses_production_by_default() -> None:
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -97,7 +104,7 @@ def test_async_secure_client_requires_factory() -> None:
 
 def test_async_secure_client_supports_context_manager() -> None:
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -110,7 +117,7 @@ def test_async_secure_client_supports_context_manager() -> None:
 
 
 def test_secure_client_exposes_signer_wallet() -> None:
-    with SecureClient.create(
+    with SecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -121,7 +128,7 @@ def test_secure_client_exposes_signer_wallet() -> None:
 
 def test_async_secure_client_exposes_signer_wallet() -> None:
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -146,7 +153,7 @@ def test_secure_client_wallet_defaults_to_signer_when_omitted() -> None:
 
     expected = to_checksum_address(Account.from_key(PRIVATE_KEY).address)
 
-    with SecureClient.create(
+    with SecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         credentials=FAKE_CREDS,
         validate_credentials=False,
@@ -170,7 +177,7 @@ def test_async_secure_client_wallet_defaults_to_signer_when_omitted() -> None:
     expected = to_checksum_address(Account.from_key(PRIVATE_KEY).address)
 
     async def run() -> str:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             validate_credentials=False,
         )

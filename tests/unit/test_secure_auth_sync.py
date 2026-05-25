@@ -26,7 +26,7 @@ def _capture(captured: list[httpx.Request], status: int, payload: Any) -> httpx.
 
 
 def _make_client() -> SecureClient:
-    return SecureClient.create(
+    return SecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -107,7 +107,7 @@ def test_create_or_derive_api_key_sync_falls_back_to_derive_on_400() -> None:
 
 
 def test_create_with_credentials_skips_auth_flow_when_validation_disabled() -> None:
-    with SecureClient.create(
+    with SecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -147,7 +147,7 @@ def test_create_validates_credentials_via_fetch_api_keys_when_enabled() -> None:
 
 def test_create_rejects_credentials_with_nonzero_nonce() -> None:
     with pytest.raises(UserInputError, match="nonce cannot be combined"):
-        SecureClient.create(
+        SecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -157,12 +157,12 @@ def test_create_rejects_credentials_with_nonzero_nonce() -> None:
 
 def test_create_rejects_negative_nonce() -> None:
     with pytest.raises(UserInputError, match="non-negative integer"):
-        SecureClient.create(private_key=PRIVATE_KEY, wallet=SIGNER_ADDRESS, nonce=-1)
+        SecureClient._create_for_testing(private_key=PRIVATE_KEY, wallet=SIGNER_ADDRESS, nonce=-1)
 
 
 def test_create_rejects_bool_nonce() -> None:
     with pytest.raises(UserInputError, match="non-negative integer"):
-        SecureClient.create(
+        SecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             nonce=cast(int, True),
@@ -170,7 +170,7 @@ def test_create_rejects_bool_nonce() -> None:
 
 
 def test_create_defaults_wallet_to_signer_when_omitted() -> None:
-    with SecureClient.create(
+    with SecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         credentials=FAKE_CREDS,
         validate_credentials=False,
@@ -181,7 +181,7 @@ def test_create_defaults_wallet_to_signer_when_omitted() -> None:
 
 def test_create_rejects_invalid_wallet_address() -> None:
     with pytest.raises(UserInputError, match="Invalid wallet address"):
-        SecureClient.create(
+        SecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet="not-an-address",
             credentials=FAKE_CREDS,
@@ -196,7 +196,7 @@ def test_create_classifies_eoa_when_wallet_equals_signer() -> None:
 
 
 def test_create_normalizes_wallet_to_checksum() -> None:
-    with SecureClient.create(
+    with SecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS.lower(),
         credentials=FAKE_CREDS,

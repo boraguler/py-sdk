@@ -35,7 +35,7 @@ def test_approve_erc20_rejects_when_no_api_key() -> None:
     async def run() -> None:
         signer = Account.from_key(PK_DEPLOY_WALLET)
         wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PK_DEPLOY_WALLET,
             wallet=wallet,
             credentials=FAKE_CREDS,
@@ -425,7 +425,7 @@ def test_approve_erc20_works_with_relayer_api_key() -> None:
     async def run() -> None:
         signer = Account.from_key(PK_DEPLOY_WALLET)
         wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create_for_testing(
             private_key=PK_DEPLOY_WALLET,
             wallet=wallet,
             credentials=FAKE_CREDS,

@@ -32,7 +32,7 @@ def _install_secure_clob(client: AsyncSecureClient, payload: dict[str, Any]) -> 
 
 
 async def _make_client() -> AsyncSecureClient:
-    return await AsyncSecureClient.create(
+    return await AsyncSecureClient._create_for_testing(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,

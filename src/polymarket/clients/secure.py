@@ -230,7 +230,6 @@ class SecureClient:
         credentials: ApiKeyCreds | None = None,
         api_key: ApiKey | None = None,
         nonce: int = 0,
-        validate_credentials: bool = True,
         logger: logging.Logger | None = None,
     ) -> Self:
         """Create an authenticated synchronous client.
@@ -242,12 +241,59 @@ class SecureClient:
                 derived during client creation.
             api_key: Optional key for gasless wallet and relayed transaction workflows.
             nonce: Credential derivation nonce. Cannot be combined with ``credentials``.
-            validate_credentials: Whether provided credentials should be validated.
 
         Raises:
             UserInputError: If key material, wallet, nonce, or credentials are invalid.
             RequestRejectedError: If credential derivation or validation is rejected.
         """
+        return cls._create(
+            private_key=private_key,
+            wallet=wallet,
+            environment=environment,
+            credentials=credentials,
+            api_key=api_key,
+            nonce=nonce,
+            validate_credentials=True,
+            logger=logger,
+        )
+
+    @classmethod
+    def _create_for_testing(
+        cls,
+        *,
+        private_key: str,
+        wallet: str | None = None,
+        environment: Environment = PRODUCTION,
+        credentials: ApiKeyCreds | None = None,
+        api_key: ApiKey | None = None,
+        nonce: int = 0,
+        validate_credentials: bool = True,
+        logger: logging.Logger | None = None,
+    ) -> Self:
+        return cls._create(
+            private_key=private_key,
+            wallet=wallet,
+            environment=environment,
+            credentials=credentials,
+            api_key=api_key,
+            nonce=nonce,
+            validate_credentials=validate_credentials,
+            logger=logger,
+        )
+
+    @classmethod
+    def _create(
+        cls,
+        *,
+        private_key: str,
+        wallet: str | None = None,
+        environment: Environment = PRODUCTION,
+        credentials: ApiKeyCreds | None = None,
+        api_key: ApiKey | None = None,
+        nonce: int = 0,
+        validate_credentials: bool,
+        logger: logging.Logger | None = None,
+    ) -> Self:
         if not private_key:
             raise UserInputError("private_key is required")
         _validate_nonce(nonce)

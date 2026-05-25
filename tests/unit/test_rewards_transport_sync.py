@@ -106,7 +106,7 @@ class TestListCurrentRewards:
 
     def test_secure_uses_unsigned_clob_not_secure_clob(self) -> None:
         captured: list[httpx.Request] = []
-        with SecureClient.create(
+        with SecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -143,7 +143,7 @@ class TestListMarketRewards:
 
     def test_secure_uses_unsigned_clob_not_secure_clob(self) -> None:
         captured: list[httpx.Request] = []
-        with SecureClient.create(
+        with SecureClient._create_for_testing(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
