@@ -35,7 +35,7 @@ def _install_secure_clob(client: AsyncSecureClient, handler: httpx.MockTransport
 
 
 async def _build_client() -> AsyncSecureClient:
-    return await AsyncSecureClient.create(
+    return await AsyncSecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,

@@ -27,7 +27,7 @@ async def _make_eoa_secure_client() -> AsyncSecureClient:
     from eth_account import Account
 
     signer = Account.from_key(PK_DEPLOY_WALLET)
-    return await AsyncSecureClient.create(
+    return await AsyncSecureClient._create(
         private_key=PK_DEPLOY_WALLET,
         wallet=signer.address,
         credentials=FAKE_CREDS,
