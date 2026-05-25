@@ -53,7 +53,7 @@ def _captured() -> list[httpx.Request]:
 
 
 def test_secure_get_portfolio_values_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -68,7 +68,7 @@ def test_secure_get_portfolio_values_defaults_to_signer(captured: list[httpx.Req
 def test_secure_get_portfolio_values_respects_explicit_user(
     captured: list[httpx.Request],
 ) -> None:
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -86,7 +86,7 @@ def test_secure_get_portfolio_values_respects_explicit_user(
 def test_secure_get_traded_market_count_defaults_to_signer(
     captured: list[httpx.Request],
 ) -> None:
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -103,7 +103,7 @@ def test_secure_get_traded_market_count_defaults_to_signer(
 def test_secure_get_traded_market_count_respects_explicit_user(
     captured: list[httpx.Request],
 ) -> None:
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -127,7 +127,7 @@ def test_secure_download_accounting_snapshot_defaults_to_signer(
         captured.append(request)
         return httpx.Response(200, content=b"PK\x03\x04", request=request)
 
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -146,7 +146,7 @@ def test_secure_download_accounting_snapshot_respects_explicit_user(
         captured.append(request)
         return httpx.Response(200, content=b"PK\x03\x04", request=request)
 
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -162,7 +162,7 @@ def test_secure_download_accounting_snapshot_respects_explicit_user(
 
 
 def test_secure_list_positions_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -175,7 +175,7 @@ def test_secure_list_positions_defaults_to_signer(captured: list[httpx.Request])
 
 
 def test_secure_list_positions_respects_explicit_user(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -191,7 +191,7 @@ def test_secure_list_positions_respects_explicit_user(captured: list[httpx.Reque
 
 
 def test_secure_list_closed_positions_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -207,7 +207,7 @@ def test_secure_list_closed_positions_defaults_to_signer(captured: list[httpx.Re
 
 
 def test_secure_list_trades_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -223,7 +223,7 @@ def test_secure_list_trades_defaults_to_signer(captured: list[httpx.Request]) ->
 
 
 def test_secure_list_activity_defaults_to_signer(captured: list[httpx.Request]) -> None:
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -242,7 +242,7 @@ def test_async_secure_list_positions_defaults_to_signer() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -262,7 +262,7 @@ def test_async_secure_list_positions_respects_explicit_user() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -286,7 +286,7 @@ def test_async_secure_list_positions_defaults_to_wallet_when_proxy() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=proxy_wallet,
             credentials=FAKE_CREDS,
@@ -311,7 +311,7 @@ def test_async_secure_download_accounting_snapshot_defaults_to_signer() -> None:
         return httpx.Response(200, content=b"PK\x03\x04", request=request)
 
     async def run() -> None:
-        client = await AsyncSecureClient.create(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -335,7 +335,7 @@ def test_secure_list_positions_rejects_explicit_empty_user(
 ) -> None:
     from polymarket.errors import UserInputError
 
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -351,7 +351,7 @@ def test_secure_get_portfolio_values_rejects_explicit_empty_user(
 ) -> None:
     from polymarket.errors import UserInputError
 
-    with SecureClient.create(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,

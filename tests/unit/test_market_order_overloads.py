@@ -19,7 +19,7 @@ _FAKE_CREDS = ApiKeyCreds(key="k", passphrase="p", secret="dGVzdA==")
 
 def _make_client() -> AsyncSecureClient:
     return asyncio.run(
-        AsyncSecureClient.create(
+        AsyncSecureClient._create(
             private_key=_PRIVATE_KEY,
             wallet=_SIGNER,
             credentials=_FAKE_CREDS,
