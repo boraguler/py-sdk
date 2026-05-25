@@ -52,6 +52,8 @@ def _parse_optional_epoch(value: object) -> datetime | None:
 
 
 class OpenOrder(BaseModel):
+    """Open order owned by an account."""
+
     id: str
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
@@ -80,6 +82,8 @@ class OpenOrder(BaseModel):
 
 
 class MakerOrder(BaseModel):
+    """Maker-side fill information attached to a trade."""
+
     order_id: str = Field(validation_alias="order_id")
     token_id: TokenId = Field(validation_alias="asset_id")
     maker_address: str = Field(validation_alias="maker_address")
@@ -97,6 +101,8 @@ class MakerOrder(BaseModel):
 
 
 class ClobTrade(BaseModel):
+    """Executed trade for an account or market."""
+
     id: str
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
@@ -123,6 +129,8 @@ class ClobTrade(BaseModel):
 
 
 class Notification(BaseModel):
+    """Account notification."""
+
     id: int
     owner: str
     type: int
@@ -151,6 +159,8 @@ class Notification(BaseModel):
 
 
 class BalanceAllowance(BaseModel):
+    """Balance and allowance values for an asset in base units."""
+
     balance: int
     allowances: dict[str, int]
 

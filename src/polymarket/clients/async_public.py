@@ -138,6 +138,7 @@ class AsyncPublicClient:
 
     @property
     def environment(self) -> Environment:
+        """Environment this client sends requests to."""
         return self._ctx.environment
 
     @overload
@@ -182,6 +183,15 @@ class AsyncPublicClient:
         self,
         specs: PublicSubscription | Sequence[PublicSubscription],
     ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]:
+        """Subscribe to one or more public realtime streams.
+
+        Pass a single subscription spec for one stream or a sequence of specs to
+        receive events through one merged handle.
+
+        Returns:
+            A subscription handle. Iterate over it to receive events and close it
+            when finished.
+        """
         items = _normalize_specs(specs)
         # AsyncSubscriptionHandle is invariant in T, so per-channel handles
         # can't widen to the union type at the type level. Cast at the
@@ -288,6 +298,7 @@ class AsyncPublicClient:
         include_tag: bool | None = None,
         locale: str | None = None,
     ) -> Market:
+        """Get a market by id, slug, or Polymarket URL."""
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_market_spec(
@@ -296,6 +307,7 @@ class AsyncPublicClient:
         )
 
     async def get_market_tags(self, id: str) -> tuple[TagReference, ...]:
+        """Get a market's tags."""
         return await async_dispatch(self._ctx, _gamma_actions.get_market_tags_spec(id))
 
     async def get_event(
@@ -309,6 +321,7 @@ class AsyncPublicClient:
         include_template: bool | None = None,
         locale: str | None = None,
     ) -> Event:
+        """Get an event by id, slug, or Polymarket URL."""
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_event_spec(
@@ -323,6 +336,7 @@ class AsyncPublicClient:
         )
 
     async def get_event_tags(self, id: str) -> tuple[TagReference, ...]:
+        """Get an event's tags."""
         return await async_dispatch(self._ctx, _gamma_actions.get_event_tags_spec(id))
 
     async def get_series(
@@ -332,6 +346,7 @@ class AsyncPublicClient:
         include_chat: bool | None = None,
         locale: str | None = None,
     ) -> Series:
+        """Get a series."""
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_series_spec(id, include_chat=include_chat, locale=locale),
@@ -346,6 +361,7 @@ class AsyncPublicClient:
         include_template: bool | None = None,
         locale: str | None = None,
     ) -> Tag:
+        """Get a tag by id or slug."""
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_tag_spec(
@@ -365,6 +381,7 @@ class AsyncPublicClient:
         omit_empty: bool | None = None,
         status: str | None = None,
     ) -> tuple[RelatedTag, ...]:
+        """Get related tag relationships."""
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_related_tags_spec(
@@ -381,6 +398,7 @@ class AsyncPublicClient:
         omit_empty: bool | None = None,
         status: str | None = None,
     ) -> tuple[Tag, ...]:
+        """Get tag resources linked from related tag relationships."""
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_related_tag_resources_spec(
@@ -389,12 +407,15 @@ class AsyncPublicClient:
         )
 
     async def get_sports(self) -> tuple[SportsMetadata, ...]:
+        """Get available sports metadata."""
         return await async_dispatch(self._ctx, _gamma_actions.get_sports_spec())
 
     async def get_sports_market_types(self) -> SportsMarketTypes:
+        """Get available sports market types."""
         return await async_dispatch(self._ctx, _gamma_actions.get_sports_market_types_spec())
 
     async def get_public_profile(self, address: str) -> PublicProfile | None:
+        """Get a public profile by wallet address. Returns None if no profile exists."""
         try:
             return await async_dispatch(self._ctx, _gamma_actions.get_public_profile_spec(address))
         except RequestRejectedError as error:
@@ -405,17 +426,20 @@ class AsyncPublicClient:
     async def get_comment_thread(
         self, id: str, *, get_positions: bool | None = None
     ) -> tuple[Comment, ...]:
+        """Get a comment thread by comment ID."""
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_comment_thread_spec(id, get_positions=get_positions),
         )
 
     async def get_event_live_volumes(self, *, id: str) -> tuple[LiveVolume, ...]:
+        """Get live volume entries for an event."""
         return await async_dispatch(self._ctx, _data_actions.get_event_live_volumes_spec(id=id))
 
     async def get_open_interests(
         self, *, market: Sequence[str] | None = None
     ) -> tuple[OpenInterest, ...]:
+        """Get open interest values, optionally filtered by market ids."""
         return await async_dispatch(self._ctx, _data_actions.get_open_interests_spec(market=market))
 
     async def get_market_holders(
@@ -425,6 +449,7 @@ class AsyncPublicClient:
         limit: int | None = None,
         min_balance: int | None = None,
     ) -> tuple[MetaHolder, ...]:
+        """Get holder balances for one or more markets."""
         return await async_dispatch(
             self._ctx,
             _data_actions.get_market_holders_spec(
@@ -435,11 +460,13 @@ class AsyncPublicClient:
     async def get_portfolio_values(
         self, *, user: str, market: Sequence[str] | None = None
     ) -> tuple[PortfolioValue, ...]:
+        """Get portfolio value snapshots for a user."""
         return await async_dispatch(
             self._ctx, _data_actions.get_portfolio_values_spec(user=user, market=market)
         )
 
     async def get_traded_market_count(self, *, user: str) -> TradedMarketCount:
+        """Get the number of markets a user has traded."""
         return await async_dispatch(
             self._ctx, _data_actions.get_traded_market_count_spec(user=user)
         )
@@ -447,6 +474,7 @@ class AsyncPublicClient:
     async def get_builder_volumes(
         self, *, time_period: BuilderVolumeTimePeriod | None = None
     ) -> tuple[BuilderVolumeEntry, ...]:
+        """Get builder volume leaderboard entries."""
         return await async_dispatch(
             self._ctx, _data_actions.get_builder_volumes_spec(time_period=time_period)
         )
@@ -461,6 +489,12 @@ class AsyncPublicClient:
         after: str | None = None,
         before: str | None = None,
     ) -> AsyncPaginator[BuilderTrade]:
+        """List builder-attributed trades.
+
+        Returns:
+            An async paginator over matching builder-attributed trades.
+        """
+
         async def fetch(cursor: str | None) -> Page[BuilderTrade]:
             path, params = _builders_actions.build_list_builder_trades_request(
                 builder_code=builder_code,
@@ -490,6 +524,11 @@ class AsyncPublicClient:
         title: str | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Position]:
+        """List open positions for a user.
+
+        Returns:
+            An async paginator over matching positions.
+        """
         spec = _data_actions.list_positions_spec(
             user=user,
             market=market,
@@ -514,6 +553,11 @@ class AsyncPublicClient:
         sort_direction: SortDirection | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[ClosedPosition]:
+        """List closed positions for a user.
+
+        Returns:
+            An async paginator over matching closed positions.
+        """
         spec = _data_actions.list_closed_positions_spec(
             user=user,
             market=market,
@@ -534,6 +578,11 @@ class AsyncPublicClient:
         sort_direction: SortDirection | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[MetaMarketPosition]:
+        """List positions in a market.
+
+        Returns:
+            An async paginator over matching market positions.
+        """
         spec = _data_actions.list_market_positions_spec(
             market=market,
             user=user,
@@ -555,6 +604,11 @@ class AsyncPublicClient:
         filter_amount: float | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Trade]:
+        """List public trades.
+
+        Returns:
+            An async paginator over matching trades.
+        """
         spec = _data_actions.list_trades_spec(
             user=user,
             market=market,
@@ -580,6 +634,11 @@ class AsyncPublicClient:
         end: int | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Activity]:
+        """List user activity.
+
+        Returns:
+            An async paginator over matching activity entries.
+        """
         spec = _data_actions.list_activity_spec(
             user=user,
             market=market,
@@ -599,10 +658,16 @@ class AsyncPublicClient:
         time_period: LeaderboardTimePeriod | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[LeaderboardEntry]:
+        """List builder leaderboard entries.
+
+        Returns:
+            An async paginator over leaderboard rows.
+        """
         spec = _data_actions.list_builder_leaderboard_spec(time_period=time_period)
         return async_paginate_offset(self._ctx, spec, page_size=page_size)
 
     async def download_accounting_snapshot(self, *, user: str) -> bytes:
+        """Download the accounting snapshot archive for a user."""
         path, params = _data_actions.build_accounting_snapshot_request(user=user)
         return await self._ctx.data.get_bytes(path, params=params)
 
@@ -616,6 +681,11 @@ class AsyncPublicClient:
         user_name: str | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[TraderLeaderboardEntry]:
+        """List trader leaderboard entries.
+
+        Returns:
+            An async paginator over leaderboard rows.
+        """
         spec = _data_actions.list_trader_leaderboard_spec(
             category=category,
             time_period=time_period,
@@ -668,6 +738,18 @@ class AsyncPublicClient:
         volume_min: float | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Event]:
+        """List events.
+
+        Returns:
+            An async paginator over matching events.
+
+        Examples:
+            Iterate over every page::
+
+                async for page in client.list_events(page_size=10):
+                    for event in page.items:
+                        print(event.title)
+        """
         spec = _gamma_actions.list_events_spec(
             ascending=ascending,
             closed=closed,
@@ -744,6 +826,17 @@ class AsyncPublicClient:
         volume_num_min: float | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Market]:
+        """List markets.
+
+        Returns:
+            An async paginator over matching markets.
+
+        Examples:
+            Iterate over individual market items::
+
+                async for market in client.list_markets(closed=False).items():
+                    print(market.question)
+        """
         spec = _gamma_actions.list_markets_spec(
             ascending=ascending,
             closed=closed,
@@ -792,6 +885,11 @@ class AsyncPublicClient:
         slug: str | Sequence[str] | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Series]:
+        """List series.
+
+        Returns:
+            An async paginator over matching series.
+        """
         spec = _gamma_actions.list_series_spec(
             ascending=ascending,
             categories_ids=categories_ids,
@@ -817,6 +915,11 @@ class AsyncPublicClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Tag]:
+        """List tags.
+
+        Returns:
+            An async paginator over matching tags.
+        """
         spec = _gamma_actions.list_tags_spec(
             ascending=ascending,
             include_chat=include_chat,
@@ -838,6 +941,11 @@ class AsyncPublicClient:
         provider_ids: int | Sequence[int] | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Team]:
+        """List teams.
+
+        Returns:
+            An async paginator over matching teams.
+        """
         spec = _gamma_actions.list_teams_spec(
             abbreviation=abbreviation,
             ascending=ascending,
@@ -859,6 +967,11 @@ class AsyncPublicClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Comment]:
+        """List comments for a market or event.
+
+        Returns:
+            An async paginator over matching comments.
+        """
         spec = _gamma_actions.list_comments_spec(
             parent_entity_id=parent_entity_id,
             parent_entity_type=parent_entity_type,
@@ -877,6 +990,11 @@ class AsyncPublicClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Comment]:
+        """List comments authored by a user address.
+
+        Returns:
+            An async paginator over matching comments.
+        """
         spec = _gamma_actions.list_comments_by_user_address_spec(
             address=address,
             ascending=ascending,
@@ -902,6 +1020,11 @@ class AsyncPublicClient:
         sort: str | None = None,
         page_size: int = 10,
     ) -> AsyncPaginator[SearchResults]:
+        """Search Polymarket content.
+
+        Returns:
+            An async paginator over search result pages.
+        """
         spec = _gamma_actions.search_spec(
             q=q,
             ascending=ascending,
@@ -920,40 +1043,49 @@ class AsyncPublicClient:
         return async_paginate_page_based(self._ctx, spec, page_size=page_size)
 
     async def get_midpoint(self, *, token_id: str) -> Decimal:
+        """Get the midpoint price for a token."""
         path, params = _clob_actions.build_midpoint_request(token_id=token_id)
         return _clob_actions.parse_midpoint(await self._ctx.clob.get_json(path, params=params))
 
     async def get_midpoints(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        """Get midpoint prices for multiple tokens."""
         path, body = _clob_actions.build_midpoints_request(token_ids=token_ids)
         return _clob_actions.parse_midpoints(await self._ctx.clob.post_json(path, json=body))
 
     async def get_price(self, *, token_id: str, side: OrderSide) -> Decimal:
+        """Get the executable price for a token side."""
         path, params = _clob_actions.build_price_request(token_id=token_id, side=side)
         return _clob_actions.parse_price(await self._ctx.clob.get_json(path, params=params))
 
     async def get_prices(
         self, *, requests: Sequence[PriceRequest]
     ) -> dict[str, dict[OrderSide, Decimal]]:
+        """Get executable prices for multiple token-side requests."""
         path, body = _clob_actions.build_prices_request(requests=requests)
         return _clob_actions.parse_prices(await self._ctx.clob.post_json(path, json=body))
 
     async def get_order_book(self, *, token_id: str) -> OrderBook:
+        """Get the order book for a token."""
         path, params = _clob_actions.build_order_book_request(token_id=token_id)
         return _clob_actions.parse_order_book(await self._ctx.clob.get_json(path, params=params))
 
     async def get_order_books(self, *, token_ids: Sequence[str]) -> tuple[OrderBook, ...]:
+        """Get order books for multiple tokens."""
         path, body = _clob_actions.build_order_books_request(token_ids=token_ids)
         return _clob_actions.parse_order_books(await self._ctx.clob.post_json(path, json=body))
 
     async def get_spread(self, *, token_id: str) -> Decimal:
+        """Get the bid-ask spread for a token."""
         path, params = _clob_actions.build_spread_request(token_id=token_id)
         return _clob_actions.parse_spread(await self._ctx.clob.get_json(path, params=params))
 
     async def get_spreads(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        """Get bid-ask spreads for multiple tokens."""
         path, body = _clob_actions.build_spreads_request(token_ids=token_ids)
         return _clob_actions.parse_spreads(await self._ctx.clob.post_json(path, json=body))
 
     async def get_last_trade_price(self, *, token_id: str) -> LastTradePrice:
+        """Get the most recent trade price for a token."""
         path, params = _clob_actions.build_last_trade_price_request(token_id=token_id)
         return _clob_actions.parse_last_trade_price(
             await self._ctx.clob.get_json(path, params=params)
@@ -962,6 +1094,7 @@ class AsyncPublicClient:
     async def get_last_trade_prices(
         self, *, token_ids: Sequence[str]
     ) -> tuple[LastTradePriceForToken, ...]:
+        """Get the most recent trade prices for multiple tokens."""
         path, body = _clob_actions.build_last_trade_prices_request(token_ids=token_ids)
         return _clob_actions.parse_last_trade_prices(
             await self._ctx.clob.post_json(path, json=body)
@@ -976,6 +1109,7 @@ class AsyncPublicClient:
         fidelity: int | None = None,
         interval: PriceHistoryInterval | None = None,
     ) -> tuple[PriceHistoryPoint, ...]:
+        """Get historical price points for a token."""
         path, params = _clob_actions.build_price_history_request(
             token_id=token_id,
             start_ts=start_ts,
@@ -1012,6 +1146,11 @@ class AsyncPublicClient:
         shares: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FOK",
     ) -> Decimal:
+        """Estimate the average execution price for a market order.
+
+        BUY orders use ``amount`` as the spend amount. SELL orders use ``shares``
+        as the number of shares to sell.
+        """
         return await _estimate_market_price(
             self._ctx,
             token_id=token_id,
@@ -1024,6 +1163,12 @@ class AsyncPublicClient:
     def list_current_rewards(
         self, *, sponsored: bool | None = None
     ) -> AsyncPaginator[CurrentReward]:
+        """List current rewards.
+
+        Returns:
+            An async paginator over current reward configurations.
+        """
+
         async def fetch(cursor: str | None) -> Page[CurrentReward]:
             path, params = _rewards_actions.build_list_current_rewards_request(
                 sponsored=sponsored, cursor=cursor
@@ -1037,6 +1182,12 @@ class AsyncPublicClient:
     def list_market_rewards(
         self, *, condition_id: str, sponsored: bool | None = None
     ) -> AsyncPaginator[MarketReward]:
+        """List rewards for a market condition.
+
+        Returns:
+            An async paginator over matching market reward configurations.
+        """
+
         async def fetch(cursor: str | None) -> Page[MarketReward]:
             path, params = _rewards_actions.build_list_market_rewards_request(
                 condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor

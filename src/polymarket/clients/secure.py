@@ -188,6 +188,12 @@ def _validate_nonce(nonce: object) -> None:
 
 
 class SecureClient:
+    """Synchronous client for authenticated account, trading, and wallet workflows.
+
+    Create instances with :meth:`SecureClient.create` so the SDK can derive or
+    validate credentials before authenticated requests are made.
+    """
+
     def __init__(
         self,
         *,
@@ -216,6 +222,43 @@ class SecureClient:
 
     @classmethod
     def create(
+        cls,
+        *,
+        private_key: str,
+        wallet: str | None = None,
+        environment: Environment = PRODUCTION,
+        credentials: ApiKeyCreds | None = None,
+        api_key: ApiKey | None = None,
+        nonce: int = 0,
+        logger: logging.Logger | None = None,
+    ) -> Self:
+        """Create an authenticated synchronous client.
+
+        Args:
+            private_key: EVM private key used for signing.
+            wallet: Wallet address to act for. Defaults to the signer's address.
+            credentials: Existing API credentials. When omitted, credentials are
+                derived during client creation.
+            api_key: Optional key for gasless wallet and relayed transaction workflows.
+            nonce: Credential derivation nonce. Cannot be combined with ``credentials``.
+
+        Raises:
+            UserInputError: If key material, wallet, nonce, or credentials are invalid.
+            RequestRejectedError: If credential derivation or validation is rejected.
+        """
+        return cls._create(
+            private_key=private_key,
+            wallet=wallet,
+            environment=environment,
+            credentials=credentials,
+            api_key=api_key,
+            nonce=nonce,
+            validate_credentials=True,
+            logger=logger,
+        )
+
+    @classmethod
+    def _create(
         cls,
         *,
         private_key: str,
@@ -328,22 +371,27 @@ class SecureClient:
 
     @property
     def environment(self) -> Environment:
+        """Environment this client sends requests to."""
         return self._ctx.environment
 
     @property
     def wallet(self) -> EvmAddress:
+        """Wallet address authenticated by this client."""
         return self._ctx.wallet
 
     @property
     def signer(self) -> EvmAddress:
+        """Signer address used for signatures."""
         return cast(EvmAddress, self._ctx.signer.address)
 
     @property
     def wallet_type(self) -> WalletType:
+        """Detected wallet type for the authenticated wallet."""
         return self._ctx.wallet_type
 
     @property
     def credentials(self) -> ApiKeyCreds:
+        """API credentials used for authenticated requests."""
         return self._ctx.credentials
 
     def __enter__(self) -> Self:
@@ -389,6 +437,7 @@ class SecureClient:
         include_tag: bool | None = None,
         locale: str | None = None,
     ) -> Market:
+        """Get a market by id, slug, or Polymarket URL."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_market_spec(
@@ -397,6 +446,7 @@ class SecureClient:
         )
 
     def get_market_tags(self, id: str) -> tuple[TagReference, ...]:
+        """Get a market's tags."""
         return sync_dispatch(self._ctx, _gamma_actions.get_market_tags_spec(id))
 
     def get_event(
@@ -410,6 +460,7 @@ class SecureClient:
         include_template: bool | None = None,
         locale: str | None = None,
     ) -> Event:
+        """Get an event by id, slug, or Polymarket URL."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_event_spec(
@@ -424,6 +475,7 @@ class SecureClient:
         )
 
     def get_event_tags(self, id: str) -> tuple[TagReference, ...]:
+        """Get an event's tags."""
         return sync_dispatch(self._ctx, _gamma_actions.get_event_tags_spec(id))
 
     def get_series(
@@ -433,6 +485,7 @@ class SecureClient:
         include_chat: bool | None = None,
         locale: str | None = None,
     ) -> Series:
+        """Get a series."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_series_spec(id, include_chat=include_chat, locale=locale),
@@ -447,6 +500,7 @@ class SecureClient:
         include_template: bool | None = None,
         locale: str | None = None,
     ) -> Tag:
+        """Get a tag by id or slug."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_tag_spec(
@@ -466,6 +520,7 @@ class SecureClient:
         omit_empty: bool | None = None,
         status: str | None = None,
     ) -> tuple[RelatedTag, ...]:
+        """Get related tag relationships."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_related_tags_spec(
@@ -482,6 +537,7 @@ class SecureClient:
         omit_empty: bool | None = None,
         status: str | None = None,
     ) -> tuple[Tag, ...]:
+        """Get tag resources linked from related tag relationships."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_related_tag_resources_spec(
@@ -490,12 +546,15 @@ class SecureClient:
         )
 
     def get_sports(self) -> tuple[SportsMetadata, ...]:
+        """Get available sports metadata."""
         return sync_dispatch(self._ctx, _gamma_actions.get_sports_spec())
 
     def get_sports_market_types(self) -> SportsMarketTypes:
+        """Get available sports market types."""
         return sync_dispatch(self._ctx, _gamma_actions.get_sports_market_types_spec())
 
     def get_public_profile(self, address: str) -> PublicProfile | None:
+        """Get a public profile by wallet address. Returns None if no profile exists."""
         try:
             return sync_dispatch(self._ctx, _gamma_actions.get_public_profile_spec(address))
         except RequestRejectedError as error:
@@ -506,17 +565,20 @@ class SecureClient:
     def get_comment_thread(
         self, id: str, *, get_positions: bool | None = None
     ) -> tuple[Comment, ...]:
+        """Get a comment thread by comment ID."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_comment_thread_spec(id, get_positions=get_positions),
         )
 
     def get_event_live_volumes(self, *, id: str) -> tuple[LiveVolume, ...]:
+        """Get live volume entries for an event."""
         return sync_dispatch(self._ctx, _data_actions.get_event_live_volumes_spec(id=id))
 
     def get_open_interests(
         self, *, market: Sequence[str] | None = None
     ) -> tuple[OpenInterest, ...]:
+        """Get open interest values, optionally filtered by market ids."""
         return sync_dispatch(self._ctx, _data_actions.get_open_interests_spec(market=market))
 
     def get_market_holders(
@@ -526,6 +588,7 @@ class SecureClient:
         limit: int | None = None,
         min_balance: int | None = None,
     ) -> tuple[MetaHolder, ...]:
+        """Get holder balances for one or more markets."""
         return sync_dispatch(
             self._ctx,
             _data_actions.get_market_holders_spec(
@@ -539,12 +602,14 @@ class SecureClient:
         user: str | None = None,
         market: Sequence[str] | None = None,
     ) -> tuple[PortfolioValue, ...]:
+        """Get portfolio value snapshots for a user or the authenticated wallet."""
         return sync_dispatch(
             self._ctx,
             _data_actions.get_portfolio_values_spec(user=self._user_or_wallet(user), market=market),
         )
 
     def get_traded_market_count(self, *, user: str | None = None) -> TradedMarketCount:
+        """Get the number of markets traded by a user or the authenticated wallet."""
         return sync_dispatch(
             self._ctx,
             _data_actions.get_traded_market_count_spec(user=self._user_or_wallet(user)),
@@ -553,6 +618,7 @@ class SecureClient:
     def get_builder_volumes(
         self, *, time_period: BuilderVolumeTimePeriod | None = None
     ) -> tuple[BuilderVolumeEntry, ...]:
+        """Get builder volume leaderboard entries."""
         return sync_dispatch(
             self._ctx, _data_actions.get_builder_volumes_spec(time_period=time_period)
         )
@@ -567,6 +633,12 @@ class SecureClient:
         after: str | None = None,
         before: str | None = None,
     ) -> Paginator[BuilderTrade]:
+        """List builder-attributed trades.
+
+        Returns:
+            A paginator over matching builder-attributed trades.
+        """
+
         def fetch(cursor: str | None) -> Page[BuilderTrade]:
             path, params = _builders_actions.build_list_builder_trades_request(
                 builder_code=builder_code,
@@ -596,6 +668,11 @@ class SecureClient:
         title: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Position]:
+        """List open positions for a user or the authenticated wallet.
+
+        Returns:
+            A paginator over matching positions.
+        """
         spec = _data_actions.list_positions_spec(
             user=self._user_or_wallet(user),
             market=market,
@@ -620,6 +697,11 @@ class SecureClient:
         sort_direction: SortDirection | None = None,
         page_size: int = 20,
     ) -> Paginator[ClosedPosition]:
+        """List closed positions for a user or the authenticated wallet.
+
+        Returns:
+            A paginator over matching closed positions.
+        """
         spec = _data_actions.list_closed_positions_spec(
             user=self._user_or_wallet(user),
             market=market,
@@ -640,6 +722,11 @@ class SecureClient:
         sort_direction: SortDirection | None = None,
         page_size: int = 20,
     ) -> Paginator[MetaMarketPosition]:
+        """List positions in a market.
+
+        Returns:
+            A paginator over matching market positions.
+        """
         spec = _data_actions.list_market_positions_spec(
             market=market,
             user=user,
@@ -661,6 +748,11 @@ class SecureClient:
         filter_amount: float | None = None,
         page_size: int = 20,
     ) -> Paginator[Trade]:
+        """List trades for a user or the authenticated wallet.
+
+        Returns:
+            A paginator over matching trades.
+        """
         spec = _data_actions.list_trades_spec(
             user=self._user_or_wallet(user),
             market=market,
@@ -686,6 +778,11 @@ class SecureClient:
         end: int | None = None,
         page_size: int = 20,
     ) -> Paginator[Activity]:
+        """List activity for a user or the authenticated wallet.
+
+        Returns:
+            A paginator over matching activity entries.
+        """
         spec = _data_actions.list_activity_spec(
             user=self._user_or_wallet(user),
             market=market,
@@ -705,10 +802,16 @@ class SecureClient:
         time_period: LeaderboardTimePeriod | None = None,
         page_size: int = 20,
     ) -> Paginator[LeaderboardEntry]:
+        """List builder leaderboard entries.
+
+        Returns:
+            A paginator over leaderboard rows.
+        """
         spec = _data_actions.list_builder_leaderboard_spec(time_period=time_period)
         return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
     def download_accounting_snapshot(self, *, user: str | None = None) -> bytes:
+        """Download the accounting snapshot archive for a user or the authenticated wallet."""
         path, params = _data_actions.build_accounting_snapshot_request(
             user=self._user_or_wallet(user)
         )
@@ -724,6 +827,11 @@ class SecureClient:
         user_name: str | None = None,
         page_size: int = 20,
     ) -> Paginator[TraderLeaderboardEntry]:
+        """List trader leaderboard entries.
+
+        Returns:
+            A paginator over leaderboard rows.
+        """
         spec = _data_actions.list_trader_leaderboard_spec(
             category=category,
             time_period=time_period,
@@ -776,6 +884,11 @@ class SecureClient:
         volume_min: float | None = None,
         page_size: int = 20,
     ) -> Paginator[Event]:
+        """List events.
+
+        Returns:
+            A paginator over matching events.
+        """
         spec = _gamma_actions.list_events_spec(
             ascending=ascending,
             closed=closed,
@@ -852,6 +965,11 @@ class SecureClient:
         volume_num_min: float | None = None,
         page_size: int = 20,
     ) -> Paginator[Market]:
+        """List markets.
+
+        Returns:
+            A paginator over matching markets.
+        """
         spec = _gamma_actions.list_markets_spec(
             ascending=ascending,
             closed=closed,
@@ -900,6 +1018,11 @@ class SecureClient:
         slug: str | Sequence[str] | None = None,
         page_size: int = 20,
     ) -> Paginator[Series]:
+        """List series.
+
+        Returns:
+            A paginator over matching series.
+        """
         spec = _gamma_actions.list_series_spec(
             ascending=ascending,
             categories_ids=categories_ids,
@@ -925,6 +1048,11 @@ class SecureClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Tag]:
+        """List tags.
+
+        Returns:
+            A paginator over matching tags.
+        """
         spec = _gamma_actions.list_tags_spec(
             ascending=ascending,
             include_chat=include_chat,
@@ -946,6 +1074,11 @@ class SecureClient:
         provider_ids: int | Sequence[int] | None = None,
         page_size: int = 20,
     ) -> Paginator[Team]:
+        """List teams.
+
+        Returns:
+            A paginator over matching teams.
+        """
         spec = _gamma_actions.list_teams_spec(
             abbreviation=abbreviation,
             ascending=ascending,
@@ -967,6 +1100,11 @@ class SecureClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Comment]:
+        """List comments for a market or event.
+
+        Returns:
+            A paginator over matching comments.
+        """
         spec = _gamma_actions.list_comments_spec(
             parent_entity_id=parent_entity_id,
             parent_entity_type=parent_entity_type,
@@ -985,6 +1123,11 @@ class SecureClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Comment]:
+        """List comments authored by a user address.
+
+        Returns:
+            A paginator over matching comments.
+        """
         spec = _gamma_actions.list_comments_by_user_address_spec(
             address=address,
             ascending=ascending,
@@ -1010,6 +1153,11 @@ class SecureClient:
         sort: str | None = None,
         page_size: int = 10,
     ) -> Paginator[SearchResults]:
+        """Search Polymarket content.
+
+        Returns:
+            A paginator over search result pages.
+        """
         spec = _gamma_actions.search_spec(
             q=q,
             ascending=ascending,
@@ -1028,46 +1176,56 @@ class SecureClient:
         return sync_paginate_page_based(self._ctx, spec, page_size=page_size)
 
     def get_midpoint(self, *, token_id: str) -> Decimal:
+        """Get the midpoint price for a token."""
         path, params = _clob_actions.build_midpoint_request(token_id=token_id)
         return _clob_actions.parse_midpoint(self._ctx.clob.get_json(path, params=params))
 
     def get_midpoints(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        """Get midpoint prices for multiple tokens."""
         path, body = _clob_actions.build_midpoints_request(token_ids=token_ids)
         return _clob_actions.parse_midpoints(self._ctx.clob.post_json(path, json=body))
 
     def get_price(self, *, token_id: str, side: OrderSide) -> Decimal:
+        """Get the executable price for a token side."""
         path, params = _clob_actions.build_price_request(token_id=token_id, side=side)
         return _clob_actions.parse_price(self._ctx.clob.get_json(path, params=params))
 
     def get_prices(
         self, *, requests: Sequence[PriceRequest]
     ) -> dict[str, dict[OrderSide, Decimal]]:
+        """Get executable prices for multiple token-side requests."""
         path, body = _clob_actions.build_prices_request(requests=requests)
         return _clob_actions.parse_prices(self._ctx.clob.post_json(path, json=body))
 
     def get_order_book(self, *, token_id: str) -> OrderBook:
+        """Get the order book for a token."""
         path, params = _clob_actions.build_order_book_request(token_id=token_id)
         return _clob_actions.parse_order_book(self._ctx.clob.get_json(path, params=params))
 
     def get_order_books(self, *, token_ids: Sequence[str]) -> tuple[OrderBook, ...]:
+        """Get order books for multiple tokens."""
         path, body = _clob_actions.build_order_books_request(token_ids=token_ids)
         return _clob_actions.parse_order_books(self._ctx.clob.post_json(path, json=body))
 
     def get_spread(self, *, token_id: str) -> Decimal:
+        """Get the bid-ask spread for a token."""
         path, params = _clob_actions.build_spread_request(token_id=token_id)
         return _clob_actions.parse_spread(self._ctx.clob.get_json(path, params=params))
 
     def get_spreads(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        """Get bid-ask spreads for multiple tokens."""
         path, body = _clob_actions.build_spreads_request(token_ids=token_ids)
         return _clob_actions.parse_spreads(self._ctx.clob.post_json(path, json=body))
 
     def get_last_trade_price(self, *, token_id: str) -> LastTradePrice:
+        """Get the most recent trade price for a token."""
         path, params = _clob_actions.build_last_trade_price_request(token_id=token_id)
         return _clob_actions.parse_last_trade_price(self._ctx.clob.get_json(path, params=params))
 
     def get_last_trade_prices(
         self, *, token_ids: Sequence[str]
     ) -> tuple[LastTradePriceForToken, ...]:
+        """Get the most recent trade prices for multiple tokens."""
         path, body = _clob_actions.build_last_trade_prices_request(token_ids=token_ids)
         return _clob_actions.parse_last_trade_prices(self._ctx.clob.post_json(path, json=body))
 
@@ -1080,6 +1238,7 @@ class SecureClient:
         fidelity: int | None = None,
         interval: PriceHistoryInterval | None = None,
     ) -> tuple[PriceHistoryPoint, ...]:
+        """Get historical price points for a token."""
         path, params = _clob_actions.build_price_history_request(
             token_id=token_id,
             start_ts=start_ts,
@@ -1116,6 +1275,11 @@ class SecureClient:
         shares: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FOK",
     ) -> Decimal:
+        """Estimate the average execution price for a market order.
+
+        BUY orders use ``amount`` as the spend amount. SELL orders use ``shares``
+        as the number of shares to sell.
+        """
         return _estimate_market_price_sync(
             self._ctx,
             token_id=token_id,
@@ -1126,6 +1290,12 @@ class SecureClient:
         )
 
     def list_current_rewards(self, *, sponsored: bool | None = None) -> Paginator[CurrentReward]:
+        """List current rewards.
+
+        Returns:
+            A paginator over current reward configurations.
+        """
+
         def fetch(cursor: str | None) -> Page[CurrentReward]:
             path, params = _rewards_actions.build_list_current_rewards_request(
                 sponsored=sponsored, cursor=cursor
@@ -1139,6 +1309,12 @@ class SecureClient:
     def list_market_rewards(
         self, *, condition_id: str, sponsored: bool | None = None
     ) -> Paginator[MarketReward]:
+        """List rewards for a market condition.
+
+        Returns:
+            A paginator over matching market reward configurations.
+        """
+
         def fetch(cursor: str | None) -> Page[MarketReward]:
             path, params = _rewards_actions.build_list_market_rewards_request(
                 condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor
@@ -1150,12 +1326,15 @@ class SecureClient:
         return Paginator(fetch=fetch)
 
     def fetch_api_keys(self) -> tuple[str, ...]:
+        """Fetch API key identifiers for the authenticated account."""
         return _auth_actions.fetch_api_keys_sync(self._ctx.secure_clob)
 
     def delete_api_key(self) -> None:
+        """Delete the API key currently used by this client."""
         _auth_actions.delete_api_key_sync(self._ctx.secure_clob)
 
     def end_authentication(self) -> "PublicClient":
+        """Delete current credentials, close this client, and return a public client."""
         from polymarket.clients.public import PublicClient
 
         environment = self._ctx.environment
@@ -1170,6 +1349,7 @@ class SecureClient:
         return PublicClient(environment=environment)
 
     def get_closed_only_mode(self) -> bool:
+        """Return whether the authenticated account is in closed-only mode."""
         path, params = _account_actions.build_closed_only_mode_request()
         return _account_actions.parse_closed_only_mode(
             self._ctx.secure_clob.get_json(path, params=params)
@@ -1182,6 +1362,12 @@ class SecureClient:
         id: str | None = None,
         market: str | None = None,
     ) -> Paginator[OpenOrder]:
+        """List open orders for the authenticated account.
+
+        Returns:
+            A paginator over matching open orders.
+        """
+
         def fetch(cursor: str | None) -> Page[OpenOrder]:
             path, params = _account_actions.build_list_open_orders_request(
                 token_id=token_id, id=id, market=market, cursor=cursor
@@ -1192,6 +1378,7 @@ class SecureClient:
         return Paginator(fetch=fetch)
 
     def get_order(self, *, order_id: str) -> OpenOrder:
+        """Get one open order for the authenticated account."""
         path, params = _account_actions.build_get_order_request(order_id=order_id)
         return _account_actions.parse_open_order(
             self._ctx.secure_clob.get_json(path, params=params)
@@ -1207,6 +1394,12 @@ class SecureClient:
         after: str | None = None,
         before: str | None = None,
     ) -> Paginator[ClobTrade]:
+        """List trades for the authenticated account.
+
+        Returns:
+            A paginator over matching trades.
+        """
+
         def fetch(cursor: str | None) -> Page[ClobTrade]:
             path, params = _account_actions.build_list_account_trades_request(
                 token_id=token_id,
@@ -1223,6 +1416,7 @@ class SecureClient:
         return Paginator(fetch=fetch)
 
     def get_notifications(self) -> tuple[Notification, ...]:
+        """Get notifications for the authenticated account."""
         path, params = _account_actions.build_notifications_request(
             signature_type=signature_type_for(self._ctx.wallet_type)
         )
@@ -1231,6 +1425,7 @@ class SecureClient:
         )
 
     def drop_notifications(self, *, ids: Sequence[int | str]) -> None:
+        """Delete notifications for the authenticated account."""
         path, params = _account_actions.build_drop_notifications_request(
             ids=ids, signature_type=signature_type_for(self._ctx.wallet_type)
         )
@@ -1239,6 +1434,7 @@ class SecureClient:
     def get_balance_allowance(
         self, *, asset_type: AssetType, token_id: str | None = None
     ) -> BalanceAllowance:
+        """Get balance and allowance information for an asset."""
         path, params = _account_actions.build_balance_allowance_request(
             asset_type=asset_type,
             token_id=token_id,
@@ -1259,6 +1455,15 @@ class SecureClient:
         expiration: int | None = None,
         builder_code: str | None = None,
     ) -> SignedOrder:
+        """Create and sign a limit order without posting it.
+
+        Use :meth:`post_order` to submit the returned signed order, or
+        :meth:`place_limit_order` to create and post in one call.
+
+        Raises:
+            UserInputError: If order parameters are invalid.
+            SigningError: If the order cannot be signed.
+        """
         return self._prepare_and_sign_limit_order(
             token_id=token_id,
             price=price,
@@ -1301,6 +1506,17 @@ class SecureClient:
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> SignedOrder:
+        """Create and sign a market order without posting it.
+
+        BUY orders use ``amount`` as the spend amount and may include
+        ``max_spend``. SELL orders use ``shares`` as the number of shares to
+        sell.
+
+        Raises:
+            UserInputError: If side-specific order parameters are invalid.
+            InsufficientLiquidityError: If available liquidity cannot fill the order.
+            SigningError: If the order cannot be signed.
+        """
         return self._prepare_and_sign_market_order(
             token_id=token_id,
             side=side,
@@ -1322,6 +1538,14 @@ class SecureClient:
         expiration: int | None = None,
         builder_code: str | None = None,
     ) -> OrderResponse:
+        """Create, sign, and post a limit order.
+
+        Raises:
+            UserInputError: If order parameters are invalid.
+            InsufficientAllowanceError: If required allowance cannot be recovered.
+            SigningError: If the order cannot be signed.
+            RequestRejectedError: If posting the order is rejected.
+        """
         signed = self._prepare_and_sign_limit_order(
             token_id=token_id,
             price=price,
@@ -1365,6 +1589,19 @@ class SecureClient:
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> OrderResponse:
+        """Create, sign, and post a market order.
+
+        BUY orders use ``amount`` as the spend amount and may include
+        ``max_spend``. SELL orders use ``shares`` as the number of shares to
+        sell.
+
+        Raises:
+            UserInputError: If side-specific order parameters are invalid.
+            InsufficientLiquidityError: If available liquidity cannot fill the order.
+            InsufficientAllowanceError: If required allowance cannot be recovered.
+            SigningError: If the order cannot be signed.
+            RequestRejectedError: If posting the order is rejected.
+        """
         signed = self._prepare_and_sign_market_order(
             token_id=token_id,
             side=side,
@@ -1377,11 +1614,13 @@ class SecureClient:
         return post_order_with_allowance_recovery_sync(self, signed)
 
     def get_builder_fee_rates(self, builder_code: str) -> BuilderFeeRates:
+        """Get fee rates for a builder code."""
         from polymarket._internal.actions.orders.market_data import fetch_builder_fee_rates_sync
 
         return fetch_builder_fee_rates_sync(self._ctx, builder_code=builder_code)
 
     def post_order(self, signed_order: SignedOrder) -> OrderResponse:
+        """Post a signed order for the authenticated account."""
         path, payload = _post_actions.build_post_order_request(
             signed_order, owner_api_key=self._ctx.credentials.key
         )
@@ -1390,6 +1629,7 @@ class SecureClient:
         )
 
     def post_orders(self, signed_orders: Sequence[SignedOrder]) -> tuple[OrderResponse, ...]:
+        """Post multiple signed orders for the authenticated account."""
         path, payload = _post_actions.build_post_orders_request(
             signed_orders, owner_api_key=self._ctx.credentials.key
         )
@@ -1398,18 +1638,21 @@ class SecureClient:
         )
 
     def cancel_order(self, *, order_id: str) -> CancelOrdersResponse:
+        """Cancel one open order for the authenticated account."""
         path, body = _cancel_actions.build_cancel_order_request(order_id=order_id)
         return _cancel_actions.parse_cancel_orders_response(
             self._ctx.secure_clob.delete_json(path, json=body)
         )
 
     def cancel_orders(self, *, order_ids: Sequence[str]) -> CancelOrdersResponse:
+        """Cancel multiple open orders for the authenticated account."""
         path, body = _cancel_actions.build_cancel_orders_request(order_ids=order_ids)
         return _cancel_actions.parse_cancel_orders_response(
             self._ctx.secure_clob.delete_json(path, json=body)
         )
 
     def cancel_all(self) -> CancelOrdersResponse:
+        """Cancel all open orders for the authenticated account."""
         path, body = _cancel_actions.build_cancel_all_request()
         return _cancel_actions.parse_cancel_orders_response(
             self._ctx.secure_clob.delete_json(path, json=body)
@@ -1418,6 +1661,7 @@ class SecureClient:
     def cancel_market_orders(
         self, *, market: str | None = None, token_id: str | None = None
     ) -> CancelOrdersResponse:
+        """Cancel open orders matching a market or token filter."""
         path, body = _cancel_actions.build_cancel_market_orders_request(
             market=market, token_id=token_id
         )
@@ -1486,18 +1730,26 @@ class SecureClient:
         return create_signed_order(unsigned, final_signature, post_only=post_only)
 
     def get_order_scoring(self, *, order_id: str) -> bool:
+        """Return whether an order is currently scoring rewards."""
         path, params = _rewards_actions.build_get_order_scoring_request(order_id=order_id)
         return _rewards_actions.parse_order_scoring(
             self._ctx.secure_clob.get_json(path, params=params)
         )
 
     def get_orders_scoring(self, *, order_ids: Sequence[str]) -> dict[str, bool]:
+        """Return reward-scoring status for multiple orders."""
         path, body = _rewards_actions.build_get_orders_scoring_request(order_ids=order_ids)
         return _rewards_actions.parse_orders_scoring(
             self._ctx.secure_clob.post_json(path, json=body)
         )
 
     def list_user_earnings_for_day(self, *, date: str) -> Paginator[UserEarning]:
+        """List reward earnings for the authenticated user on a date.
+
+        Returns:
+            A paginator over matching earning entries.
+        """
+
         def fetch(cursor: str | None) -> Page[UserEarning]:
             path, params = _rewards_actions.build_list_user_earnings_for_day_request(
                 date=date,
@@ -1511,6 +1763,7 @@ class SecureClient:
         return Paginator(fetch=fetch)
 
     def get_total_earnings_for_user_for_day(self, *, date: str) -> tuple[TotalUserEarning, ...]:
+        """Get total reward earnings for the authenticated user on a date."""
         path, params = _rewards_actions.build_total_user_earnings_for_day_request(
             date=date, signature_type=signature_type_for(self._ctx.wallet_type)
         )
@@ -1527,6 +1780,12 @@ class SecureClient:
         position: str | None = None,
         page_size: int | None = None,
     ) -> Paginator[UserRewardsEarning]:
+        """List reward earnings with market configuration for the authenticated user.
+
+        Returns:
+            A paginator over matching reward earning entries.
+        """
+
         def fetch(cursor: str | None) -> Page[UserRewardsEarning]:
             path, params = _rewards_actions.build_list_user_earnings_and_markets_config_request(
                 date=date,
@@ -1544,6 +1803,7 @@ class SecureClient:
         return Paginator(fetch=fetch)
 
     def get_reward_percentages(self) -> RewardsPercentages:
+        """Get current reward percentage allocations for the authenticated account."""
         path, params = _rewards_actions.build_get_reward_percentages_request(
             signature_type=signature_type_for(self._ctx.wallet_type)
         )
@@ -1559,6 +1819,14 @@ class SecureClient:
         amount: int | Literal["max"],
         metadata: str | None = None,
     ) -> SyncTransactionHandle:
+        """Submit an ERC-20 approval transaction.
+
+        Args:
+            amount: Base-units amount to approve, or ``"max"`` for the maximum value.
+
+        Returns:
+            A transaction handle. Call ``wait()`` to wait for a terminal outcome.
+        """
         try:
             token = cast(EvmAddress, to_checksum_address(token_address))
         except ValueError as error:
@@ -1582,6 +1850,11 @@ class SecureClient:
         approved: bool = True,
         metadata: str | None = None,
     ) -> SyncTransactionHandle:
+        """Approve or revoke an ERC-1155 operator for all tokens.
+
+        Returns:
+            A transaction handle. Call ``wait()`` to wait for a terminal outcome.
+        """
         try:
             token = cast(EvmAddress, to_checksum_address(token_address))
         except ValueError as error:
@@ -1605,6 +1878,14 @@ class SecureClient:
         amount: int,
         metadata: str | None = None,
     ) -> SyncTransactionHandle:
+        """Submit an ERC-20 transfer transaction.
+
+        Args:
+            amount: Base-units amount to transfer.
+
+        Returns:
+            A transaction handle. Call ``wait()`` to wait for a terminal outcome.
+        """
         try:
             token = cast(EvmAddress, to_checksum_address(token_address))
         except ValueError as error:
@@ -1620,6 +1901,15 @@ class SecureClient:
         return self._dispatch_single_call(call, metadata=resolved_metadata)
 
     def setup_trading_approvals(self) -> SyncTransactionHandle:
+        """Approve the standard set of trading allowances for the wallet.
+
+        EOA wallets submit approvals directly. Gasless wallets submit a relayed
+        transaction. The returned handle represents the final transaction in the
+        setup workflow.
+
+        Returns:
+            A transaction handle. Call ``wait()`` to wait for a terminal outcome.
+        """
         env = self._ctx.environment
         collateral = cast(EvmAddress, env.collateral_token)
         conditional = cast(EvmAddress, env.conditional_tokens)
@@ -1690,6 +1980,15 @@ class SecureClient:
         )
 
     def setup_gasless_wallet(self) -> Self:
+        """Create or reuse the gasless wallet for the signer.
+
+        Returns:
+            A new secure client scoped to the gasless wallet.
+
+        Raises:
+            UserInputError: If the client was not created with an API key that
+                can authorize gasless wallet workflows.
+        """
         ctx = self._ctx
         if ctx.api_key is None:
             raise UserInputError(
@@ -1729,6 +2028,7 @@ class SecureClient:
         )
 
     def is_gasless_ready(self) -> bool:
+        """Return whether the signer has a deployed gasless wallet ready to use."""
         ctx = self._ctx
         if ctx.wallet_type != "EOA":
             type_param = (
@@ -1749,6 +2049,14 @@ class SecureClient:
         amount: int,
         metadata: str | None = None,
     ) -> SyncTransactionHandle:
+        """Split collateral into outcome positions for a condition.
+
+        Args:
+            amount: Base-units collateral amount to split.
+
+        Returns:
+            A transaction handle. Call ``wait()`` to wait for a terminal outcome.
+        """
         env = self._ctx.environment
         neg_risk = self._resolve_market_neg_risk(condition_id)
         call = split_position_call(
@@ -1771,6 +2079,15 @@ class SecureClient:
         amount: int | Literal["max"],
         metadata: str | None = None,
     ) -> SyncTransactionHandle:
+        """Merge outcome positions back into collateral.
+
+        Args:
+            amount: Base-units position amount to merge, or ``"max"`` to merge
+                the largest available balanced amount.
+
+        Returns:
+            A transaction handle. Call ``wait()`` to wait for a terminal outcome.
+        """
         env = self._ctx.environment
         binary = self._fetch_binary_positions(condition_id)
         neg_risk = expect_negative_risk_flag(binary)
@@ -1795,6 +2112,16 @@ class SecureClient:
         market_id: str | None = None,
         metadata: str | None = None,
     ) -> SyncTransactionHandle:
+        """Redeem resolved positions for a condition or market.
+
+        Provide exactly one of ``condition_id`` or ``market_id``.
+
+        Returns:
+            A transaction handle. Call ``wait()`` to wait for a terminal outcome.
+
+        Raises:
+            UserInputError: If both identifiers or neither identifier is provided.
+        """
         if (condition_id is None) == (market_id is None):
             raise UserInputError("Provide exactly one of condition_id or market_id")
         env = self._ctx.environment

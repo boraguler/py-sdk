@@ -16,6 +16,8 @@ from polymarket.types import EvmAddress
 
 
 class PortfolioValue(BaseModel):
+    """Current portfolio value for a user."""
+
     user: EvmAddress | None = None
     value: Decimal | None = None
 
@@ -26,11 +28,15 @@ class PortfolioValue(BaseModel):
 
 
 class TradedMarketCount(BaseModel):
+    """Number of markets traded by a user."""
+
     user: EvmAddress | None = None
     traded: int | None = None
 
 
 class Position(BaseModel):
+    """Open market position held by a wallet."""
+
     condition_id: ConditionId = Field(validation_alias="conditionId")
     wallet: EvmAddress | None = Field(default=None, validation_alias="proxyWallet")
     token_id: TokenId | None = Field(default=None, validation_alias="asset")
@@ -80,6 +86,8 @@ class Position(BaseModel):
 
 
 class ClosedPosition(BaseModel):
+    """Closed market position for a wallet."""
+
     wallet: EvmAddress | None = Field(default=None, validation_alias="proxyWallet")
     token_id: TokenId | None = Field(default=None, validation_alias="asset")
     condition_id: ConditionId | None = Field(default=None, validation_alias="conditionId")

@@ -31,7 +31,7 @@ async def make_deposit_client() -> AsyncSecureClient:
 
     signer = Account.from_key(PK_DEPLOY_WALLET)
     wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
-    return await AsyncSecureClient.create(
+    return await AsyncSecureClient._create(
         private_key=PK_DEPLOY_WALLET,
         wallet=wallet,
         credentials=FAKE_CREDS,
@@ -48,7 +48,7 @@ async def make_proxy_client() -> AsyncSecureClient:
 
     signer = Account.from_key(PK_PROXY_WALLET)
     wallet = derive_proxy_wallet_address(signer.address, PRODUCTION.wallet_derivation)
-    return await AsyncSecureClient.create(
+    return await AsyncSecureClient._create(
         private_key=PK_PROXY_WALLET,
         wallet=wallet,
         credentials=FAKE_CREDS,
@@ -61,7 +61,7 @@ async def make_eoa_client(*, with_api_key: bool = True) -> AsyncSecureClient:
     from eth_account import Account
 
     signer = Account.from_key(PK_DEPLOY_WALLET)
-    return await AsyncSecureClient.create(
+    return await AsyncSecureClient._create(
         private_key=PK_DEPLOY_WALLET,
         wallet=signer.address,
         credentials=FAKE_CREDS,
@@ -80,7 +80,7 @@ async def make_eoa_client_with_rpc(
 
     env = dataclasses.replace(PRODUCTION, rpc_url="https://rpc.test")
     signer = Account.from_key(PK_DEPLOY_WALLET)
-    client = await AsyncSecureClient.create(
+    client = await AsyncSecureClient._create(
         private_key=PK_DEPLOY_WALLET,
         wallet=signer.address,
         credentials=FAKE_CREDS,
@@ -153,7 +153,7 @@ async def make_safe_client() -> AsyncSecureClient:
 
     signer = Account.from_key(PK_SAFE_WALLET)
     wallet = derive_safe_wallet_address(signer.address, PRODUCTION.wallet_derivation)
-    return await AsyncSecureClient.create(
+    return await AsyncSecureClient._create(
         private_key=PK_SAFE_WALLET,
         wallet=wallet,
         credentials=FAKE_CREDS,
@@ -226,7 +226,7 @@ def make_sync_eoa_client(*, with_api_key: bool = True) -> SecureClient:
     from eth_account import Account
 
     signer = Account.from_key(PK_DEPLOY_WALLET)
-    return SecureClient.create(
+    return SecureClient._create(
         private_key=PK_DEPLOY_WALLET,
         wallet=signer.address,
         credentials=FAKE_CREDS,
@@ -243,7 +243,7 @@ def make_sync_deposit_client() -> SecureClient:
 
     signer = Account.from_key(PK_DEPLOY_WALLET)
     wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
-    return SecureClient.create(
+    return SecureClient._create(
         private_key=PK_DEPLOY_WALLET,
         wallet=wallet,
         credentials=FAKE_CREDS,
@@ -260,7 +260,7 @@ def make_sync_proxy_client() -> SecureClient:
 
     signer = Account.from_key(PK_PROXY_WALLET)
     wallet = derive_proxy_wallet_address(signer.address, PRODUCTION.wallet_derivation)
-    return SecureClient.create(
+    return SecureClient._create(
         private_key=PK_PROXY_WALLET,
         wallet=wallet,
         credentials=FAKE_CREDS,
@@ -277,7 +277,7 @@ def make_sync_safe_client() -> SecureClient:
 
     signer = Account.from_key(PK_SAFE_WALLET)
     wallet = derive_safe_wallet_address(signer.address, PRODUCTION.wallet_derivation)
-    return SecureClient.create(
+    return SecureClient._create(
         private_key=PK_SAFE_WALLET,
         wallet=wallet,
         credentials=FAKE_CREDS,
