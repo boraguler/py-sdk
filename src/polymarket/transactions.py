@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class GaslessTransactionHandle:
+    """Async handle for a relayed gasless transaction."""
+
     transaction_id: str
     transaction_hash: str | None
     _relayer: AsyncTransport = field(repr=False)
@@ -19,6 +21,7 @@ class GaslessTransactionHandle:
     _poll_delay_s: float
 
     async def wait(self) -> TransactionOutcome:
+        """Wait until the transaction reaches a terminal outcome."""
         from polymarket._internal.actions.relayer.poll import poll_until_terminal
 
         return await poll_until_terminal(
@@ -32,6 +35,8 @@ class GaslessTransactionHandle:
 
 @dataclass(frozen=True, slots=True)
 class EoaTransactionHandle:
+    """Async handle for a directly broadcast EOA transaction."""
+
     transaction_hash: str
     _rpc: JsonRpcClient = field(repr=False)
     _max_polls: int
@@ -39,9 +44,11 @@ class EoaTransactionHandle:
 
     @property
     def transaction_id(self) -> None:
+        """Return None because EOA transactions do not have relayer ids."""
         return None
 
     async def wait(self) -> TransactionOutcome:
+        """Wait until the transaction reaches a terminal outcome."""
         from polymarket._internal.eoa.broadcast import wait_for_receipt
 
         return await wait_for_receipt(
@@ -54,6 +61,8 @@ class EoaTransactionHandle:
 
 @dataclass(frozen=True, slots=True)
 class SyncGaslessTransactionHandle:
+    """Synchronous handle for a relayed gasless transaction."""
+
     transaction_id: str
     transaction_hash: str | None
     _relayer: SyncTransport = field(repr=False)
@@ -61,6 +70,7 @@ class SyncGaslessTransactionHandle:
     _poll_delay_s: float
 
     def wait(self) -> TransactionOutcome:
+        """Wait until the transaction reaches a terminal outcome."""
         from polymarket._internal.actions.relayer.poll import poll_until_terminal_sync
 
         return poll_until_terminal_sync(
@@ -74,6 +84,8 @@ class SyncGaslessTransactionHandle:
 
 @dataclass(frozen=True, slots=True)
 class SyncEoaTransactionHandle:
+    """Synchronous handle for a directly broadcast EOA transaction."""
+
     transaction_hash: str
     _rpc: SyncJsonRpcClient = field(repr=False)
     _max_polls: int
@@ -81,9 +93,11 @@ class SyncEoaTransactionHandle:
 
     @property
     def transaction_id(self) -> None:
+        """Return None because EOA transactions do not have relayer ids."""
         return None
 
     def wait(self) -> TransactionOutcome:
+        """Wait until the transaction reaches a terminal outcome."""
         from polymarket._internal.eoa.broadcast import wait_for_receipt_sync
 
         return wait_for_receipt_sync(
@@ -95,7 +109,10 @@ class SyncEoaTransactionHandle:
 
 
 TransactionHandle: TypeAlias = GaslessTransactionHandle | EoaTransactionHandle
+"""Async transaction handle returned by async wallet methods."""
+
 SyncTransactionHandle: TypeAlias = SyncGaslessTransactionHandle | SyncEoaTransactionHandle
+"""Synchronous transaction handle returned by sync wallet methods."""
 
 
 __all__ = [

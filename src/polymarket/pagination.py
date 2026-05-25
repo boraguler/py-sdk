@@ -11,13 +11,25 @@ T = TypeVar("T")
 
 @dataclass(frozen=True, slots=True)
 class Page(Generic[T]):
+    """One page of paginated SDK results."""
+
     items: tuple[T, ...]
+    """Items returned on this page."""
     has_more: bool
+    """Whether another page is available."""
     next_cursor: str | None = None
+    """Cursor to pass to ``from_cursor()`` for the next page, when available."""
     total_count: int | None = None
+    """Total matching item count when the API provides it."""
 
 
 class Paginator(Generic[T]):
+    """Synchronous paginator returned by list-style client methods.
+
+    Iterate over the paginator to fetch pages lazily, or call ``items()`` to
+    iterate over individual items across pages.
+    """
+
     def __init__(
         self,
         fetch: Callable[[str | None], Page[T]],
@@ -27,9 +39,14 @@ class Paginator(Generic[T]):
         self._initial_cursor = initial_cursor
 
     def first_page(self) -> Page[T]:
+        """Fetch the first page for this paginator."""
         return self._fetch(self._initial_cursor)
 
     def from_cursor(self, cursor: str | None) -> Paginator[T]:
+        """Create a paginator that starts from ``cursor``.
+
+        Passing ``None`` returns an empty paginator because no next page exists.
+        """
         if cursor is None:
             return cast(Paginator[T], _EmptyPaginator())
         return Paginator(self._fetch, initial_cursor=cursor)
@@ -38,6 +55,7 @@ class Paginator(Generic[T]):
         return self._iter_pages()
 
     def items(self) -> Iterator[T]:
+        """Iterate over individual items across all fetched pages."""
         for page in self._iter_pages():
             yield from page.items
 
@@ -56,6 +74,12 @@ class Paginator(Generic[T]):
 
 
 class AsyncPaginator(Generic[T]):
+    """Async paginator returned by async list-style client methods.
+
+    Use ``async for`` over the paginator to fetch pages lazily, or call
+    ``items()`` to iterate over individual items across pages.
+    """
+
     def __init__(
         self,
         fetch: Callable[[str | None], Awaitable[Page[T]]],
@@ -65,9 +89,14 @@ class AsyncPaginator(Generic[T]):
         self._initial_cursor = initial_cursor
 
     async def first_page(self) -> Page[T]:
+        """Fetch the first page for this paginator."""
         return await self._fetch(self._initial_cursor)
 
     def from_cursor(self, cursor: str | None) -> AsyncPaginator[T]:
+        """Create an async paginator that starts from ``cursor``.
+
+        Passing ``None`` returns an empty paginator because no next page exists.
+        """
         if cursor is None:
             return cast(AsyncPaginator[T], _EmptyAsyncPaginator())
         return AsyncPaginator(self._fetch, initial_cursor=cursor)
@@ -76,6 +105,7 @@ class AsyncPaginator(Generic[T]):
         return self._iter_pages()
 
     def items(self) -> AsyncIterator[T]:
+        """Iterate over individual items across all fetched pages."""
         return self._iter_items()
 
     async def _iter_pages(self) -> AsyncIterator[Page[T]]:

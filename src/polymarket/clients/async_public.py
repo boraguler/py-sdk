@@ -182,6 +182,15 @@ class AsyncPublicClient:
         self,
         specs: PublicSubscription | Sequence[PublicSubscription],
     ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]:
+        """Subscribe to one or more public realtime streams.
+
+        Pass a single subscription spec for one stream or a sequence of specs to
+        receive events through one merged handle.
+
+        Returns:
+            A subscription handle. Iterate over it to receive events and close it
+            when finished.
+        """
         items = _normalize_specs(specs)
         # AsyncSubscriptionHandle is invariant in T, so per-channel handles
         # can't widen to the union type at the type level. Cast at the
@@ -288,6 +297,7 @@ class AsyncPublicClient:
         include_tag: bool | None = None,
         locale: str | None = None,
     ) -> Market:
+        """Get a market by id, slug, or Polymarket URL."""
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_market_spec(
@@ -309,6 +319,7 @@ class AsyncPublicClient:
         include_template: bool | None = None,
         locale: str | None = None,
     ) -> Event:
+        """Get an event by id, slug, or Polymarket URL."""
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_event_spec(
@@ -668,6 +679,18 @@ class AsyncPublicClient:
         volume_min: float | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Event]:
+        """List events.
+
+        Returns:
+            An async paginator over matching events.
+
+        Examples:
+            Iterate over every page::
+
+                async for page in client.list_events(page_size=10):
+                    for event in page.items:
+                        print(event.title)
+        """
         spec = _gamma_actions.list_events_spec(
             ascending=ascending,
             closed=closed,
@@ -744,6 +767,17 @@ class AsyncPublicClient:
         volume_num_min: float | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Market]:
+        """List markets.
+
+        Returns:
+            An async paginator over matching markets.
+
+        Examples:
+            Iterate over individual market items::
+
+                async for market in client.list_markets(closed=False).items():
+                    print(market.question)
+        """
         spec = _gamma_actions.list_markets_spec(
             ascending=ascending,
             closed=closed,
@@ -902,6 +936,11 @@ class AsyncPublicClient:
         sort: str | None = None,
         page_size: int = 10,
     ) -> AsyncPaginator[SearchResults]:
+        """Search Polymarket content.
+
+        Returns:
+            An async paginator over search result pages.
+        """
         spec = _gamma_actions.search_spec(
             q=q,
             ascending=ascending,
@@ -920,28 +959,34 @@ class AsyncPublicClient:
         return async_paginate_page_based(self._ctx, spec, page_size=page_size)
 
     async def get_midpoint(self, *, token_id: str) -> Decimal:
+        """Get the midpoint price for a token."""
         path, params = _clob_actions.build_midpoint_request(token_id=token_id)
         return _clob_actions.parse_midpoint(await self._ctx.clob.get_json(path, params=params))
 
     async def get_midpoints(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        """Get midpoint prices for multiple tokens."""
         path, body = _clob_actions.build_midpoints_request(token_ids=token_ids)
         return _clob_actions.parse_midpoints(await self._ctx.clob.post_json(path, json=body))
 
     async def get_price(self, *, token_id: str, side: OrderSide) -> Decimal:
+        """Get the executable price for a token side."""
         path, params = _clob_actions.build_price_request(token_id=token_id, side=side)
         return _clob_actions.parse_price(await self._ctx.clob.get_json(path, params=params))
 
     async def get_prices(
         self, *, requests: Sequence[PriceRequest]
     ) -> dict[str, dict[OrderSide, Decimal]]:
+        """Get executable prices for multiple token-side requests."""
         path, body = _clob_actions.build_prices_request(requests=requests)
         return _clob_actions.parse_prices(await self._ctx.clob.post_json(path, json=body))
 
     async def get_order_book(self, *, token_id: str) -> OrderBook:
+        """Get the order book for a token."""
         path, params = _clob_actions.build_order_book_request(token_id=token_id)
         return _clob_actions.parse_order_book(await self._ctx.clob.get_json(path, params=params))
 
     async def get_order_books(self, *, token_ids: Sequence[str]) -> tuple[OrderBook, ...]:
+        """Get order books for multiple tokens."""
         path, body = _clob_actions.build_order_books_request(token_ids=token_ids)
         return _clob_actions.parse_order_books(await self._ctx.clob.post_json(path, json=body))
 
@@ -976,6 +1021,7 @@ class AsyncPublicClient:
         fidelity: int | None = None,
         interval: PriceHistoryInterval | None = None,
     ) -> tuple[PriceHistoryPoint, ...]:
+        """Get historical price points for a token."""
         path, params = _clob_actions.build_price_history_request(
             token_id=token_id,
             start_ts=start_ts,
@@ -1012,6 +1058,11 @@ class AsyncPublicClient:
         shares: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FOK",
     ) -> Decimal:
+        """Estimate the average execution price for a market order.
+
+        BUY orders use ``amount`` as the spend amount. SELL orders use ``shares``
+        as the number of shares to sell.
+        """
         return await _estimate_market_price(
             self._ctx,
             token_id=token_id,
@@ -1024,6 +1075,12 @@ class AsyncPublicClient:
     def list_current_rewards(
         self, *, sponsored: bool | None = None
     ) -> AsyncPaginator[CurrentReward]:
+        """List current rewards.
+
+        Returns:
+            An async paginator over current reward configurations.
+        """
+
         async def fetch(cursor: str | None) -> Page[CurrentReward]:
             path, params = _rewards_actions.build_list_current_rewards_request(
                 sponsored=sponsored, cursor=cursor
@@ -1037,6 +1094,12 @@ class AsyncPublicClient:
     def list_market_rewards(
         self, *, condition_id: str, sponsored: bool | None = None
     ) -> AsyncPaginator[MarketReward]:
+        """List rewards for a market condition.
+
+        Returns:
+            An async paginator over matching market reward configurations.
+        """
+
         async def fetch(cursor: str | None) -> Page[MarketReward]:
             path, params = _rewards_actions.build_list_market_rewards_request(
                 condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor

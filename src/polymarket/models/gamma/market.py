@@ -34,6 +34,8 @@ from polymarket.types import EvmAddress
 
 
 class UmaResolutionStatus(StrEnum):
+    """Resolution lifecycle state for a market."""
+
     DISPUTED = "disputed"
     PROPOSED = "proposed"
     REQUESTED = "requested"
@@ -42,6 +44,8 @@ class UmaResolutionStatus(StrEnum):
 
 
 class MarketState(BaseModel):
+    """Operational state and timing for a market."""
+
     active: bool | None = None
     closed: bool | None = None
     archived: bool | None = None
@@ -77,6 +81,8 @@ class MarketState(BaseModel):
 
 
 class MarketOutcome(BaseModel):
+    """One tradable outcome in a binary market."""
+
     label: str
     token_id: TokenId | None = Field(
         default=None,
@@ -91,11 +97,15 @@ class MarketOutcome(BaseModel):
 
 
 class MarketOutcomes(BaseModel):
+    """Binary market outcomes."""
+
     yes: MarketOutcome
     no: MarketOutcome
 
 
 class MarketMetrics(BaseModel):
+    """Volume and liquidity metrics for a market."""
+
     volume: Decimal | None = None
     volume_num: Decimal | None = Field(
         default=None,
@@ -142,6 +152,8 @@ class MarketMetrics(BaseModel):
 
 
 class MarketPrices(BaseModel):
+    """Current price and price-change data for a market."""
+
     best_bid: Decimal | None = Field(
         default=None,
         validation_alias="bestBid",
@@ -183,6 +195,8 @@ class MarketPrices(BaseModel):
 
 
 class FeeSchedule(BaseModel):
+    """Fee schedule applied to market trading."""
+
     exponent: int | float
     rate: Decimal
     taker_only: bool = Field(validation_alias="takerOnly")
@@ -195,6 +209,8 @@ class FeeSchedule(BaseModel):
 
 
 class MarketTrading(BaseModel):
+    """Trading configuration and constraints for a market."""
+
     minimum_order_size: Decimal | None = Field(
         default=None,
         validation_alias="minimumOrderSize",
@@ -227,6 +243,8 @@ class MarketTrading(BaseModel):
 
 
 class MarketResolution(BaseModel):
+    """Resolution metadata for a market."""
+
     question_id: QuestionId | None = Field(
         default=None,
         validation_alias="questionId",
@@ -257,6 +275,8 @@ class MarketResolution(BaseModel):
 
 
 class ClobReward(BaseModel):
+    """Reward configuration attached to a market condition."""
+
     id: ClobRewardId
     condition_id: ConditionId = Field(validation_alias="conditionId")
     asset_address: str = Field(validation_alias="assetAddress")
@@ -275,6 +295,8 @@ class ClobReward(BaseModel):
 
 
 class MarketRewards(BaseModel):
+    """Reward settings for a market."""
+
     clob_rewards: tuple[ClobReward, ...] | None = Field(
         default=None,
         validation_alias="clobRewards",
@@ -299,6 +321,8 @@ class MarketRewards(BaseModel):
 
 
 class MarketSportsMetadata(BaseModel):
+    """Sports-specific metadata for a market."""
+
     sports_market_type: str | None = Field(
         default=None,
         validation_alias="sportsMarketType",
@@ -320,6 +344,8 @@ class MarketSportsMetadata(BaseModel):
 
 
 class MarketEvent(BaseModel):
+    """Event reference attached to a market."""
+
     id: EventId
     slug: str | None = None
     title: str | None = None
@@ -331,6 +357,8 @@ class MarketEvent(BaseModel):
 
 
 class MarketTag(BaseModel):
+    """Tag reference attached to a market."""
+
     id: TagId
     slug: str | None = None
     label: str | None = None

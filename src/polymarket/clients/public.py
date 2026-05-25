@@ -277,11 +277,13 @@ class PublicClient:
         )
 
     def get_event_live_volumes(self, *, id: str) -> tuple[LiveVolume, ...]:
+        """Get live volume entries for an event."""
         return sync_dispatch(self._ctx, _data_actions.get_event_live_volumes_spec(id=id))
 
     def get_open_interests(
         self, *, market: Sequence[str] | None = None
     ) -> tuple[OpenInterest, ...]:
+        """Get open interest values, optionally filtered by market ids."""
         return sync_dispatch(self._ctx, _data_actions.get_open_interests_spec(market=market))
 
     def get_market_holders(
@@ -291,6 +293,7 @@ class PublicClient:
         limit: int | None = None,
         min_balance: int | None = None,
     ) -> tuple[MetaHolder, ...]:
+        """Get holder balances for one or more markets."""
         return sync_dispatch(
             self._ctx,
             _data_actions.get_market_holders_spec(
@@ -301,16 +304,19 @@ class PublicClient:
     def get_portfolio_values(
         self, *, user: str, market: Sequence[str] | None = None
     ) -> tuple[PortfolioValue, ...]:
+        """Get portfolio value snapshots for a user."""
         return sync_dispatch(
             self._ctx, _data_actions.get_portfolio_values_spec(user=user, market=market)
         )
 
     def get_traded_market_count(self, *, user: str) -> TradedMarketCount:
+        """Get the number of markets a user has traded."""
         return sync_dispatch(self._ctx, _data_actions.get_traded_market_count_spec(user=user))
 
     def get_builder_volumes(
         self, *, time_period: BuilderVolumeTimePeriod | None = None
     ) -> tuple[BuilderVolumeEntry, ...]:
+        """Get builder volume leaderboard entries."""
         return sync_dispatch(
             self._ctx, _data_actions.get_builder_volumes_spec(time_period=time_period)
         )
@@ -325,6 +331,13 @@ class PublicClient:
         after: str | None = None,
         before: str | None = None,
     ) -> Paginator[BuilderTrade]:
+        """List builder-attributed trades.
+
+        Returns:
+            A paginator. Use ``first_page()``, iterate over pages, or call ``items()``
+            to stream individual trades.
+        """
+
         def fetch(cursor: str | None) -> Page[BuilderTrade]:
             path, params = _builders_actions.build_list_builder_trades_request(
                 builder_code=builder_code,
@@ -354,6 +367,11 @@ class PublicClient:
         title: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Position]:
+        """List open positions for a user.
+
+        Returns:
+            A paginator over matching positions.
+        """
         spec = _data_actions.list_positions_spec(
             user=user,
             market=market,
@@ -378,6 +396,11 @@ class PublicClient:
         sort_direction: SortDirection | None = None,
         page_size: int = 20,
     ) -> Paginator[ClosedPosition]:
+        """List closed positions for a user.
+
+        Returns:
+            A paginator over matching closed positions.
+        """
         spec = _data_actions.list_closed_positions_spec(
             user=user,
             market=market,
@@ -398,6 +421,11 @@ class PublicClient:
         sort_direction: SortDirection | None = None,
         page_size: int = 20,
     ) -> Paginator[MetaMarketPosition]:
+        """List positions in a market.
+
+        Returns:
+            A paginator over matching market positions.
+        """
         spec = _data_actions.list_market_positions_spec(
             market=market,
             user=user,
@@ -419,6 +447,11 @@ class PublicClient:
         filter_amount: float | None = None,
         page_size: int = 20,
     ) -> Paginator[Trade]:
+        """List public trades.
+
+        Returns:
+            A paginator over matching trades.
+        """
         spec = _data_actions.list_trades_spec(
             user=user,
             market=market,
@@ -444,6 +477,11 @@ class PublicClient:
         end: int | None = None,
         page_size: int = 20,
     ) -> Paginator[Activity]:
+        """List user activity.
+
+        Returns:
+            A paginator over matching activity entries.
+        """
         spec = _data_actions.list_activity_spec(
             user=user,
             market=market,
@@ -463,10 +501,16 @@ class PublicClient:
         time_period: LeaderboardTimePeriod | None = None,
         page_size: int = 20,
     ) -> Paginator[LeaderboardEntry]:
+        """List builder leaderboard entries.
+
+        Returns:
+            A paginator over leaderboard rows.
+        """
         spec = _data_actions.list_builder_leaderboard_spec(time_period=time_period)
         return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
     def download_accounting_snapshot(self, *, user: str) -> bytes:
+        """Download the accounting snapshot archive for a user."""
         path, params = _data_actions.build_accounting_snapshot_request(user=user)
         return self._ctx.data.get_bytes(path, params=params)
 
@@ -480,6 +524,11 @@ class PublicClient:
         user_name: str | None = None,
         page_size: int = 20,
     ) -> Paginator[TraderLeaderboardEntry]:
+        """List trader leaderboard entries.
+
+        Returns:
+            A paginator over leaderboard rows.
+        """
         spec = _data_actions.list_trader_leaderboard_spec(
             category=category,
             time_period=time_period,
@@ -532,6 +581,23 @@ class PublicClient:
         volume_min: float | None = None,
         page_size: int = 20,
     ) -> Paginator[Event]:
+        """List events.
+
+        Returns:
+            A paginator over matching events.
+
+        Examples:
+            Fetch the first page::
+
+                paginator = client.list_events(page_size=10)
+                first_page = paginator.first_page()
+
+            Iterate over all pages::
+
+                for page in client.list_events(page_size=10):
+                    for event in page.items:
+                        print(event.title)
+        """
         spec = _gamma_actions.list_events_spec(
             ascending=ascending,
             closed=closed,
@@ -608,6 +674,22 @@ class PublicClient:
         volume_num_min: float | None = None,
         page_size: int = 20,
     ) -> Paginator[Market]:
+        """List markets.
+
+        Returns:
+            A paginator over matching markets.
+
+        Examples:
+            Fetch the first page::
+
+                paginator = client.list_markets(closed=False, page_size=10)
+                first_page = paginator.first_page()
+
+            Iterate over every market item::
+
+                for market in client.list_markets(closed=False).items():
+                    print(market.question)
+        """
         spec = _gamma_actions.list_markets_spec(
             ascending=ascending,
             closed=closed,
@@ -656,6 +738,11 @@ class PublicClient:
         slug: str | Sequence[str] | None = None,
         page_size: int = 20,
     ) -> Paginator[Series]:
+        """List series.
+
+        Returns:
+            A paginator over matching series.
+        """
         spec = _gamma_actions.list_series_spec(
             ascending=ascending,
             categories_ids=categories_ids,
@@ -681,6 +768,11 @@ class PublicClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Tag]:
+        """List tags.
+
+        Returns:
+            A paginator over matching tags.
+        """
         spec = _gamma_actions.list_tags_spec(
             ascending=ascending,
             include_chat=include_chat,
@@ -702,6 +794,11 @@ class PublicClient:
         provider_ids: int | Sequence[int] | None = None,
         page_size: int = 20,
     ) -> Paginator[Team]:
+        """List teams.
+
+        Returns:
+            A paginator over matching teams.
+        """
         spec = _gamma_actions.list_teams_spec(
             abbreviation=abbreviation,
             ascending=ascending,
@@ -723,6 +820,11 @@ class PublicClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Comment]:
+        """List comments for a market or event.
+
+        Returns:
+            A paginator over matching comments.
+        """
         spec = _gamma_actions.list_comments_spec(
             parent_entity_id=parent_entity_id,
             parent_entity_type=parent_entity_type,
@@ -741,6 +843,11 @@ class PublicClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Comment]:
+        """List comments authored by a user address.
+
+        Returns:
+            A paginator over matching comments.
+        """
         spec = _gamma_actions.list_comments_by_user_address_spec(
             address=address,
             ascending=ascending,
@@ -766,6 +873,17 @@ class PublicClient:
         sort: str | None = None,
         page_size: int = 10,
     ) -> Paginator[SearchResults]:
+        """Search Polymarket content.
+
+        Returns:
+            A paginator over search result pages.
+
+        Examples:
+            Search markets and events::
+
+                for result in client.search(q="election").items():
+                    print(result)
+        """
         spec = _gamma_actions.search_spec(
             q=q,
             ascending=ascending,
@@ -784,46 +902,56 @@ class PublicClient:
         return sync_paginate_page_based(self._ctx, spec, page_size=page_size)
 
     def get_midpoint(self, *, token_id: str) -> Decimal:
+        """Get the midpoint price for a token."""
         path, params = _clob_actions.build_midpoint_request(token_id=token_id)
         return _clob_actions.parse_midpoint(self._ctx.clob.get_json(path, params=params))
 
     def get_midpoints(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        """Get midpoint prices for multiple tokens."""
         path, body = _clob_actions.build_midpoints_request(token_ids=token_ids)
         return _clob_actions.parse_midpoints(self._ctx.clob.post_json(path, json=body))
 
     def get_price(self, *, token_id: str, side: OrderSide) -> Decimal:
+        """Get the executable price for a token side."""
         path, params = _clob_actions.build_price_request(token_id=token_id, side=side)
         return _clob_actions.parse_price(self._ctx.clob.get_json(path, params=params))
 
     def get_prices(
         self, *, requests: Sequence[PriceRequest]
     ) -> dict[str, dict[OrderSide, Decimal]]:
+        """Get executable prices for multiple token-side requests."""
         path, body = _clob_actions.build_prices_request(requests=requests)
         return _clob_actions.parse_prices(self._ctx.clob.post_json(path, json=body))
 
     def get_order_book(self, *, token_id: str) -> OrderBook:
+        """Get the order book for a token."""
         path, params = _clob_actions.build_order_book_request(token_id=token_id)
         return _clob_actions.parse_order_book(self._ctx.clob.get_json(path, params=params))
 
     def get_order_books(self, *, token_ids: Sequence[str]) -> tuple[OrderBook, ...]:
+        """Get order books for multiple tokens."""
         path, body = _clob_actions.build_order_books_request(token_ids=token_ids)
         return _clob_actions.parse_order_books(self._ctx.clob.post_json(path, json=body))
 
     def get_spread(self, *, token_id: str) -> Decimal:
+        """Get the bid-ask spread for a token."""
         path, params = _clob_actions.build_spread_request(token_id=token_id)
         return _clob_actions.parse_spread(self._ctx.clob.get_json(path, params=params))
 
     def get_spreads(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        """Get bid-ask spreads for multiple tokens."""
         path, body = _clob_actions.build_spreads_request(token_ids=token_ids)
         return _clob_actions.parse_spreads(self._ctx.clob.post_json(path, json=body))
 
     def get_last_trade_price(self, *, token_id: str) -> LastTradePrice:
+        """Get the most recent trade price for a token."""
         path, params = _clob_actions.build_last_trade_price_request(token_id=token_id)
         return _clob_actions.parse_last_trade_price(self._ctx.clob.get_json(path, params=params))
 
     def get_last_trade_prices(
         self, *, token_ids: Sequence[str]
     ) -> tuple[LastTradePriceForToken, ...]:
+        """Get the most recent trade prices for multiple tokens."""
         path, body = _clob_actions.build_last_trade_prices_request(token_ids=token_ids)
         return _clob_actions.parse_last_trade_prices(self._ctx.clob.post_json(path, json=body))
 
@@ -836,6 +964,7 @@ class PublicClient:
         fidelity: int | None = None,
         interval: PriceHistoryInterval | None = None,
     ) -> tuple[PriceHistoryPoint, ...]:
+        """Get historical price points for a token."""
         path, params = _clob_actions.build_price_history_request(
             token_id=token_id,
             start_ts=start_ts,
@@ -872,6 +1001,15 @@ class PublicClient:
         shares: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FOK",
     ) -> Decimal:
+        """Estimate the average execution price for a market order.
+
+        BUY orders use ``amount`` as the spend amount. SELL orders use ``shares``
+        as the number of shares to sell.
+
+        Raises:
+            UserInputError: If the side-specific amount is missing or invalid.
+            InsufficientLiquidityError: If available liquidity cannot fill the order.
+        """
         return _estimate_market_price_sync(
             self._ctx,
             token_id=token_id,
@@ -882,6 +1020,12 @@ class PublicClient:
         )
 
     def list_current_rewards(self, *, sponsored: bool | None = None) -> Paginator[CurrentReward]:
+        """List current rewards.
+
+        Returns:
+            A paginator over current reward configurations.
+        """
+
         def fetch(cursor: str | None) -> Page[CurrentReward]:
             path, params = _rewards_actions.build_list_current_rewards_request(
                 sponsored=sponsored, cursor=cursor
@@ -895,6 +1039,12 @@ class PublicClient:
     def list_market_rewards(
         self, *, condition_id: str, sponsored: bool | None = None
     ) -> Paginator[MarketReward]:
+        """List rewards for a market condition.
+
+        Returns:
+            A paginator over matching market reward configurations.
+        """
+
         def fetch(cursor: str | None) -> Page[MarketReward]:
             path, params = _rewards_actions.build_list_market_rewards_request(
                 condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor

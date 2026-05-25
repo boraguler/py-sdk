@@ -210,6 +210,12 @@ _L2HeaderResolver: TypeAlias = Callable[[str, str, str | None], Awaitable[Mappin
 
 
 class AsyncSecureClient:
+    """Async client for authenticated account, trading, wallet, and stream workflows.
+
+    Create instances with :meth:`AsyncSecureClient.create` so the SDK can derive
+    or validate credentials before authenticated requests are made.
+    """
+
     def __init__(
         self,
         *,
@@ -253,6 +259,21 @@ class AsyncSecureClient:
         validate_credentials: bool = True,
         logger: logging.Logger | None = None,
     ) -> Self:
+        """Create an authenticated async client.
+
+        Args:
+            private_key: EVM private key used for signing.
+            wallet: Wallet address to act for. Defaults to the signer's address.
+            credentials: Existing API credentials. When omitted, credentials are
+                derived during client creation.
+            api_key: Optional key for gasless wallet and relayed transaction workflows.
+            nonce: Credential derivation nonce. Cannot be combined with ``credentials``.
+            validate_credentials: Whether provided credentials should be validated.
+
+        Raises:
+            UserInputError: If key material, wallet, nonce, or credentials are invalid.
+            RequestRejectedError: If credential derivation or validation is rejected.
+        """
         if not private_key:
             raise UserInputError("private_key is required")
         _validate_nonce(nonce)
@@ -410,6 +431,16 @@ class AsyncSecureClient:
         self,
         specs: SecureSubscription | Sequence[SecureSubscription],
     ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent]:
+        """Subscribe to one or more public or authenticated realtime streams.
+
+        Pass a single subscription spec for one stream or a sequence of specs to
+        receive events through one merged handle. Authenticated user stream specs
+        are supported only by secure clients.
+
+        Returns:
+            A subscription handle. Iterate over it to receive events and close it
+            when finished.
+        """
         items = _normalize_specs(specs)
         handles: list[AsyncSubscriptionHandle[Any]] = []
         try:
@@ -1271,6 +1302,7 @@ class AsyncSecureClient:
         return AsyncPublicClient(environment=environment)
 
     async def get_closed_only_mode(self) -> bool:
+        """Return whether the authenticated account is in closed-only mode."""
         path, params = _account_actions.build_closed_only_mode_request()
         return _account_actions.parse_closed_only_mode(
             await self._ctx.secure_clob.get_json(path, params=params)
@@ -1283,6 +1315,12 @@ class AsyncSecureClient:
         id: str | None = None,
         market: str | None = None,
     ) -> AsyncPaginator[OpenOrder]:
+        """List open orders for the authenticated account.
+
+        Returns:
+            An async paginator over matching open orders.
+        """
+
         async def fetch(cursor: str | None) -> Page[OpenOrder]:
             path, params = _account_actions.build_list_open_orders_request(
                 token_id=token_id, id=id, market=market, cursor=cursor
@@ -1293,6 +1331,7 @@ class AsyncSecureClient:
         return AsyncPaginator(fetch=fetch)
 
     async def get_order(self, *, order_id: str) -> OpenOrder:
+        """Get one open order for the authenticated account."""
         path, params = _account_actions.build_get_order_request(order_id=order_id)
         return _account_actions.parse_open_order(
             await self._ctx.secure_clob.get_json(path, params=params)
@@ -1308,6 +1347,12 @@ class AsyncSecureClient:
         after: str | None = None,
         before: str | None = None,
     ) -> AsyncPaginator[ClobTrade]:
+        """List trades for the authenticated account.
+
+        Returns:
+            An async paginator over matching trades.
+        """
+
         async def fetch(cursor: str | None) -> Page[ClobTrade]:
             path, params = _account_actions.build_list_account_trades_request(
                 token_id=token_id,
@@ -1340,6 +1385,7 @@ class AsyncSecureClient:
     async def get_balance_allowance(
         self, *, asset_type: AssetType, token_id: str | None = None
     ) -> BalanceAllowance:
+        """Get balance and allowance information for an asset."""
         path, params = _account_actions.build_balance_allowance_request(
             asset_type=asset_type,
             token_id=token_id,
@@ -1376,6 +1422,11 @@ class AsyncSecureClient:
         shares: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FOK",
     ) -> Decimal:
+        """Estimate the average execution price for a market order.
+
+        BUY orders use ``amount`` as the spend amount. SELL orders use ``shares``
+        as the number of shares to sell.
+        """
         return await _estimate_market_price(
             self._ctx,
             token_id=token_id,
@@ -1396,6 +1447,11 @@ class AsyncSecureClient:
         expiration: int | None = None,
         builder_code: str | None = None,
     ) -> SignedOrder:
+        """Create and sign a limit order without posting it.
+
+        Use :meth:`post_order` to submit the returned signed order, or
+        :meth:`place_limit_order` to create and post in one call.
+        """
         params = validate_limit_order_params(
             token_id=token_id,
             price=price,
@@ -1440,6 +1496,12 @@ class AsyncSecureClient:
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> SignedOrder:
+        """Create and sign a market order without posting it.
+
+        BUY orders use ``amount`` as the spend amount and may include
+        ``max_spend``. SELL orders use ``shares`` as the number of shares to
+        sell.
+        """
         return await self._prepare_and_sign_market_order(
             token_id=token_id,
             side=side,
@@ -1484,6 +1546,7 @@ class AsyncSecureClient:
         expiration: int | None = None,
         builder_code: str | None = None,
     ) -> OrderResponse:
+        """Create, sign, and post a limit order."""
         signed = await self.create_limit_order(
             token_id=token_id,
             price=price,
@@ -1527,6 +1590,12 @@ class AsyncSecureClient:
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> OrderResponse:
+        """Create, sign, and post a market order.
+
+        BUY orders use ``amount`` as the spend amount and may include
+        ``max_spend``. SELL orders use ``shares`` as the number of shares to
+        sell.
+        """
         signed = await self._prepare_and_sign_market_order(
             token_id=token_id,
             side=side,
@@ -1551,6 +1620,14 @@ class AsyncSecureClient:
         amount: int | Literal["max"],
         metadata: str | None = None,
     ) -> TransactionHandle:
+        """Submit an ERC-20 approval transaction.
+
+        Args:
+            amount: Base-units amount to approve, or ``"max"`` for the maximum value.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
         try:
             token = cast(EvmAddress, to_checksum_address(token_address))
         except ValueError as error:
@@ -1574,6 +1651,11 @@ class AsyncSecureClient:
         approved: bool = True,
         metadata: str | None = None,
     ) -> TransactionHandle:
+        """Approve or revoke an ERC-1155 operator for all tokens.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
         try:
             token = cast(EvmAddress, to_checksum_address(token_address))
         except ValueError as error:
@@ -1597,6 +1679,14 @@ class AsyncSecureClient:
         amount: int,
         metadata: str | None = None,
     ) -> TransactionHandle:
+        """Submit an ERC-20 transfer transaction.
+
+        Args:
+            amount: Base-units amount to transfer.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
         try:
             token = cast(EvmAddress, to_checksum_address(token_address))
         except ValueError as error:
@@ -1612,6 +1702,15 @@ class AsyncSecureClient:
         return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
     async def setup_trading_approvals(self) -> TransactionHandle:
+        """Approve the standard set of trading allowances for the wallet.
+
+        EOA wallets submit approvals directly. Gasless wallets submit a relayed
+        transaction. The returned handle represents the final transaction in the
+        setup workflow.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
         env = self._ctx.environment
         collateral = cast(EvmAddress, env.collateral_token)
         conditional = cast(EvmAddress, env.conditional_tokens)
@@ -1682,6 +1781,15 @@ class AsyncSecureClient:
         )
 
     async def setup_gasless_wallet(self) -> Self:
+        """Create or reuse the gasless wallet for the signer.
+
+        Returns:
+            A new async secure client scoped to the gasless wallet.
+
+        Raises:
+            UserInputError: If the client was not created with an API key that
+                can authorize gasless wallet workflows.
+        """
         ctx = self._ctx
         if ctx.api_key is None:
             raise UserInputError(
@@ -1721,6 +1829,7 @@ class AsyncSecureClient:
         )
 
     async def is_gasless_ready(self) -> bool:
+        """Return whether the signer has a deployed gasless wallet ready to use."""
         ctx = self._ctx
         if ctx.wallet_type != "EOA":
             type_param = (
@@ -1759,6 +1868,14 @@ class AsyncSecureClient:
         amount: int,
         metadata: str | None = None,
     ) -> TransactionHandle:
+        """Split collateral into outcome positions for a condition.
+
+        Args:
+            amount: Base-units collateral amount to split.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
         env = self._ctx.environment
         neg_risk = await self._resolve_market_neg_risk(condition_id)
         call = split_position_call(
@@ -1781,6 +1898,15 @@ class AsyncSecureClient:
         amount: int | Literal["max"],
         metadata: str | None = None,
     ) -> TransactionHandle:
+        """Merge outcome positions back into collateral.
+
+        Args:
+            amount: Base-units position amount to merge, or ``"max"`` to merge
+                the largest available balanced amount.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
         env = self._ctx.environment
         binary = await self._fetch_binary_positions(condition_id)
         neg_risk = expect_negative_risk_flag(binary)
@@ -1805,6 +1931,16 @@ class AsyncSecureClient:
         market_id: str | None = None,
         metadata: str | None = None,
     ) -> TransactionHandle:
+        """Redeem resolved positions for a condition or market.
+
+        Provide exactly one of ``condition_id`` or ``market_id``.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+
+        Raises:
+            UserInputError: If both identifiers or neither identifier is provided.
+        """
         if (condition_id is None) == (market_id is None):
             raise UserInputError("Provide exactly one of condition_id or market_id")
         env = self._ctx.environment
@@ -1853,6 +1989,7 @@ class AsyncSecureClient:
         return expect_binary_positions(page.items)
 
     async def post_order(self, signed_order: SignedOrder) -> OrderResponse:
+        """Post a signed order for the authenticated account."""
         path, payload = _post_actions.build_post_order_request(
             signed_order, owner_api_key=self._ctx.credentials.key
         )
@@ -1861,6 +1998,7 @@ class AsyncSecureClient:
         )
 
     async def post_orders(self, signed_orders: Sequence[SignedOrder]) -> tuple[OrderResponse, ...]:
+        """Post multiple signed orders for the authenticated account."""
         path, payload = _post_actions.build_post_orders_request(
             signed_orders, owner_api_key=self._ctx.credentials.key
         )
@@ -1869,18 +2007,21 @@ class AsyncSecureClient:
         )
 
     async def cancel_order(self, *, order_id: str) -> CancelOrdersResponse:
+        """Cancel one open order for the authenticated account."""
         path, body = _cancel_actions.build_cancel_order_request(order_id=order_id)
         return _cancel_actions.parse_cancel_orders_response(
             await self._ctx.secure_clob.delete_json(path, json=body)
         )
 
     async def cancel_orders(self, *, order_ids: Sequence[str]) -> CancelOrdersResponse:
+        """Cancel multiple open orders for the authenticated account."""
         path, body = _cancel_actions.build_cancel_orders_request(order_ids=order_ids)
         return _cancel_actions.parse_cancel_orders_response(
             await self._ctx.secure_clob.delete_json(path, json=body)
         )
 
     async def cancel_all(self) -> CancelOrdersResponse:
+        """Cancel all open orders for the authenticated account."""
         path, body = _cancel_actions.build_cancel_all_request()
         return _cancel_actions.parse_cancel_orders_response(
             await self._ctx.secure_clob.delete_json(path, json=body)
@@ -1889,6 +2030,7 @@ class AsyncSecureClient:
     async def cancel_market_orders(
         self, *, market: str | None = None, token_id: str | None = None
     ) -> CancelOrdersResponse:
+        """Cancel open orders matching a market or token filter."""
         path, body = _cancel_actions.build_cancel_market_orders_request(
             market=market, token_id=token_id
         )

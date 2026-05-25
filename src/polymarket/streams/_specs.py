@@ -25,7 +25,7 @@ EquityPricesEventType = Literal["update", "subscribe"]
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MarketSpec:
-    """Subscription for the CLOB market stream."""
+    """Subscribe to realtime market updates for one or more token ids."""
 
     token_ids: Sequence[str]
     custom_feature_enabled: bool = False
@@ -61,6 +61,12 @@ class SportsSpec:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CommentsSpec:
+    """Subscribe to realtime comment and reaction events.
+
+    Filters are optional. When provided, ``types`` limits event kinds and the
+    parent entity fields limit events to a specific market or event.
+    """
+
     types: Sequence[CommentsEventType] | None = None
     parent_entity_id: int | None = None
     parent_entity_type: ParentEntityType | None = None
@@ -93,6 +99,12 @@ class CommentsSpec:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CryptoPricesSpec:
+    """Subscribe to realtime crypto price updates for a topic.
+
+    When ``symbols`` is omitted, the subscription receives all symbols for the
+    selected topic.
+    """
+
     topic: CryptoPricesTopic
     symbols: Sequence[str] | None = None
 
@@ -118,6 +130,8 @@ class CryptoPricesSpec:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class EquityPricesSpec:
+    """Subscribe to realtime equity price updates for one symbol."""
+
     symbol: str
     types: Sequence[EquityPricesEventType] | None = None
     topic: Literal["prices.equity.pyth"] = field(default="prices.equity.pyth", init=False)
@@ -140,6 +154,12 @@ class EquityPricesSpec:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UserSpec:
+    """Subscribe to authenticated user order and trade events.
+
+    When ``markets`` is omitted, the subscription receives user events for all
+    markets available to the authenticated account.
+    """
+
     markets: Sequence[str] | None = None
     topic: Literal["user"] = field(default="user", init=False)
 
