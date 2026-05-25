@@ -116,7 +116,7 @@ def test_async_public_list_trades_passes_event_id() -> None:
 
 def test_secure_list_trades_passes_event_id() -> None:
     captured: list[httpx.Request] = []
-    with SecureClient._create_for_testing(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -134,7 +134,7 @@ def test_async_secure_list_trades_passes_event_id() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -178,7 +178,7 @@ def test_async_public_list_activity_passes_event_id() -> None:
 
 def test_secure_list_activity_passes_event_id() -> None:
     captured: list[httpx.Request] = []
-    with SecureClient._create_for_testing(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -196,7 +196,7 @@ def test_async_secure_list_activity_passes_event_id() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -228,7 +228,7 @@ def test_public_list_positions_passes_event_id() -> None:
 
 def test_secure_list_positions_passes_event_id() -> None:
     captured: list[httpx.Request] = []
-    with SecureClient._create_for_testing(
+    with SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,
@@ -259,7 +259,7 @@ def test_secure_list_trades_rejects_market_and_event_id_together() -> None:
     from polymarket.errors import UserInputError
 
     with (
-        SecureClient._create_for_testing(
+        SecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,

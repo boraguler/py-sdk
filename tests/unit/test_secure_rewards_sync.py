@@ -32,7 +32,7 @@ def _install_secure_clob(client: SecureClient, handler: httpx.MockTransport) -> 
 
 
 def _make_client() -> SecureClient:
-    return SecureClient._create_for_testing(
+    return SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,

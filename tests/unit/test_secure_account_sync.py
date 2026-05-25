@@ -94,7 +94,7 @@ def _assert_l2_headers(request: httpx.Request) -> None:
 
 
 def _make_client() -> SecureClient:
-    return SecureClient._create_for_testing(
+    return SecureClient._create(
         private_key=PRIVATE_KEY,
         wallet=SIGNER_ADDRESS,
         credentials=FAKE_CREDS,

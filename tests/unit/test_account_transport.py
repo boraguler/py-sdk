@@ -96,7 +96,7 @@ def _assert_l2_headers(request: httpx.Request) -> None:
 
 def _make_client() -> AsyncSecureClient:
     return asyncio.run(
-        AsyncSecureClient._create_for_testing(
+        AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -109,7 +109,7 @@ def test_get_closed_only_mode_returns_bool_and_uses_l2_headers() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> bool:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -147,7 +147,7 @@ def test_list_open_orders_paginates_until_end_cursor() -> None:
         return httpx.Response(200, json=next(responses), request=request)
 
     async def run() -> list[str]:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -177,7 +177,7 @@ def test_get_order_targets_data_order_path() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> str:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -209,7 +209,7 @@ def test_list_account_trades_paginates_and_passes_filters() -> None:
         return httpx.Response(200, json=next(responses), request=request)
 
     async def run() -> list[str]:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -239,7 +239,7 @@ def test_get_notifications_includes_signature_type_for_eoa_wallet() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -263,7 +263,7 @@ def test_drop_notifications_uses_delete_with_comma_separated_ids() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -286,7 +286,7 @@ def test_drop_notifications_uses_delete_with_comma_separated_ids() -> None:
 
 def test_drop_notifications_rejects_empty_id_list() -> None:
     async def run() -> None:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -305,7 +305,7 @@ def test_get_balance_allowance_for_collateral_omits_token_id() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> int:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -334,7 +334,7 @@ def test_get_balance_allowance_for_conditional_includes_token_id() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,
@@ -366,7 +366,7 @@ def test_secure_client_classifies_eoa_when_wallet_equals_signer() -> None:
 
 def test_secure_client_normalizes_wallet_to_checksum() -> None:
     async def run() -> str:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS.lower(),
             credentials=FAKE_CREDS,
@@ -382,7 +382,7 @@ def test_secure_client_normalizes_wallet_to_checksum() -> None:
 
 def test_secure_client_rejects_invalid_wallet_address() -> None:
     async def run() -> None:
-        await AsyncSecureClient._create_for_testing(
+        await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet="not-an-address",
             credentials=FAKE_CREDS,
@@ -400,7 +400,7 @@ def test_secure_client_defaults_wallet_to_signer_address() -> None:
     expected = to_checksum_address(Account.from_key(PRIVATE_KEY).address)
 
     async def run() -> str:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             credentials=FAKE_CREDS,
             validate_credentials=False,
@@ -416,7 +416,7 @@ def test_secure_client_defaults_wallet_to_signer_address() -> None:
 
 def test_secure_client_rejects_unrelated_wallet_address() -> None:
     async def run() -> None:
-        await AsyncSecureClient._create_for_testing(
+        await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet="0x0000000000000000000000000000000000000002",
             credentials=FAKE_CREDS,

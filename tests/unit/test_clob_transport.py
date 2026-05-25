@@ -73,7 +73,7 @@ def test_async_secure_get_midpoint_uses_same_clob_endpoint() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> Decimal:
-        client = await AsyncSecureClient._create_for_testing(
+        client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
             wallet=SIGNER_ADDRESS,
             credentials=FAKE_CREDS,

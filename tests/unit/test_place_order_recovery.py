@@ -33,7 +33,7 @@ async def _make_deposit_client() -> AsyncSecureClient:
 
     signer = Account.from_key(_PRIVATE_KEY)
     wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
-    return await AsyncSecureClient._create_for_testing(
+    return await AsyncSecureClient._create(
         private_key=_PRIVATE_KEY,
         wallet=wallet,
         credentials=_CREDS,

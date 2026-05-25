@@ -258,30 +258,6 @@ class SecureClient:
         )
 
     @classmethod
-    def _create_for_testing(
-        cls,
-        *,
-        private_key: str,
-        wallet: str | None = None,
-        environment: Environment = PRODUCTION,
-        credentials: ApiKeyCreds | None = None,
-        api_key: ApiKey | None = None,
-        nonce: int = 0,
-        validate_credentials: bool = True,
-        logger: logging.Logger | None = None,
-    ) -> Self:
-        return cls._create(
-            private_key=private_key,
-            wallet=wallet,
-            environment=environment,
-            credentials=credentials,
-            api_key=api_key,
-            nonce=nonce,
-            validate_credentials=validate_credentials,
-            logger=logger,
-        )
-
-    @classmethod
     def _create(
         cls,
         *,
@@ -291,7 +267,7 @@ class SecureClient:
         credentials: ApiKeyCreds | None = None,
         api_key: ApiKey | None = None,
         nonce: int = 0,
-        validate_credentials: bool,
+        validate_credentials: bool = True,
         logger: logging.Logger | None = None,
     ) -> Self:
         if not private_key:
