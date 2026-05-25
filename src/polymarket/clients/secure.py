@@ -242,7 +242,6 @@ class SecureClient:
                 derived during client creation.
             api_key: Optional key for gasless wallet and relayed transaction workflows.
             nonce: Credential derivation nonce. Cannot be combined with ``credentials``.
-            validate_credentials: Whether provided credentials should be validated.
 
         Raises:
             UserInputError: If key material, wallet, nonce, or credentials are invalid.
@@ -349,22 +348,27 @@ class SecureClient:
 
     @property
     def environment(self) -> Environment:
+        """Environment this client sends requests to."""
         return self._ctx.environment
 
     @property
     def wallet(self) -> EvmAddress:
+        """Wallet address authenticated by this client."""
         return self._ctx.wallet
 
     @property
     def signer(self) -> EvmAddress:
+        """Signer address used for signatures."""
         return cast(EvmAddress, self._ctx.signer.address)
 
     @property
     def wallet_type(self) -> WalletType:
+        """Detected wallet type for the authenticated wallet."""
         return self._ctx.wallet_type
 
     @property
     def credentials(self) -> ApiKeyCreds:
+        """API credentials used for authenticated requests."""
         return self._ctx.credentials
 
     def __enter__(self) -> Self:
@@ -410,6 +414,7 @@ class SecureClient:
         include_tag: bool | None = None,
         locale: str | None = None,
     ) -> Market:
+        """Get a market by id, slug, or Polymarket URL."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_market_spec(
@@ -418,6 +423,7 @@ class SecureClient:
         )
 
     def get_market_tags(self, id: str) -> tuple[TagReference, ...]:
+        """Get a market's tags."""
         return sync_dispatch(self._ctx, _gamma_actions.get_market_tags_spec(id))
 
     def get_event(
@@ -431,6 +437,7 @@ class SecureClient:
         include_template: bool | None = None,
         locale: str | None = None,
     ) -> Event:
+        """Get an event by id, slug, or Polymarket URL."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_event_spec(
@@ -445,6 +452,7 @@ class SecureClient:
         )
 
     def get_event_tags(self, id: str) -> tuple[TagReference, ...]:
+        """Get an event's tags."""
         return sync_dispatch(self._ctx, _gamma_actions.get_event_tags_spec(id))
 
     def get_series(
@@ -454,6 +462,7 @@ class SecureClient:
         include_chat: bool | None = None,
         locale: str | None = None,
     ) -> Series:
+        """Get a series."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_series_spec(id, include_chat=include_chat, locale=locale),
@@ -468,6 +477,7 @@ class SecureClient:
         include_template: bool | None = None,
         locale: str | None = None,
     ) -> Tag:
+        """Get a tag by id or slug."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_tag_spec(
@@ -487,6 +497,7 @@ class SecureClient:
         omit_empty: bool | None = None,
         status: str | None = None,
     ) -> tuple[RelatedTag, ...]:
+        """Get related tag relationships."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_related_tags_spec(
@@ -503,6 +514,7 @@ class SecureClient:
         omit_empty: bool | None = None,
         status: str | None = None,
     ) -> tuple[Tag, ...]:
+        """Get tag resources linked from related tag relationships."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_related_tag_resources_spec(
@@ -511,12 +523,15 @@ class SecureClient:
         )
 
     def get_sports(self) -> tuple[SportsMetadata, ...]:
+        """Get available sports metadata."""
         return sync_dispatch(self._ctx, _gamma_actions.get_sports_spec())
 
     def get_sports_market_types(self) -> SportsMarketTypes:
+        """Get available sports market types."""
         return sync_dispatch(self._ctx, _gamma_actions.get_sports_market_types_spec())
 
     def get_public_profile(self, address: str) -> PublicProfile | None:
+        """Get a public profile by wallet address. Returns None if no profile exists."""
         try:
             return sync_dispatch(self._ctx, _gamma_actions.get_public_profile_spec(address))
         except RequestRejectedError as error:
@@ -527,17 +542,20 @@ class SecureClient:
     def get_comment_thread(
         self, id: str, *, get_positions: bool | None = None
     ) -> tuple[Comment, ...]:
+        """Get a comment thread by comment ID."""
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_comment_thread_spec(id, get_positions=get_positions),
         )
 
     def get_event_live_volumes(self, *, id: str) -> tuple[LiveVolume, ...]:
+        """Get live volume entries for an event."""
         return sync_dispatch(self._ctx, _data_actions.get_event_live_volumes_spec(id=id))
 
     def get_open_interests(
         self, *, market: Sequence[str] | None = None
     ) -> tuple[OpenInterest, ...]:
+        """Get open interest values, optionally filtered by market ids."""
         return sync_dispatch(self._ctx, _data_actions.get_open_interests_spec(market=market))
 
     def get_market_holders(
@@ -547,6 +565,7 @@ class SecureClient:
         limit: int | None = None,
         min_balance: int | None = None,
     ) -> tuple[MetaHolder, ...]:
+        """Get holder balances for one or more markets."""
         return sync_dispatch(
             self._ctx,
             _data_actions.get_market_holders_spec(
@@ -560,12 +579,14 @@ class SecureClient:
         user: str | None = None,
         market: Sequence[str] | None = None,
     ) -> tuple[PortfolioValue, ...]:
+        """Get portfolio value snapshots for a user or the authenticated wallet."""
         return sync_dispatch(
             self._ctx,
             _data_actions.get_portfolio_values_spec(user=self._user_or_wallet(user), market=market),
         )
 
     def get_traded_market_count(self, *, user: str | None = None) -> TradedMarketCount:
+        """Get the number of markets traded by a user or the authenticated wallet."""
         return sync_dispatch(
             self._ctx,
             _data_actions.get_traded_market_count_spec(user=self._user_or_wallet(user)),
@@ -574,6 +595,7 @@ class SecureClient:
     def get_builder_volumes(
         self, *, time_period: BuilderVolumeTimePeriod | None = None
     ) -> tuple[BuilderVolumeEntry, ...]:
+        """Get builder volume leaderboard entries."""
         return sync_dispatch(
             self._ctx, _data_actions.get_builder_volumes_spec(time_period=time_period)
         )
@@ -588,6 +610,12 @@ class SecureClient:
         after: str | None = None,
         before: str | None = None,
     ) -> Paginator[BuilderTrade]:
+        """List builder-attributed trades.
+
+        Returns:
+            A paginator over matching builder-attributed trades.
+        """
+
         def fetch(cursor: str | None) -> Page[BuilderTrade]:
             path, params = _builders_actions.build_list_builder_trades_request(
                 builder_code=builder_code,
@@ -617,6 +645,11 @@ class SecureClient:
         title: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Position]:
+        """List open positions for a user or the authenticated wallet.
+
+        Returns:
+            A paginator over matching positions.
+        """
         spec = _data_actions.list_positions_spec(
             user=self._user_or_wallet(user),
             market=market,
@@ -641,6 +674,11 @@ class SecureClient:
         sort_direction: SortDirection | None = None,
         page_size: int = 20,
     ) -> Paginator[ClosedPosition]:
+        """List closed positions for a user or the authenticated wallet.
+
+        Returns:
+            A paginator over matching closed positions.
+        """
         spec = _data_actions.list_closed_positions_spec(
             user=self._user_or_wallet(user),
             market=market,
@@ -661,6 +699,11 @@ class SecureClient:
         sort_direction: SortDirection | None = None,
         page_size: int = 20,
     ) -> Paginator[MetaMarketPosition]:
+        """List positions in a market.
+
+        Returns:
+            A paginator over matching market positions.
+        """
         spec = _data_actions.list_market_positions_spec(
             market=market,
             user=user,
@@ -682,6 +725,11 @@ class SecureClient:
         filter_amount: float | None = None,
         page_size: int = 20,
     ) -> Paginator[Trade]:
+        """List trades for a user or the authenticated wallet.
+
+        Returns:
+            A paginator over matching trades.
+        """
         spec = _data_actions.list_trades_spec(
             user=self._user_or_wallet(user),
             market=market,
@@ -707,6 +755,11 @@ class SecureClient:
         end: int | None = None,
         page_size: int = 20,
     ) -> Paginator[Activity]:
+        """List activity for a user or the authenticated wallet.
+
+        Returns:
+            A paginator over matching activity entries.
+        """
         spec = _data_actions.list_activity_spec(
             user=self._user_or_wallet(user),
             market=market,
@@ -726,10 +779,16 @@ class SecureClient:
         time_period: LeaderboardTimePeriod | None = None,
         page_size: int = 20,
     ) -> Paginator[LeaderboardEntry]:
+        """List builder leaderboard entries.
+
+        Returns:
+            A paginator over leaderboard rows.
+        """
         spec = _data_actions.list_builder_leaderboard_spec(time_period=time_period)
         return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
     def download_accounting_snapshot(self, *, user: str | None = None) -> bytes:
+        """Download the accounting snapshot archive for a user or the authenticated wallet."""
         path, params = _data_actions.build_accounting_snapshot_request(
             user=self._user_or_wallet(user)
         )
@@ -745,6 +804,11 @@ class SecureClient:
         user_name: str | None = None,
         page_size: int = 20,
     ) -> Paginator[TraderLeaderboardEntry]:
+        """List trader leaderboard entries.
+
+        Returns:
+            A paginator over leaderboard rows.
+        """
         spec = _data_actions.list_trader_leaderboard_spec(
             category=category,
             time_period=time_period,
@@ -797,6 +861,11 @@ class SecureClient:
         volume_min: float | None = None,
         page_size: int = 20,
     ) -> Paginator[Event]:
+        """List events.
+
+        Returns:
+            A paginator over matching events.
+        """
         spec = _gamma_actions.list_events_spec(
             ascending=ascending,
             closed=closed,
@@ -873,6 +942,11 @@ class SecureClient:
         volume_num_min: float | None = None,
         page_size: int = 20,
     ) -> Paginator[Market]:
+        """List markets.
+
+        Returns:
+            A paginator over matching markets.
+        """
         spec = _gamma_actions.list_markets_spec(
             ascending=ascending,
             closed=closed,
@@ -921,6 +995,11 @@ class SecureClient:
         slug: str | Sequence[str] | None = None,
         page_size: int = 20,
     ) -> Paginator[Series]:
+        """List series.
+
+        Returns:
+            A paginator over matching series.
+        """
         spec = _gamma_actions.list_series_spec(
             ascending=ascending,
             categories_ids=categories_ids,
@@ -946,6 +1025,11 @@ class SecureClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Tag]:
+        """List tags.
+
+        Returns:
+            A paginator over matching tags.
+        """
         spec = _gamma_actions.list_tags_spec(
             ascending=ascending,
             include_chat=include_chat,
@@ -967,6 +1051,11 @@ class SecureClient:
         provider_ids: int | Sequence[int] | None = None,
         page_size: int = 20,
     ) -> Paginator[Team]:
+        """List teams.
+
+        Returns:
+            A paginator over matching teams.
+        """
         spec = _gamma_actions.list_teams_spec(
             abbreviation=abbreviation,
             ascending=ascending,
@@ -988,6 +1077,11 @@ class SecureClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Comment]:
+        """List comments for a market or event.
+
+        Returns:
+            A paginator over matching comments.
+        """
         spec = _gamma_actions.list_comments_spec(
             parent_entity_id=parent_entity_id,
             parent_entity_type=parent_entity_type,
@@ -1006,6 +1100,11 @@ class SecureClient:
         order: str | None = None,
         page_size: int = 20,
     ) -> Paginator[Comment]:
+        """List comments authored by a user address.
+
+        Returns:
+            A paginator over matching comments.
+        """
         spec = _gamma_actions.list_comments_by_user_address_spec(
             address=address,
             ascending=ascending,
@@ -1031,6 +1130,11 @@ class SecureClient:
         sort: str | None = None,
         page_size: int = 10,
     ) -> Paginator[SearchResults]:
+        """Search Polymarket content.
+
+        Returns:
+            A paginator over search result pages.
+        """
         spec = _gamma_actions.search_spec(
             q=q,
             ascending=ascending,
@@ -1049,46 +1153,56 @@ class SecureClient:
         return sync_paginate_page_based(self._ctx, spec, page_size=page_size)
 
     def get_midpoint(self, *, token_id: str) -> Decimal:
+        """Get the midpoint price for a token."""
         path, params = _clob_actions.build_midpoint_request(token_id=token_id)
         return _clob_actions.parse_midpoint(self._ctx.clob.get_json(path, params=params))
 
     def get_midpoints(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        """Get midpoint prices for multiple tokens."""
         path, body = _clob_actions.build_midpoints_request(token_ids=token_ids)
         return _clob_actions.parse_midpoints(self._ctx.clob.post_json(path, json=body))
 
     def get_price(self, *, token_id: str, side: OrderSide) -> Decimal:
+        """Get the executable price for a token side."""
         path, params = _clob_actions.build_price_request(token_id=token_id, side=side)
         return _clob_actions.parse_price(self._ctx.clob.get_json(path, params=params))
 
     def get_prices(
         self, *, requests: Sequence[PriceRequest]
     ) -> dict[str, dict[OrderSide, Decimal]]:
+        """Get executable prices for multiple token-side requests."""
         path, body = _clob_actions.build_prices_request(requests=requests)
         return _clob_actions.parse_prices(self._ctx.clob.post_json(path, json=body))
 
     def get_order_book(self, *, token_id: str) -> OrderBook:
+        """Get the order book for a token."""
         path, params = _clob_actions.build_order_book_request(token_id=token_id)
         return _clob_actions.parse_order_book(self._ctx.clob.get_json(path, params=params))
 
     def get_order_books(self, *, token_ids: Sequence[str]) -> tuple[OrderBook, ...]:
+        """Get order books for multiple tokens."""
         path, body = _clob_actions.build_order_books_request(token_ids=token_ids)
         return _clob_actions.parse_order_books(self._ctx.clob.post_json(path, json=body))
 
     def get_spread(self, *, token_id: str) -> Decimal:
+        """Get the bid-ask spread for a token."""
         path, params = _clob_actions.build_spread_request(token_id=token_id)
         return _clob_actions.parse_spread(self._ctx.clob.get_json(path, params=params))
 
     def get_spreads(self, *, token_ids: Sequence[str]) -> dict[str, Decimal]:
+        """Get bid-ask spreads for multiple tokens."""
         path, body = _clob_actions.build_spreads_request(token_ids=token_ids)
         return _clob_actions.parse_spreads(self._ctx.clob.post_json(path, json=body))
 
     def get_last_trade_price(self, *, token_id: str) -> LastTradePrice:
+        """Get the most recent trade price for a token."""
         path, params = _clob_actions.build_last_trade_price_request(token_id=token_id)
         return _clob_actions.parse_last_trade_price(self._ctx.clob.get_json(path, params=params))
 
     def get_last_trade_prices(
         self, *, token_ids: Sequence[str]
     ) -> tuple[LastTradePriceForToken, ...]:
+        """Get the most recent trade prices for multiple tokens."""
         path, body = _clob_actions.build_last_trade_prices_request(token_ids=token_ids)
         return _clob_actions.parse_last_trade_prices(self._ctx.clob.post_json(path, json=body))
 
@@ -1101,6 +1215,7 @@ class SecureClient:
         fidelity: int | None = None,
         interval: PriceHistoryInterval | None = None,
     ) -> tuple[PriceHistoryPoint, ...]:
+        """Get historical price points for a token."""
         path, params = _clob_actions.build_price_history_request(
             token_id=token_id,
             start_ts=start_ts,
@@ -1137,6 +1252,11 @@ class SecureClient:
         shares: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FOK",
     ) -> Decimal:
+        """Estimate the average execution price for a market order.
+
+        BUY orders use ``amount`` as the spend amount. SELL orders use ``shares``
+        as the number of shares to sell.
+        """
         return _estimate_market_price_sync(
             self._ctx,
             token_id=token_id,
@@ -1147,6 +1267,12 @@ class SecureClient:
         )
 
     def list_current_rewards(self, *, sponsored: bool | None = None) -> Paginator[CurrentReward]:
+        """List current rewards.
+
+        Returns:
+            A paginator over current reward configurations.
+        """
+
         def fetch(cursor: str | None) -> Page[CurrentReward]:
             path, params = _rewards_actions.build_list_current_rewards_request(
                 sponsored=sponsored, cursor=cursor
@@ -1160,6 +1286,12 @@ class SecureClient:
     def list_market_rewards(
         self, *, condition_id: str, sponsored: bool | None = None
     ) -> Paginator[MarketReward]:
+        """List rewards for a market condition.
+
+        Returns:
+            A paginator over matching market reward configurations.
+        """
+
         def fetch(cursor: str | None) -> Page[MarketReward]:
             path, params = _rewards_actions.build_list_market_rewards_request(
                 condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor
@@ -1171,12 +1303,15 @@ class SecureClient:
         return Paginator(fetch=fetch)
 
     def fetch_api_keys(self) -> tuple[str, ...]:
+        """Fetch API key identifiers for the authenticated account."""
         return _auth_actions.fetch_api_keys_sync(self._ctx.secure_clob)
 
     def delete_api_key(self) -> None:
+        """Delete the API key currently used by this client."""
         _auth_actions.delete_api_key_sync(self._ctx.secure_clob)
 
     def end_authentication(self) -> "PublicClient":
+        """Delete current credentials, close this client, and return a public client."""
         from polymarket.clients.public import PublicClient
 
         environment = self._ctx.environment
@@ -1572,18 +1707,26 @@ class SecureClient:
         return create_signed_order(unsigned, final_signature, post_only=post_only)
 
     def get_order_scoring(self, *, order_id: str) -> bool:
+        """Return whether an order is currently scoring rewards."""
         path, params = _rewards_actions.build_get_order_scoring_request(order_id=order_id)
         return _rewards_actions.parse_order_scoring(
             self._ctx.secure_clob.get_json(path, params=params)
         )
 
     def get_orders_scoring(self, *, order_ids: Sequence[str]) -> dict[str, bool]:
+        """Return reward-scoring status for multiple orders."""
         path, body = _rewards_actions.build_get_orders_scoring_request(order_ids=order_ids)
         return _rewards_actions.parse_orders_scoring(
             self._ctx.secure_clob.post_json(path, json=body)
         )
 
     def list_user_earnings_for_day(self, *, date: str) -> Paginator[UserEarning]:
+        """List reward earnings for the authenticated user on a date.
+
+        Returns:
+            A paginator over matching earning entries.
+        """
+
         def fetch(cursor: str | None) -> Page[UserEarning]:
             path, params = _rewards_actions.build_list_user_earnings_for_day_request(
                 date=date,
@@ -1597,6 +1740,7 @@ class SecureClient:
         return Paginator(fetch=fetch)
 
     def get_total_earnings_for_user_for_day(self, *, date: str) -> tuple[TotalUserEarning, ...]:
+        """Get total reward earnings for the authenticated user on a date."""
         path, params = _rewards_actions.build_total_user_earnings_for_day_request(
             date=date, signature_type=signature_type_for(self._ctx.wallet_type)
         )
@@ -1613,6 +1757,12 @@ class SecureClient:
         position: str | None = None,
         page_size: int | None = None,
     ) -> Paginator[UserRewardsEarning]:
+        """List reward earnings with market configuration for the authenticated user.
+
+        Returns:
+            A paginator over matching reward earning entries.
+        """
+
         def fetch(cursor: str | None) -> Page[UserRewardsEarning]:
             path, params = _rewards_actions.build_list_user_earnings_and_markets_config_request(
                 date=date,
@@ -1630,6 +1780,7 @@ class SecureClient:
         return Paginator(fetch=fetch)
 
     def get_reward_percentages(self) -> RewardsPercentages:
+        """Get current reward percentage allocations for the authenticated account."""
         path, params = _rewards_actions.build_get_reward_percentages_request(
             signature_type=signature_type_for(self._ctx.wallet_type)
         )

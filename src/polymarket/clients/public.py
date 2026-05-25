@@ -110,6 +110,7 @@ class PublicClient:
 
     @property
     def environment(self) -> Environment:
+        """Environment this client sends requests to."""
         return self._ctx.environment
 
     def __enter__(self) -> Self:
