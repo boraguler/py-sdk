@@ -25,10 +25,16 @@ EquityPricesEventType = Literal["update", "subscribe"]
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MarketSpec:
-    """Subscribe to realtime market updates for one or more token ids."""
+    """Subscribe to realtime market updates for one or more token ids.
+
+    Set ``custom_feature_enabled=True`` to additionally receive
+    ``MarketBestBidAskEvent``, ``NewMarketEvent``, and ``MarketResolvedEvent``.
+    """
 
     token_ids: Sequence[str]
+    """Token ids whose market events should be delivered."""
     custom_feature_enabled: bool = False
+    """Whether to enable top-of-book and market lifecycle events."""
     topic: Literal["market"] = field(default="market", init=False)
 
     def __post_init__(self) -> None:

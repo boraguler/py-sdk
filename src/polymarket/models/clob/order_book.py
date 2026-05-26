@@ -21,7 +21,9 @@ class OrderBook(BaseModel):
     token_id: TokenId = Field(validation_alias="asset_id")
     timestamp: datetime | None = None
     bids: tuple[OrderBookLevel, ...]
+    """Bid levels in ascending price order, lowest bid first."""
     asks: tuple[OrderBookLevel, ...]
+    """Ask levels in descending price order, highest ask first."""
     min_order_size: _DecimalFromString
     tick_size: _DecimalFromString
     neg_risk: bool
