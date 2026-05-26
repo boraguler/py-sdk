@@ -64,7 +64,7 @@ def validate_limit_order_params(
         if expiration < 0:
             raise UserInputError("expiration must be a non-negative integer.")
         minimum = int(time.time()) + _MIN_EXPIRATION_BUFFER_S
-        if expiration <= minimum:
+        if expiration < minimum:
             raise UserInputError(
                 f"expiration must be at least {_MIN_EXPIRATION_BUFFER_S} seconds in the future."
             )
