@@ -1595,6 +1595,10 @@ class AsyncSecureClient:
 
         Use :meth:`post_order` to submit the returned signed order, or
         :meth:`place_limit_order` to create and post in one call.
+
+        When ``expiration`` is provided, it must be a Unix timestamp at least
+        60 seconds in the future. Use extra buffer for immediate submissions to
+        account for latency and clock skew.
         """
         params = validate_limit_order_params(
             token_id=token_id,
@@ -1690,7 +1694,12 @@ class AsyncSecureClient:
         expiration: int | None = None,
         builder_code: str | None = None,
     ) -> OrderResponse:
-        """Create, sign, and post a limit order."""
+        """Create, sign, and post a limit order.
+
+        When ``expiration`` is provided, it must be a Unix timestamp at least
+        60 seconds in the future. Use extra buffer for immediate submissions to
+        account for latency and clock skew.
+        """
         signed = await self.create_limit_order(
             token_id=token_id,
             price=price,
