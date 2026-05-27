@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.0-b3](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b2...polymarket-client-v0.1.0-b3) (2026-05-26)
+
+
+### Bug Fixes
+
+* accept GTD expiration boundary ([3a5615f](https://github.com/Polymarket/py-sdk/commit/3a5615f279058df1ba98b77948a03ff13f0be4ab))
+* accept GTD expiration boundary ([7d24c67](https://github.com/Polymarket/py-sdk/commit/7d24c67db78311d0307a56f82cc3583b5c79e17f))
+
+
+### Documentation
+
+* clarify market stream and orderbook fields ([ae23142](https://github.com/Polymarket/py-sdk/commit/ae23142e4bda6587a78433d98985a58aaaa6fdec))
+* clarify market stream and orderbook fields ([cb5fc33](https://github.com/Polymarket/py-sdk/commit/cb5fc337715840e06bda436c3777b10cad0819c2))
+* note GTD expiration buffer ([20c9600](https://github.com/Polymarket/py-sdk/commit/20c9600c40fe7420a2ed20da993c357db28abf56))
+
 ## [0.1.0-b2](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b1...polymarket-client-v0.1.0-b2) (2026-05-25)
 
 
