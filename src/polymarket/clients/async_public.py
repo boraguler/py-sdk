@@ -343,13 +343,12 @@ class AsyncPublicClient:
         self,
         id: str,
         *,
-        include_chat: bool | None = None,
         locale: str | None = None,
     ) -> Series:
         """Get a series."""
         return await async_dispatch(
             self._ctx,
-            _gamma_actions.get_series_spec(id, include_chat=include_chat, locale=locale),
+            _gamma_actions.get_series_spec(id, locale=locale),
         )
 
     async def get_tag(
@@ -357,7 +356,6 @@ class AsyncPublicClient:
         *,
         id: str | None = None,
         slug: str | None = None,
-        include_chat: bool | None = None,
         include_template: bool | None = None,
         locale: str | None = None,
     ) -> Tag:
@@ -367,7 +365,6 @@ class AsyncPublicClient:
             _gamma_actions.get_tag_spec(
                 id=id,
                 slug=slug,
-                include_chat=include_chat,
                 include_template=include_template,
                 locale=locale,
             ),
@@ -874,11 +871,8 @@ class AsyncPublicClient:
         self,
         *,
         ascending: bool | None = None,
-        categories_ids: int | Sequence[int] | None = None,
-        categories_labels: str | Sequence[str] | None = None,
         closed: bool | None = None,
         exclude_events: bool | None = None,
-        include_chat: bool | None = None,
         locale: str | None = None,
         order: str | None = None,
         recurrence: Recurrence | None = None,
@@ -892,11 +886,8 @@ class AsyncPublicClient:
         """
         spec = _gamma_actions.list_series_spec(
             ascending=ascending,
-            categories_ids=categories_ids,
-            categories_labels=categories_labels,
             closed=closed,
             exclude_events=exclude_events,
-            include_chat=include_chat,
             locale=locale,
             order=order,
             recurrence=recurrence,
@@ -908,7 +899,6 @@ class AsyncPublicClient:
         self,
         *,
         ascending: bool | None = None,
-        include_chat: bool | None = None,
         include_template: bool | None = None,
         is_carousel: bool | None = None,
         locale: str | None = None,
@@ -922,7 +912,6 @@ class AsyncPublicClient:
         """
         spec = _gamma_actions.list_tags_spec(
             ascending=ascending,
-            include_chat=include_chat,
             include_template=include_template,
             is_carousel=is_carousel,
             locale=locale,

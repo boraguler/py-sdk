@@ -225,14 +225,13 @@ def get_event_tags_spec(id: str) -> RequestSpec[tuple[TagReference, ...]]:
 def get_series_spec(
     id: str,
     *,
-    include_chat: bool | None,
     locale: str | None,
 ) -> RequestSpec[Series]:
     return RequestSpec(
         service="gamma",
         method="GET",
         path=build_series_path(id),
-        params={"include_chat": include_chat, "locale": locale},
+        params={"locale": locale},
         parse=Series.parse_response,
     )
 
@@ -241,20 +240,16 @@ def get_tag_spec(
     *,
     id: str | None,
     slug: str | None,
-    include_chat: bool | None,
     include_template: bool | None,
     locale: str | None,
 ) -> RequestSpec[Tag]:
-    if slug is not None and (include_chat is not None or include_template is not None):
-        raise UserInputError(
-            "include_chat and include_template are only supported for tag id lookup."
-        )
+    if slug is not None and include_template is not None:
+        raise UserInputError("include_template is only supported for tag id lookup.")
     return RequestSpec(
         service="gamma",
         method="GET",
         path=build_tag_path(id=id, slug=slug),
         params={
-            "include_chat": include_chat,
             "include_template": include_template,
             "locale": locale,
         },
@@ -534,11 +529,8 @@ def list_markets_spec(
 def list_series_spec(
     *,
     ascending: bool | None = None,
-    categories_ids: int | Sequence[int] | None = None,
-    categories_labels: str | Sequence[str] | None = None,
     closed: bool | None = None,
     exclude_events: bool | None = None,
-    include_chat: bool | None = None,
     locale: str | None = None,
     order: str | None = None,
     recurrence: Recurrence | None = None,
@@ -548,11 +540,8 @@ def list_series_spec(
 
     params: dict[str, QueryParamValue] = {}
     _add_optional(params, "ascending", ascending)
-    _add_optional_seq(params, "categories_ids", categories_ids)
-    _add_optional_seq(params, "categories_labels", categories_labels)
     _add_optional(params, "closed", closed)
     _add_optional(params, "exclude_events", exclude_events)
-    _add_optional(params, "include_chat", include_chat)
     _add_optional(params, "locale", locale)
     _add_optional(params, "order", order)
     _add_optional(params, "recurrence", recurrence)
@@ -569,7 +558,6 @@ def list_series_spec(
 def list_tags_spec(
     *,
     ascending: bool | None = None,
-    include_chat: bool | None = None,
     include_template: bool | None = None,
     is_carousel: bool | None = None,
     locale: str | None = None,
@@ -577,7 +565,6 @@ def list_tags_spec(
 ) -> OffsetPaginatedSpec[Tag]:
     params: dict[str, QueryParamValue] = {}
     _add_optional(params, "ascending", ascending)
-    _add_optional(params, "include_chat", include_chat)
     _add_optional(params, "include_template", include_template)
     _add_optional(params, "is_carousel", is_carousel)
     _add_optional(params, "locale", locale)

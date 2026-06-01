@@ -96,66 +96,47 @@ def test_get_event_tags_spec_rejects_empty_id() -> None:
 
 
 def test_get_series_spec_includes_optional_params() -> None:
-    spec = gamma_actions.get_series_spec("series-id", include_chat=True, locale="en")
+    spec = gamma_actions.get_series_spec("series-id", locale="en")
 
     assert spec.service == "gamma"
     assert spec.path == "/series/series-id"
-    assert spec.params == {"include_chat": True, "locale": "en"}
+    assert spec.params == {"locale": "en"}
 
 
 def test_get_series_spec_omits_unset_params() -> None:
-    spec = gamma_actions.get_series_spec("series-id", include_chat=None, locale=None)
+    spec = gamma_actions.get_series_spec("series-id", locale=None)
 
-    assert spec.params == {"include_chat": None, "locale": None}
+    assert spec.params == {"locale": None}
 
 
 def test_get_series_spec_rejects_empty_id() -> None:
     with pytest.raises(UserInputError, match="id is required"):
-        gamma_actions.get_series_spec("", include_chat=None, locale=None)
+        gamma_actions.get_series_spec("", locale=None)
 
 
 def test_get_tag_spec_by_id_includes_options() -> None:
-    spec = gamma_actions.get_tag_spec(
-        id="42", slug=None, include_chat=True, include_template=True, locale="en"
-    )
+    spec = gamma_actions.get_tag_spec(id="42", slug=None, include_template=True, locale="en")
 
     assert spec.path == "/tags/42"
     assert spec.params == {
-        "include_chat": True,
         "include_template": True,
         "locale": "en",
     }
 
 
 def test_get_tag_spec_by_slug_with_only_locale() -> None:
-    spec = gamma_actions.get_tag_spec(
-        id=None, slug="politics", include_chat=None, include_template=None, locale="en"
-    )
+    spec = gamma_actions.get_tag_spec(id=None, slug="politics", include_template=None, locale="en")
 
     assert spec.path == "/tags/slug/politics"
     assert spec.params == {
-        "include_chat": None,
         "include_template": None,
         "locale": "en",
     }
 
 
-def test_get_tag_spec_rejects_slug_with_include_chat() -> None:
-    with pytest.raises(
-        UserInputError, match="include_chat and include_template are only supported for tag id"
-    ):
-        gamma_actions.get_tag_spec(
-            id=None, slug="politics", include_chat=True, include_template=None, locale=None
-        )
-
-
 def test_get_tag_spec_rejects_slug_with_include_template() -> None:
-    with pytest.raises(
-        UserInputError, match="include_chat and include_template are only supported for tag id"
-    ):
-        gamma_actions.get_tag_spec(
-            id=None, slug="politics", include_chat=None, include_template=True, locale=None
-        )
+    with pytest.raises(UserInputError, match="include_template is only supported for tag id"):
+        gamma_actions.get_tag_spec(id=None, slug="politics", include_template=True, locale=None)
 
 
 def test_get_related_tags_spec_by_id_includes_filters() -> None:
