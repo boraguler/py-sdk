@@ -5,11 +5,10 @@ from __future__ import annotations
 from pydantic import Field
 
 from polymarket.models.base import BaseModel
-from polymarket.models.gamma.common import Chat, TagReference, TemplateReference
+from polymarket.models.gamma.common import TagReference, TemplateReference
 
 
 class Tag(TagReference):
-    chats: tuple[Chat, ...] | None = None
     templates: tuple[TemplateReference, ...] | None = None
 
 
