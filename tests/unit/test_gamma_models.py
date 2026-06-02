@@ -420,7 +420,6 @@ def test_series_parses_with_nested_collections() -> None:
             "liquidity": "800",
             "events": [{"id": "EVENT-1"}],
             "collections": [{"id": "COLL-1", "slug": "c1"}],
-            "categories": [{"id": "CAT-1", "label": "Cat 1"}],
             "tags": [{"id": "TAG-1", "label": "Tag 1"}],
         }
     )
@@ -429,7 +428,6 @@ def test_series_parses_with_nested_collections() -> None:
     assert series.volume == Decimal("1500")
     assert series.events is not None and len(series.events) == 1
     assert series.collections is not None and series.collections[0].slug == "c1"
-    assert series.categories is not None and series.categories[0].label == "Cat 1"
 
 
 def test_series_accepts_integer_id_per_ts_schema() -> None:
@@ -445,13 +443,6 @@ def test_tag_inherits_tag_reference_fields_and_adds_chats() -> None:
             "label": "Politics",
             "slug": "politics",
             "isCarousel": True,
-            "chats": [
-                {
-                    "id": "CHAT-1",
-                    "channelId": "ch-1",
-                    "live": False,
-                }
-            ],
             "templates": [
                 {
                     "id": "TPL-1",
@@ -464,7 +455,6 @@ def test_tag_inherits_tag_reference_fields_and_adds_chats() -> None:
     assert tag.id == "TAG-1"
     assert tag.label == "Politics"
     assert tag.is_carousel is True
-    assert tag.chats is not None and tag.chats[0].channel_id == "ch-1"
     assert tag.templates is not None and tag.templates[0].display_name == "Template"
 
 

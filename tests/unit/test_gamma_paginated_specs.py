@@ -77,10 +77,10 @@ def test_list_series_spec_default_has_no_params() -> None:
     assert spec.base_params is None
 
 
-def test_list_series_spec_with_categories() -> None:
-    spec = gamma_actions.list_series_spec(closed=False, categories_ids=[1, 2])
+def test_list_series_spec_collects_filter_params() -> None:
+    spec = gamma_actions.list_series_spec(closed=False, exclude_events=True, slug=["nba"])
 
-    assert spec.base_params == {"closed": False, "categories_ids": (1, 2)}
+    assert spec.base_params == {"closed": False, "exclude_events": True, "slug": ("nba",)}
 
 
 def test_list_series_spec_rejects_invalid_recurrence() -> None:
@@ -97,9 +97,9 @@ def test_list_tags_spec_default_has_no_params() -> None:
 
 
 def test_list_tags_spec_with_options() -> None:
-    spec = gamma_actions.list_tags_spec(include_chat=True, locale="en")
+    spec = gamma_actions.list_tags_spec(include_template=True, locale="en")
 
-    assert spec.base_params == {"include_chat": True, "locale": "en"}
+    assert spec.base_params == {"include_template": True, "locale": "en"}
 
 
 def test_list_teams_spec_default_has_no_params() -> None:
