@@ -60,6 +60,18 @@ class EoaTransactionHandle:
 
 
 @dataclass(frozen=True, slots=True)
+class DeprecatedTransactionHandle:
+    """Compatibility handle for workflows that now wait internally."""
+
+    transaction_hash: None = None
+    transaction_id: None = None
+
+    async def wait(self) -> None:
+        """Return immediately; retained for backward compatibility."""
+        return None
+
+
+@dataclass(frozen=True, slots=True)
 class SyncGaslessTransactionHandle:
     """Synchronous handle for a relayed gasless transaction."""
 
@@ -108,6 +120,18 @@ class SyncEoaTransactionHandle:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class SyncDeprecatedTransactionHandle:
+    """Synchronous compatibility handle for workflows that now wait internally."""
+
+    transaction_hash: None = None
+    transaction_id: None = None
+
+    def wait(self) -> None:
+        """Return immediately; retained for backward compatibility."""
+        return None
+
+
 TransactionHandle: TypeAlias = GaslessTransactionHandle | EoaTransactionHandle
 """Async transaction handle returned by async wallet methods."""
 
@@ -118,6 +142,8 @@ SyncTransactionHandle: TypeAlias = SyncGaslessTransactionHandle | SyncEoaTransac
 __all__ = [
     "EoaTransactionHandle",
     "GaslessTransactionHandle",
+    "DeprecatedTransactionHandle",
+    "SyncDeprecatedTransactionHandle",
     "SyncEoaTransactionHandle",
     "SyncGaslessTransactionHandle",
     "SyncTransactionHandle",

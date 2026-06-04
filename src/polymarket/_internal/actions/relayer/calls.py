@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import cast
 
+from eth_abi.abi import decode as abi_decode
 from eth_abi.abi import encode as abi_encode
 from eth_utils.crypto import keccak
 from eth_utils.hexadecimal import decode_hex
 
-from polymarket.errors import UserInputError
+from polymarket.errors import UnexpectedResponseError, UserInputError
 from polymarket.types import EvmAddress, HexString
 
 MAX_UINT256 = (1 << 256) - 1
@@ -18,8 +19,10 @@ def _selector(signature: str) -> bytes:
 
 
 _ERC20_APPROVE_SELECTOR = _selector("approve(address,uint256)")
+_ERC20_ALLOWANCE_SELECTOR = _selector("allowance(address,address)")
 _ERC20_TRANSFER_SELECTOR = _selector("transfer(address,uint256)")
 _ERC1155_SET_APPROVAL_FOR_ALL_SELECTOR = _selector("setApprovalForAll(address,bool)")
+_ERC1155_IS_APPROVED_FOR_ALL_SELECTOR = _selector("isApprovedForAll(address,address)")
 _CTF_SPLIT_POSITION_SELECTOR = _selector("splitPosition(address,bytes32,bytes32,uint256[],uint256)")
 _CTF_MERGE_POSITIONS_SELECTOR = _selector(
     "mergePositions(address,bytes32,bytes32,uint256[],uint256)"
@@ -52,6 +55,19 @@ def erc20_approval_call(
     )
 
 
+def erc20_allowance_call(
+    *, token_address: EvmAddress, owner: EvmAddress, spender: EvmAddress
+) -> TransactionCall:
+    payload = _ERC20_ALLOWANCE_SELECTOR + abi_encode(
+        ["address", "address"], [str(owner), str(spender)]
+    )
+    return TransactionCall(to=token_address, data=cast(HexString, "0x" + payload.hex()))
+
+
+def decode_erc20_allowance_result(data: str) -> int:
+    return cast(int, _decode_return_data(data, "uint256"))
+
+
 def erc20_transfer_call(
     *, token_address: EvmAddress, recipient: EvmAddress, amount: int
 ) -> TransactionCall:
@@ -75,6 +91,19 @@ def erc1155_set_approval_for_all_call(
         to=token_address,
         data=cast(HexString, "0x" + payload.hex()),
     )
+
+
+def erc1155_is_approved_for_all_call(
+    *, token_address: EvmAddress, owner: EvmAddress, operator: EvmAddress
+) -> TransactionCall:
+    payload = _ERC1155_IS_APPROVED_FOR_ALL_SELECTOR + abi_encode(
+        ["address", "address"], [str(owner), str(operator)]
+    )
+    return TransactionCall(to=token_address, data=cast(HexString, "0x" + payload.hex()))
+
+
+def decode_erc1155_is_approved_for_all_result(data: str) -> bool:
+    return cast(bool, _decode_return_data(data, "bool"))
 
 
 def split_position_call(
@@ -157,6 +186,18 @@ def _condition_id_bytes(condition_id: str) -> bytes:
     return raw
 
 
+def _decode_return_data(data: str, abi_type: str) -> object:
+    try:
+        values = abi_decode([abi_type], decode_hex(data))
+    except Exception as error:
+        raise UnexpectedResponseError(
+            f"Could not decode {abi_type} return data: {error}"
+        ) from error
+    if len(values) != 1:
+        raise UnexpectedResponseError(f"Expected one {abi_type} return value, got {len(values)}")
+    return values[0]
+
+
 def encode_proxy_call(calls: list[TransactionCall]) -> HexString:
     if not calls:
         raise UserInputError("encode_proxy_call requires at least one call")
@@ -192,9 +233,13 @@ __all__ = [
     "MAX_UINT256",
     "TransactionCall",
     "ctf_redeem_positions_call",
+    "decode_erc1155_is_approved_for_all_result",
+    "decode_erc20_allowance_result",
     "encode_proxy_call",
     "encode_safe_multisend_call",
+    "erc1155_is_approved_for_all_call",
     "erc1155_set_approval_for_all_call",
+    "erc20_allowance_call",
     "erc20_approval_call",
     "erc20_transfer_call",
     "merge_positions_call",
