@@ -10,7 +10,7 @@ permissions:
 jobs:
   integration:
     name: Integration tests
-    runs-on: arc-runner-set-euw1
+    runs-on: arc-public-runner-set-euw1
 
     steps:
       - name: Checkout
