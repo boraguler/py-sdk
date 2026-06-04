@@ -36,6 +36,12 @@ dependencies = [
   "websockets>=13,<16",
 ]
 
+[project.optional-dependencies]
+arrow = ["pyarrow>=15,<22"]
+pandas = ["pandas>=2,<3", "pyarrow>=15,<22"]
+polars = ["polars>=1,<2", "pyarrow>=15,<22"]
+quant = ["pandas>=2,<3", "polars>=1,<2", "pyarrow>=15,<22"]
+
 [project.urls]
 Homepage = "https://polymarket.com"
 Documentation = "https://docs.polymarket.com"
@@ -51,6 +57,12 @@ dev = [
   "pyright>=1.1,<2",
   "pytest-watcher>=0.6.3",
   "python-dotenv>=1.2.2",
+  # Frames extras — dev needs all of them to run the frames test suite.
+  # Production users install only the extras they need via
+  # ``polymarket-client[pandas|polars|arrow|quant]``.
+  "pyarrow>=15,<22",
+  "pandas>=2,<3",
+  "polars>=1,<2",
 ]
 
 [tool.hatch.build]
@@ -102,3 +114,15 @@ pythonVersion = "3.11"
 typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
+
+# The frames adapters wrap pyarrow / pandas / polars, none of which ship
+# first-class type stubs that satisfy strict mode. Loosen the unknown-type
+# reports for these modules only; everything else stays strict.
+[[tool.pyright.executionEnvironments]]
+root = "src/polymarket/frames"
+reportMissingTypeStubs = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownParameterType = "none"
+reportUnknownLambdaType = "none"

@@ -1,35 +1,51 @@
+"""Paginators and pages returned by SDK list-style endpoints."""
+
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Generic, TypeVar, cast
+from typing import Any, Generic, Literal, TypeVar, cast
 
+from polymarket._frames_bridge import frames_func as _frames_func
 from polymarket.errors import UnexpectedResponseError
 
 T = TypeVar("T")
 
 
+# Frame-method returns are typed as ``Any`` because pandas/polars/pyarrow
+# stubs don't survive strict-mode pyright. Drain ``limit`` is required so
+# multi-page truncation can't be silent.
+LimitArg = int | None
+DecimalMode = Literal["decimal", "float"]
+
+
 @dataclass(frozen=True, slots=True)
 class Page(Generic[T]):
-    """One page of paginated SDK results."""
-
     items: tuple[T, ...]
-    """Items returned on this page."""
     has_more: bool
-    """Whether another page is available."""
     next_cursor: str | None = None
-    """Cursor to pass to ``from_cursor()`` for the next page, when available."""
     total_count: int | None = None
-    """Total matching item count when the API provides it."""
+
+    def to_arrow(self) -> Any:
+        return _frames_func("to_arrow")(self)
+
+    def to_pandas(
+        self,
+        *,
+        decimal: DecimalMode = "decimal",
+        explode: Sequence[str] | None = None,
+    ) -> Any:
+        return _frames_func("to_pandas")(self, decimal=decimal, explode=explode)
+
+    def to_polars(
+        self,
+        *,
+        explode: Sequence[str] | None = None,
+    ) -> Any:
+        return _frames_func("to_polars")(self, explode=explode)
 
 
 class Paginator(Generic[T]):
-    """Synchronous paginator returned by list-style client methods.
-
-    Iterate over the paginator to fetch pages lazily, or call ``items()`` to
-    iterate over individual items across pages.
-    """
-
     def __init__(
         self,
         fetch: Callable[[str | None], Page[T]],
@@ -39,14 +55,9 @@ class Paginator(Generic[T]):
         self._initial_cursor = initial_cursor
 
     def first_page(self) -> Page[T]:
-        """Fetch the first page for this paginator."""
         return self._fetch(self._initial_cursor)
 
     def from_cursor(self, cursor: str | None) -> Paginator[T]:
-        """Create a paginator that starts from ``cursor``.
-
-        Passing ``None`` returns an empty paginator because no next page exists.
-        """
         if cursor is None:
             return cast(Paginator[T], _EmptyPaginator())
         return Paginator(self._fetch, initial_cursor=cursor)
@@ -55,7 +66,6 @@ class Paginator(Generic[T]):
         return self._iter_pages()
 
     def items(self) -> Iterator[T]:
-        """Iterate over individual items across all fetched pages."""
         for page in self._iter_pages():
             yield from page.items
 
@@ -72,14 +82,34 @@ class Paginator(Generic[T]):
                 )
             cursor = page.next_cursor
 
+    def to_arrow(self, *, limit: LimitArg) -> Any:
+        items, _truncated = _drain_paginator(self, limit)
+        return _frames_func("to_arrow")(tuple(items))
+
+    def to_pandas(
+        self,
+        *,
+        limit: LimitArg,
+        decimal: DecimalMode = "decimal",
+        explode: Sequence[str] | None = None,
+    ) -> Any:
+        items, truncated = _drain_paginator(self, limit)
+        df = _frames_func("to_pandas")(tuple(items), decimal=decimal, explode=explode)
+        if truncated:
+            df.attrs["polymarket_truncated"] = True
+        return df
+
+    def to_polars(
+        self,
+        *,
+        limit: LimitArg,
+        explode: Sequence[str] | None = None,
+    ) -> Any:
+        items, _truncated = _drain_paginator(self, limit)
+        return _frames_func("to_polars")(tuple(items), explode=explode)
+
 
 class AsyncPaginator(Generic[T]):
-    """Async paginator returned by async list-style client methods.
-
-    Use ``async for`` over the paginator to fetch pages lazily, or call
-    ``items()`` to iterate over individual items across pages.
-    """
-
     def __init__(
         self,
         fetch: Callable[[str | None], Awaitable[Page[T]]],
@@ -89,14 +119,9 @@ class AsyncPaginator(Generic[T]):
         self._initial_cursor = initial_cursor
 
     async def first_page(self) -> Page[T]:
-        """Fetch the first page for this paginator."""
         return await self._fetch(self._initial_cursor)
 
     def from_cursor(self, cursor: str | None) -> AsyncPaginator[T]:
-        """Create an async paginator that starts from ``cursor``.
-
-        Passing ``None`` returns an empty paginator because no next page exists.
-        """
         if cursor is None:
             return cast(AsyncPaginator[T], _EmptyAsyncPaginator())
         return AsyncPaginator(self._fetch, initial_cursor=cursor)
@@ -105,7 +130,6 @@ class AsyncPaginator(Generic[T]):
         return self._iter_pages()
 
     def items(self) -> AsyncIterator[T]:
-        """Iterate over individual items across all fetched pages."""
         return self._iter_items()
 
     async def _iter_pages(self) -> AsyncIterator[Page[T]]:
@@ -125,6 +149,71 @@ class AsyncPaginator(Generic[T]):
         async for page in self._iter_pages():
             for item in page.items:
                 yield item
+
+    async def to_arrow(self, *, limit: LimitArg) -> Any:
+        items, _truncated = await _drain_async_paginator(self, limit)
+        return _frames_func("to_arrow")(tuple(items))
+
+    async def to_pandas(
+        self,
+        *,
+        limit: LimitArg,
+        decimal: DecimalMode = "decimal",
+        explode: Sequence[str] | None = None,
+    ) -> Any:
+        items, truncated = await _drain_async_paginator(self, limit)
+        df = _frames_func("to_pandas")(tuple(items), decimal=decimal, explode=explode)
+        if truncated:
+            df.attrs["polymarket_truncated"] = True
+        return df
+
+    async def to_polars(
+        self,
+        *,
+        limit: LimitArg,
+        explode: Sequence[str] | None = None,
+    ) -> Any:
+        items, _truncated = await _drain_async_paginator(self, limit)
+        return _frames_func("to_polars")(tuple(items), explode=explode)
+
+
+def _drain_paginator(paginator: Paginator[T], limit: int | None) -> tuple[list[T], bool]:
+    if limit is None:
+        return list(paginator.items()), False
+    if limit < 0:
+        from polymarket.errors import UserInputError
+
+        raise UserInputError(f"limit must be >= 0 or None; got {limit}.")
+    out: list[T] = []
+    truncated = False
+    for item in paginator.items():
+        if len(out) >= limit:
+            truncated = True
+            break
+        out.append(item)
+    return out, truncated
+
+
+async def _drain_async_paginator(
+    paginator: AsyncPaginator[T], limit: int | None
+) -> tuple[list[T], bool]:
+    if limit is None:
+        out: list[T] = []
+        async for item in paginator.items():
+            out.append(item)
+        return out, False
+    if limit < 0:
+        from polymarket.errors import UserInputError
+
+        raise UserInputError(f"limit must be >= 0 or None; got {limit}.")
+    out2: list[T] = []
+    truncated = False
+    async for item in paginator.items():
+        if len(out2) >= limit:
+            truncated = True
+            break
+        out2.append(item)
+    return out2, truncated
 
 
 class _EmptyPaginator(Paginator[object]):
@@ -157,7 +246,7 @@ class _EmptyAsyncPaginator(AsyncPaginator[object]):
 
     async def _iter_pages(self) -> AsyncIterator[Page[object]]:
         return
-        yield  # pragma: no cover - keeps the method an async generator
+        yield  # pragma: no cover - forces this method to be an async generator
 
 
 def _empty_sync_fetch(_cursor: str | None) -> Page[object]:
@@ -168,4 +257,4 @@ async def _empty_async_fetch(_cursor: str | None) -> Page[object]:
     return Page(items=(), has_more=False)
 
 
-__all__ = ["AsyncPaginator", "Page", "Paginator"]
+__all__ = ["AsyncPaginator", "DecimalMode", "LimitArg", "Page", "Paginator"]
