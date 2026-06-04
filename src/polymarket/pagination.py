@@ -184,6 +184,9 @@ def _drain_paginator(paginator: Paginator[T], limit: int | None) -> tuple[list[T
         from polymarket.errors import UserInputError
 
         raise UserInputError(f"limit must be >= 0 or None; got {limit}.")
+    if limit == 0:
+        # Skip the fetch entirely; with no observation we can't claim truncation.
+        return [], False
     out: list[T] = []
     truncated = False
     for item in paginator.items():
@@ -206,6 +209,8 @@ async def _drain_async_paginator(
         from polymarket.errors import UserInputError
 
         raise UserInputError(f"limit must be >= 0 or None; got {limit}.")
+    if limit == 0:
+        return [], False
     out2: list[T] = []
     truncated = False
     async for item in paginator.items():

@@ -38,8 +38,7 @@ def to_arrow(value: object) -> pa.Table:
         )
     if isinstance(value, AsyncPaginator):
         raise TypeError(
-            "to_arrow() does not accept AsyncPaginator. Use "
-            "`await paginator.to_arrow(limit=N)`."
+            "to_arrow() does not accept AsyncPaginator. Use `await paginator.to_arrow(limit=N)`."
         )
 
     if isinstance(value, BaseModel):

@@ -126,11 +126,12 @@ def test_paginator_limit_int_larger_than_available() -> None:
     assert "polymarket_truncated" not in df.attrs
 
 
-def test_paginator_limit_zero_returns_empty_dataframe() -> None:
-    paginator, _ = _three_page_sync()
+def test_paginator_limit_zero_returns_empty_dataframe_without_fetching() -> None:
+    paginator, fetched = _three_page_sync()
     df = paginator.to_pandas(limit=0)
     assert len(df) == 0
-    assert df.attrs.get("polymarket_truncated") is True
+    assert "polymarket_truncated" not in df.attrs
+    assert fetched == []
 
 
 def test_paginator_negative_limit_rejected() -> None:
@@ -222,6 +223,17 @@ def test_async_paginator_negative_limit_rejected() -> None:
         paginator, _ = _three_page_async()
         with pytest.raises(UserInputError, match="limit must be >= 0"):
             await paginator.to_pandas(limit=-5)
+
+    _run(go())
+
+
+def test_async_paginator_limit_zero_does_not_fetch() -> None:
+    async def go() -> None:
+        paginator, fetched = _three_page_async()
+        df = await paginator.to_pandas(limit=0)
+        assert len(df) == 0
+        assert "polymarket_truncated" not in df.attrs
+        assert fetched == []
 
     _run(go())
 
