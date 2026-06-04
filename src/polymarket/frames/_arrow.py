@@ -28,7 +28,7 @@ def to_arrow(value: object) -> pa.Table:
         return override(value)
 
     if isinstance(value, Page):
-        return _build_table_from_models(list(value.items))
+        return to_arrow(tuple(value.items))
 
     if isinstance(value, Paginator):
         raise TypeError(
@@ -49,6 +49,13 @@ def to_arrow(value: object) -> pa.Table:
         items = list(value)
         if not items:
             return pa.table({})
+        # Homogeneous sequence whose element type has an override:
+        # hand the whole list to the override so it can emit identity columns.
+        types_seen = {type(it) for it in items}
+        if len(types_seen) == 1:
+            seq_override = lookup_override(next(iter(types_seen)))
+            if seq_override is not None:
+                return seq_override(items)
         if all(isinstance(item, BaseModel) for item in items):
             return _build_table_from_models(items)
         raise TypeError(

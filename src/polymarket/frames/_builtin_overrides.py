@@ -13,12 +13,26 @@ if TYPE_CHECKING:
 
 @register_override(OrderBook)
 def _orderbook_to_arrow(value: object) -> pa.Table:  # pyright: ignore[reportUnusedFunction]
+    # Single book -> [side, level, price, size]; sequence of books ->
+    # [market, token_id, side, level, price, size] so rows stay attributable.
     from polymarket.frames._arrow import _build_table_from_rows
 
-    assert isinstance(value, OrderBook)
+    if isinstance(value, OrderBook):
+        return _build_table_from_rows(_orderbook_rows(value))
+
+    assert isinstance(value, (list, tuple))
     rows: list[dict[str, object]] = []
-    for level_idx, lvl in enumerate(value.bids):
-        rows.append({"side": "bid", "level": level_idx, "price": lvl.price, "size": lvl.size})
-    for level_idx, lvl in enumerate(value.asks):
-        rows.append({"side": "ask", "level": level_idx, "price": lvl.price, "size": lvl.size})
+    for book in value:
+        assert isinstance(book, OrderBook)
+        for r in _orderbook_rows(book):
+            rows.append({"market": book.market, "token_id": book.token_id, **r})
     return _build_table_from_rows(rows)
+
+
+def _orderbook_rows(book: OrderBook) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for level_idx, lvl in enumerate(book.bids):
+        rows.append({"side": "bid", "level": level_idx, "price": lvl.price, "size": lvl.size})
+    for level_idx, lvl in enumerate(book.asks):
+        rows.append({"side": "ask", "level": level_idx, "price": lvl.price, "size": lvl.size})
+    return rows

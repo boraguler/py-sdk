@@ -10,16 +10,20 @@ import pyarrow as pa
 
 from polymarket.frames import to_arrow, to_pandas, to_polars
 from polymarket.models import OrderBook
+from polymarket.pagination import Page
 
 
 def _make_book(
     bids: tuple[tuple[str, str], ...] = (("0.49", "100"), ("0.48", "50")),
     asks: tuple[tuple[str, str], ...] = (("0.51", "80"),),
+    *,
+    market: str = "0xfoo",
+    asset_id: str = "42",
 ) -> OrderBook:
     return OrderBook.model_validate(
         {
-            "market": "0xfoo",
-            "asset_id": "42",
+            "market": market,
+            "asset_id": asset_id,
             "timestamp": None,
             "bids": [{"price": p, "size": s} for p, s in bids],
             "asks": [{"price": p, "size": s} for p, s in asks],
@@ -112,3 +116,46 @@ def test_completely_empty_book_yields_empty_table() -> None:
     book = _make_book(bids=(), asks=())
     table = book.to_arrow()
     assert table.num_rows == 0
+
+
+def test_sequence_of_books_includes_identity_columns() -> None:
+    b1 = _make_book(market="0xaaa", asset_id="1")
+    b2 = _make_book(market="0xbbb", asset_id="2", asks=(("0.55", "40"),))
+    table = to_arrow((b1, b2))
+    assert table.column_names == ["market", "token_id", "side", "level", "price", "size"]
+    assert table.num_rows == 6
+    markets = table["market"].to_pylist()
+    assert markets.count("0xaaa") == 3
+    assert markets.count("0xbbb") == 3
+
+
+def test_single_book_in_list_still_includes_identity_columns() -> None:
+    df = to_pandas((_make_book(market="0xaaa", asset_id="1"),))
+    assert list(df.columns) == ["market", "token_id", "side", "level", "price", "size"]
+    assert (df["market"] == "0xaaa").all()
+
+
+def test_page_of_books_uses_sequence_shape() -> None:
+    page: Page[OrderBook] = Page(
+        items=(
+            _make_book(market="0xaaa", asset_id="1"),
+            _make_book(market="0xbbb", asset_id="2"),
+        ),
+        has_more=False,
+    )
+    df = page.to_pandas()
+    assert list(df.columns) == ["market", "token_id", "side", "level", "price", "size"]
+    assert set(df["market"]) == {"0xaaa", "0xbbb"}
+
+
+def test_polars_sequence_of_books() -> None:
+    b1 = _make_book(market="0xaaa", asset_id="1")
+    b2 = _make_book(market="0xbbb", asset_id="2")
+    df = to_polars((b1, b2))
+    assert df.columns == ["market", "token_id", "side", "level", "price", "size"]
+    assert df.shape == (6, 6)
+
+
+def test_single_book_scalar_call_keeps_compact_shape() -> None:
+    table = _make_book().to_arrow()
+    assert table.column_names == ["side", "level", "price", "size"]
