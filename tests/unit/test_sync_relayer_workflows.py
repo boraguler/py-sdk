@@ -1,28 +1,23 @@
 # pyright: reportPrivateUsage=false
 import dataclasses
 import json
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 import httpx
 import pytest
 from _relayer_helpers import (
     SPENDER,
     TOKEN,
-    beacon_factory_rpc_handler,
     install_sync_relayer_handler,
     install_sync_rpc_handler,
-    legacy_factory_rpc_handler,
     make_sync_deposit_client,
     make_sync_eoa_client,
     make_sync_proxy_client,
     make_sync_safe_client,
     request_json,
+    trading_approval_rpc_handler,
 )
 
-from polymarket._internal.wallet import (
-    derive_beacon_deposit_wallet_address,
-    derive_uups_deposit_wallet_address,
-)
 from polymarket.environments import PRODUCTION
 from polymarket.errors import (
     TimeoutError as PolyTimeoutError,
@@ -30,7 +25,6 @@ from polymarket.errors import (
 from polymarket.errors import (
     TransactionFailedError,
     UnexpectedResponseError,
-    UserInputError,
 )
 from polymarket.transactions import SyncEoaTransactionHandle, SyncGaslessTransactionHandle
 
@@ -106,149 +100,6 @@ def test_approve_erc20_eoa_uses_direct_broadcast() -> None:
     assert "eth_sendRawTransaction" in methods
 
 
-def test_is_gasless_ready_deposit_wallet_returns_true() -> None:
-    captured: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        return httpx.Response(200, json={"deployed": True}, request=request)
-
-    with make_sync_deposit_client() as client:
-        install_sync_relayer_handler(client, handler)
-        result = client.is_gasless_ready()
-
-    assert result is True
-    qs = parse_qs(urlparse(str(captured[0].url)).query)
-    assert qs["type"] == ["WALLET"]
-
-
-def test_is_gasless_ready_eoa_legacy_factory_queries_uups_address() -> None:
-    captured: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        return httpx.Response(200, json={"deployed": True}, request=request)
-
-    with make_sync_eoa_client() as client:
-        signer_address = client._ctx.signer.address
-        install_sync_relayer_handler(client, handler)
-        install_sync_rpc_handler(client, legacy_factory_rpc_handler())
-        assert client.is_gasless_ready() is True
-
-    expected = derive_uups_deposit_wallet_address(signer_address, PRODUCTION.wallet_derivation)
-    qs = parse_qs(urlparse(str(captured[0].url)).query)
-    assert qs["address"] == [expected]
-    assert qs["type"] == ["WALLET"]
-
-
-def test_is_gasless_ready_eoa_beacon_factory_queries_beacon_address() -> None:
-    captured: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        return httpx.Response(200, json={"deployed": False}, request=request)
-
-    with make_sync_eoa_client() as client:
-        signer_address = client._ctx.signer.address
-        install_sync_relayer_handler(client, handler)
-        install_sync_rpc_handler(
-            client,
-            beacon_factory_rpc_handler(PRODUCTION.wallet_derivation.deposit_wallet_beacon),
-        )
-        assert client.is_gasless_ready() is False
-
-    expected = derive_beacon_deposit_wallet_address(signer_address, PRODUCTION.wallet_derivation)
-    qs = parse_qs(urlparse(str(captured[0].url)).query)
-    assert qs["address"] == [expected]
-    assert qs["type"] == ["WALLET"]
-
-
-def test_setup_gasless_wallet_rejects_without_api_key() -> None:
-    with (
-        pytest.raises(UserInputError, match="Builder API Key or Relayer API Key"),
-        make_sync_eoa_client(with_api_key=False) as client,
-    ):
-        client.setup_gasless_wallet()
-
-
-def test_setup_gasless_wallet_eoa_skips_deploy_when_already_deployed() -> None:
-    captured: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        path = urlparse(str(request.url)).path
-        if path == "/deployed":
-            return httpx.Response(200, json={"deployed": True}, request=request)
-        return httpx.Response(404, request=request)
-
-    with make_sync_eoa_client() as client:
-        signer_address = client._ctx.signer.address
-        install_sync_relayer_handler(client, handler)
-        install_sync_rpc_handler(client, legacy_factory_rpc_handler())
-        gasless = client.setup_gasless_wallet()
-        try:
-            assert gasless.wallet_type == "DEPOSIT_WALLET"
-            expected = derive_uups_deposit_wallet_address(
-                signer_address, PRODUCTION.wallet_derivation
-            )
-            assert str(gasless.wallet) == expected
-        finally:
-            gasless.close()
-
-    submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
-    assert submit_calls == []
-
-
-def test_setup_gasless_wallet_eoa_deploys_when_not_deployed_and_returns_fresh_client() -> None:
-    captured: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        path = urlparse(str(request.url)).path
-        if path == "/deployed":
-            return httpx.Response(200, json={"deployed": False}, request=request)
-        if path == "/submit":
-            return httpx.Response(
-                200,
-                json={
-                    "state": "STATE_NEW",
-                    "transactionHash": None,
-                    "transactionID": "tx-deploy",
-                },
-                request=request,
-            )
-        if path.startswith("/v1/account/transactions/"):
-            return httpx.Response(
-                200,
-                json={
-                    "state": "STATE_MINED",
-                    "transaction_hash": "0x" + "ab" * 32,
-                    "transaction_id": "tx-deploy",
-                },
-                request=request,
-            )
-        return httpx.Response(404, request=request)
-
-    with make_sync_eoa_client() as client:
-        install_sync_relayer_handler(client, handler)
-        install_sync_rpc_handler(client, legacy_factory_rpc_handler())
-        client._ctx = dataclasses.replace(
-            client._ctx,
-            environment=dataclasses.replace(client._ctx.environment, relayer_poll_frequency_ms=1),
-        )
-        gasless = client.setup_gasless_wallet()
-        try:
-            assert gasless is not client
-            assert gasless.wallet_type == "DEPOSIT_WALLET"
-        finally:
-            gasless.close()
-
-    submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
-    assert len(submit_calls) == 1
-    body = request_json(submit_calls[0])
-    assert body["type"] == "WALLET-CREATE"
-
-
 def test_split_position_routes_through_collateral_adapter() -> None:
     captured: list[httpx.Request] = []
     _CONDITION_ID = "0x" + "11" * 32
@@ -319,16 +170,47 @@ def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> No
                 },
                 request=request,
             )
+        if path == "/v1/account/transactions/tx-setup":
+            return httpx.Response(
+                200,
+                json={
+                    "state": "STATE_MINED",
+                    "transaction_hash": "0x" + "ab" * 32,
+                    "transaction_id": "tx-setup",
+                },
+                request=request,
+            )
         return httpx.Response(404, request=request)
 
     with make_sync_deposit_client() as client:
         install_sync_relayer_handler(client, handler)
+        install_sync_rpc_handler(client, trading_approval_rpc_handler())
         client.setup_trading_approvals()
 
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     body = request_json(submit_calls[0])
     inner_calls = body["depositWalletParams"]["calls"]
     assert len(inner_calls) == 11
+
+
+def test_setup_trading_approvals_skips_submit_when_already_approved() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(404, request=request)
+
+    with make_sync_deposit_client() as client:
+        install_sync_relayer_handler(client, handler)
+        install_sync_rpc_handler(
+            client,
+            trading_approval_rpc_handler(allowance=(1 << 256) - 1, approved=True),
+        )
+        handle = client.setup_trading_approvals()
+        handle.wait()
+
+    submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
+    assert submit_calls == []
 
 
 def test_close_closes_relayer_and_rpc_transports() -> None:
@@ -374,6 +256,16 @@ def _safe_relayer_handler(captured: list[httpx.Request]):  # type: ignore[no-unt
                     "state": "STATE_NEW",
                     "transactionHash": None,
                     "transactionID": "tx-safe",
+                },
+                request=request,
+            )
+        if path == "/v1/account/transactions/tx-safe":
+            return httpx.Response(
+                200,
+                json={
+                    "state": "STATE_MINED",
+                    "transaction_hash": "0x" + "cd" * 32,
+                    "transaction_id": "tx-safe",
                 },
                 request=request,
             )
@@ -428,6 +320,7 @@ def test_setup_trading_approvals_safe_uses_multisend_delegatecall() -> None:
 
     with make_sync_safe_client() as client:
         install_sync_relayer_handler(client, _safe_relayer_handler(captured))
+        install_sync_rpc_handler(client, trading_approval_rpc_handler())
         client.setup_trading_approvals()
 
     submit = [r for r in captured if urlparse(str(r.url)).path == "/submit"][0]
