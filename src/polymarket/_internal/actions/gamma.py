@@ -364,7 +364,7 @@ __all__ = [
 def list_events_spec(
     *,
     ascending: bool | None = None,
-    closed: bool | None = None,
+    closed: bool = False,
     cyom: bool | None = None,
     end_date_max: TimestampFilter | None = None,
     end_date_min: TimestampFilter | None = None,
