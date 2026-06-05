@@ -147,18 +147,21 @@ def test_secure_client_invalid_key_raises_user_input_error() -> None:
         SecureClient.create(private_key="not-a-valid-key", wallet=SIGNER_ADDRESS)
 
 
-def test_secure_client_wallet_defaults_to_signer_when_omitted() -> None:
+def test_secure_client_wallet_defaults_to_current_deposit_wallet_when_omitted() -> None:
     from eth_account import Account
-    from eth_utils.address import to_checksum_address
 
-    expected = to_checksum_address(Account.from_key(PRIVATE_KEY).address)
+    from polymarket._internal.wallet import derive_uups_deposit_wallet_address
+    from polymarket.environments import PRODUCTION
+
+    signer = Account.from_key(PRIVATE_KEY)
+    expected = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
 
     with SecureClient._create(
         private_key=PRIVATE_KEY,
         credentials=FAKE_CREDS,
         validate_credentials=False,
     ) as client:
-        assert client.wallet_type == "EOA"
+        assert client.wallet_type == "DEPOSIT_WALLET"
         assert str(client.wallet) == expected
 
 
@@ -170,19 +173,23 @@ def test_async_secure_client_invalid_key_raises_user_input_error() -> None:
     asyncio.run(run())
 
 
-def test_async_secure_client_wallet_defaults_to_signer_when_omitted() -> None:
+def test_async_secure_client_wallet_defaults_to_current_deposit_wallet_when_omitted() -> None:
     from eth_account import Account
-    from eth_utils.address import to_checksum_address
 
-    expected = to_checksum_address(Account.from_key(PRIVATE_KEY).address)
+    from polymarket._internal.wallet import derive_uups_deposit_wallet_address
+    from polymarket.environments import PRODUCTION
+
+    signer = Account.from_key(PRIVATE_KEY)
+    expected = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
 
     async def run() -> str:
         client = await AsyncSecureClient._create(
             private_key=PRIVATE_KEY,
+            credentials=FAKE_CREDS,
             validate_credentials=False,
         )
         try:
-            assert client.wallet_type == "EOA"
+            assert client.wallet_type == "DEPOSIT_WALLET"
             return str(client.wallet)
         finally:
             await client.close()

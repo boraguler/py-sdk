@@ -5,9 +5,11 @@ from urllib.parse import urlparse
 import httpx
 from _relayer_helpers import (
     install_relayer_routes,
+    install_rpc_handler,
     make_deposit_client,
     make_safe_client,
     request_json,
+    trading_approval_rpc_handler,
 )
 from eth_utils.crypto import keccak
 
@@ -36,8 +38,14 @@ def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> No
                     "transactionHash": None,
                     "transactionID": "tx-setup",
                 },
+                "/v1/account/transactions/tx-setup": {
+                    "state": "STATE_MINED",
+                    "transaction_hash": "0x" + "ab" * 32,
+                    "transaction_id": "tx-setup",
+                },
             },
         )
+        install_rpc_handler(client, trading_approval_rpc_handler())
         try:
             await client.setup_trading_approvals()
         finally:
@@ -86,6 +94,27 @@ def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> No
     assert body["metadata"] == "Trading setup approvals"
 
 
+def test_setup_trading_approvals_skips_submit_when_already_approved() -> None:
+    captured: list[httpx.Request] = []
+
+    async def run() -> None:
+        client = await make_deposit_client()
+        install_relayer_routes(client, captured, {})
+        install_rpc_handler(
+            client,
+            trading_approval_rpc_handler(allowance=(1 << 256) - 1, approved=True),
+        )
+        try:
+            handle = await client.setup_trading_approvals()
+            await handle.wait()
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+    submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
+    assert submit_calls == []
+
+
 def test_setup_trading_approvals_uses_safe_multisend_for_safe() -> None:
     captured: list[httpx.Request] = []
 
@@ -104,8 +133,14 @@ def test_setup_trading_approvals_uses_safe_multisend_for_safe() -> None:
                     "transactionHash": None,
                     "transactionID": "tx-setup-safe",
                 },
+                "/v1/account/transactions/tx-setup-safe": {
+                    "state": "STATE_MINED",
+                    "transaction_hash": "0x" + "cd" * 32,
+                    "transaction_id": "tx-setup-safe",
+                },
             },
         )
+        install_rpc_handler(client, trading_approval_rpc_handler())
         try:
             await client.setup_trading_approvals()
         finally:

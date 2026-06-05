@@ -60,6 +60,9 @@ from polymarket._internal.actions.orders.typed_data import (
     build_order_typed_data,
 )
 from polymarket._internal.actions.orders.types import OrderDraft
+from polymarket._internal.actions.relayer.approvals import (
+    resolve_missing_trading_approval_calls,
+)
 from polymarket._internal.actions.relayer.auth import make_relayer_header_resolver
 from polymarket._internal.actions.relayer.calls import (
     MAX_UINT256,
@@ -189,9 +192,10 @@ from polymarket.streams._specs import (
     SecureSubscription,
     SportsSpec,
     UserSpec,
-    _normalize_specs,
+    normalize_specs,
 )
 from polymarket.transactions import (
+    DeprecatedTransactionHandle,
     EoaTransactionHandle,
     TransactionHandle,
 )
@@ -262,7 +266,7 @@ class AsyncSecureClient:
 
         Args:
             private_key: EVM private key used for signing.
-            wallet: Wallet address to act for. Defaults to the signer's address.
+            wallet: Wallet address to act for. Defaults to the signer's current Deposit Wallet.
             credentials: Existing API credentials. When omitted, credentials are
                 derived during client creation.
             api_key: Optional key for gasless wallet and relayed transaction workflows.
@@ -272,7 +276,7 @@ class AsyncSecureClient:
             UserInputError: If key material, wallet, nonce, or credentials are invalid.
             RequestRejectedError: If credential derivation or validation is rejected.
         """
-        return await cls._create(
+        client = await cls._create(
             private_key=private_key,
             wallet=wallet,
             environment=environment,
@@ -282,6 +286,11 @@ class AsyncSecureClient:
             validate_credentials=True,
             logger=logger,
         )
+        try:
+            return await client._ensure_wallet_ready()
+        except BaseException:
+            await client.close()
+            raise
 
     @classmethod
     async def _create(
@@ -306,7 +315,12 @@ class AsyncSecureClient:
         except (ValueError, TypeError) as error:
             raise UserInputError(f"Invalid private_key: {error}") from error
 
-        resolved_wallet = wallet if wallet else signer.address
+        resolved_wallet = await _resolve_requested_wallet(
+            signer=signer,
+            wallet=wallet,
+            environment=environment,
+            logger=logger,
+        )
         try:
             wallet_checksum = to_checksum_address(resolved_wallet)
         except ValueError as error:
@@ -468,7 +482,7 @@ class AsyncSecureClient:
             A subscription handle. Iterate over it to receive events and close it
             when finished.
         """
-        items = _normalize_specs(specs)
+        items = normalize_specs(specs)
         handles: list[AsyncSubscriptionHandle[Any]] = []
         try:
             for spec in items:
@@ -1844,147 +1858,48 @@ class AsyncSecureClient:
         )
         return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
-    async def setup_trading_approvals(self) -> TransactionHandle:
+    async def setup_trading_approvals(self) -> DeprecatedTransactionHandle:
         """Approve the standard set of trading allowances for the wallet.
 
         EOA wallets submit approvals directly. Gasless wallets submit a relayed
-        transaction. The returned handle represents the final transaction in the
-        setup workflow.
+        transaction. Already-approved allowances are skipped, and the method waits
+        internally for any submitted transactions.
 
         Returns:
-            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+            A deprecated compatibility handle whose ``wait()`` returns immediately.
         """
-        env = self._ctx.environment
-        collateral = cast(EvmAddress, env.collateral_token)
-        conditional = cast(EvmAddress, env.conditional_tokens)
-        calls = [
-            erc20_approval_call(
-                token_address=collateral,
-                spender=cast(EvmAddress, env.standard_exchange),
-                amount=MAX_UINT256,
-            ),
-            erc20_approval_call(
-                token_address=collateral,
-                spender=cast(EvmAddress, env.neg_risk_exchange),
-                amount=MAX_UINT256,
-            ),
-            erc20_approval_call(
-                token_address=collateral,
-                spender=cast(EvmAddress, env.neg_risk_adapter),
-                amount=MAX_UINT256,
-            ),
-            erc20_approval_call(
-                token_address=collateral,
-                spender=cast(EvmAddress, env.collateral_adapter),
-                amount=MAX_UINT256,
-            ),
-            erc20_approval_call(
-                token_address=collateral,
-                spender=cast(EvmAddress, env.neg_risk_collateral_adapter),
-                amount=MAX_UINT256,
-            ),
-            erc1155_set_approval_for_all_call(
-                token_address=conditional,
-                operator=cast(EvmAddress, env.standard_exchange),
-                approved=True,
-            ),
-            erc1155_set_approval_for_all_call(
-                token_address=conditional,
-                operator=cast(EvmAddress, env.neg_risk_exchange),
-                approved=True,
-            ),
-            erc1155_set_approval_for_all_call(
-                token_address=conditional,
-                operator=cast(EvmAddress, env.neg_risk_adapter),
-                approved=True,
-            ),
-            erc1155_set_approval_for_all_call(
-                token_address=conditional,
-                operator=cast(EvmAddress, env.collateral_adapter),
-                approved=True,
-            ),
-            erc1155_set_approval_for_all_call(
-                token_address=conditional,
-                operator=cast(EvmAddress, env.neg_risk_collateral_adapter),
-                approved=True,
-            ),
-            erc1155_set_approval_for_all_call(
-                token_address=conditional,
-                operator=cast(EvmAddress, env.auto_redeem_operator),
-                approved=True,
-            ),
-        ]
+        calls = await resolve_missing_trading_approval_calls(
+            self._ctx.rpc,
+            wallet=self._ctx.wallet,
+            environment=self._ctx.environment,
+        )
+        if not calls:
+            return DeprecatedTransactionHandle()
         if self._ctx.wallet_type == "EOA":
-            for call in calls[:-1]:
+            for call in calls:
                 handle = await self._broadcast_eoa_call(call)
                 await handle.wait()
-            return await self._broadcast_eoa_call(calls[-1])
-        return await prepare_gasless_transaction(
+            return DeprecatedTransactionHandle()
+        handle = await prepare_gasless_transaction(
             self._ctx, calls=calls, metadata="Trading setup approvals"
         )
+        await handle.wait()
+        return DeprecatedTransactionHandle()
 
     async def setup_gasless_wallet(self) -> Self:
-        """Create or reuse the gasless wallet for the signer.
+        """Return this client.
 
-        Returns:
-            A new async secure client scoped to the gasless wallet.
-
-        Raises:
-            UserInputError: If the client was not created with an API key that
-                can authorize gasless wallet workflows.
+        Deprecated. Secure client creation now sets up the wallet required for
+        the selected trading flow.
         """
-        ctx = self._ctx
-        if ctx.api_key is None:
-            raise UserInputError(
-                "setup_gasless_wallet requires a Builder API Key or Relayer API Key. "
-                "Pass api_key= when constructing the client."
-            )
-        if ctx.wallet_type != "EOA":
-            return type(self)._construct_for_wallet(
-                signer=ctx.signer,
-                wallet=str(ctx.wallet),
-                environment=ctx.environment,
-                credentials=ctx.credentials,
-                api_key=ctx.api_key,
-                logger=self._streams_logger,
-            )
-        deposit_address = cast(
-            EvmAddress,
-            await derive_current_deposit_wallet_address(
-                ctx.rpc, ctx.signer.address, ctx.environment.wallet_derivation
-            ),
-        )
-        ready = await fetch_deployed(
-            ctx.relayer,
-            address=str(deposit_address),
-            type=RelayerTransactionType.WALLET,
-        )
-        if not ready:
-            handle = await submit_deposit_wallet_create(ctx, metadata="Deploy Deposit Wallet")
-            await handle.wait()
-        return type(self)._construct_for_wallet(
-            signer=ctx.signer,
-            wallet=str(deposit_address),
-            environment=ctx.environment,
-            credentials=ctx.credentials,
-            api_key=ctx.api_key,
-            logger=self._streams_logger,
-        )
+        return self
 
     async def is_gasless_ready(self) -> bool:
-        """Return whether the signer has a deployed gasless wallet ready to use."""
-        ctx = self._ctx
-        if ctx.wallet_type != "EOA":
-            type_param = (
-                RelayerTransactionType.WALLET if ctx.wallet_type == "DEPOSIT_WALLET" else None
-            )
-            return await fetch_deployed(ctx.relayer, address=str(ctx.wallet), type=type_param)
-        deposit_address = await derive_current_deposit_wallet_address(
-            ctx.rpc, ctx.signer.address, ctx.environment.wallet_derivation
-        )
-        return await fetch_deployed(
-            ctx.relayer, address=deposit_address, type=RelayerTransactionType.WALLET
-        )
+        """Return True.
+
+        Deprecated. Secure client creation now performs the required wallet setup.
+        """
+        return True
 
     async def _broadcast_eoa_call(self, call: TransactionCall) -> EoaTransactionHandle:
         env = self._ctx.environment
@@ -2003,6 +1918,38 @@ class AsyncSecureClient:
         if self._ctx.wallet_type == "EOA":
             return await self._broadcast_eoa_call(call)
         return await prepare_gasless_transaction(self._ctx, calls=[call], metadata=metadata)
+
+    async def _ensure_wallet_ready(self) -> Self:
+        ctx = self._ctx
+        if ctx.wallet_type == "EOA":
+            return self
+        deployed = await fetch_deployed(
+            ctx.relayer,
+            address=str(ctx.wallet),
+            type=_relayer_transaction_type_for_wallet(ctx.wallet_type),
+        )
+        if deployed:
+            return self
+        if ctx.wallet_type == "DEPOSIT_WALLET":
+            await self._deploy_default_deposit_wallet()
+            return self
+        raise UserInputError(
+            f"Wallet {ctx.wallet} does not exist. Provide an existing wallet address, "
+            "or omit wallet to use the default Deposit Wallet flow."
+        )
+
+    async def _deploy_default_deposit_wallet(self) -> None:
+        ctx = self._ctx
+        current_deposit_wallet = await derive_current_deposit_wallet_address(
+            ctx.rpc, ctx.signer.address, ctx.environment.wallet_derivation
+        )
+        if str(ctx.wallet).lower() != current_deposit_wallet.lower():
+            raise UserInputError(
+                f"Wallet {ctx.wallet} does not match the expected Deposit Wallet "
+                f"{current_deposit_wallet} for this signer, nor a deployed wallet address."
+            )
+        handle = await submit_deposit_wallet_create(ctx, metadata="Deploy Deposit Wallet")
+        await handle.wait()
 
     async def split_position(
         self,
@@ -2350,6 +2297,37 @@ async def _bootstrap_credentials(
         signer, chain_id=environment.chain_id, timestamp=int(time.time()), nonce=nonce
     )
     return await _auth_actions.create_or_derive_api_key(clob, signature)
+
+
+async def _resolve_requested_wallet(
+    *,
+    signer: LocalAccount,
+    wallet: str | None,
+    environment: Environment,
+    logger: logging.Logger | None,
+) -> str:
+    if wallet is not None:
+        return wallet
+    rpc_transport = AsyncTransport(base_url=environment.rpc_url, logger=logger)
+    rpc = JsonRpcClient(rpc_transport)
+    try:
+        return await derive_current_deposit_wallet_address(
+            rpc, signer.address, environment.wallet_derivation
+        )
+    finally:
+        await rpc.close()
+
+
+def _relayer_transaction_type_for_wallet(
+    wallet_type: WalletType,
+) -> RelayerTransactionType | None:
+    if wallet_type == "DEPOSIT_WALLET":
+        return RelayerTransactionType.WALLET
+    if wallet_type == "POLY_PROXY":
+        return RelayerTransactionType.PROXY
+    if wallet_type == "GNOSIS_SAFE":
+        return RelayerTransactionType.SAFE
+    return None
 
 
 async def _credentials_are_active(

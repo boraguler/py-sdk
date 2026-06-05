@@ -104,7 +104,7 @@ from polymarket.streams._specs import (
     MarketSpec,
     PublicSubscription,
     SportsSpec,
-    _normalize_specs,
+    normalize_specs,
 )
 
 if TYPE_CHECKING:
@@ -192,7 +192,7 @@ class AsyncPublicClient:
             A subscription handle. Iterate over it to receive events and close it
             when finished.
         """
-        items = _normalize_specs(specs)
+        items = normalize_specs(specs)
         # AsyncSubscriptionHandle is invariant in T, so per-channel handles
         # can't widen to the union type at the type level. Cast at the
         # boundary — the underlying queue holds whatever was pushed into it.

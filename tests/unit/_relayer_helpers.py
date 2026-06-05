@@ -8,6 +8,7 @@ from typing import Any, cast
 from urllib.parse import urlparse
 
 import httpx
+from eth_utils.crypto import keccak
 
 from polymarket import ApiKeyCreds, AsyncSecureClient, BuilderApiKey, SecureClient
 from polymarket.clients._transport import AsyncTransport
@@ -116,6 +117,65 @@ def make_rpc_handler(
         method = body["method"]
         if method == "eth_chainId":
             result: object = hex(chain_id)
+        elif method == "eth_getTransactionCount":
+            result = hex(nonce)
+        elif method == "eth_gasPrice":
+            result = hex(gas_price)
+        elif method == "eth_estimateGas":
+            result = hex(gas_estimate)
+        elif method == "eth_sendRawTransaction":
+            result = send_response or ("0x" + "ab" * 32)
+        elif method == "eth_getTransactionReceipt":
+            try:
+                result = next(receipt_iter)
+            except StopIteration:
+                result = None
+        else:
+            return httpx.Response(
+                200,
+                json={"jsonrpc": "2.0", "id": body["id"], "error": {"message": "unmocked"}},
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            json={"jsonrpc": "2.0", "id": body["id"], "result": result},
+            request=request,
+        )
+
+    handler.captured = captured  # type: ignore[attr-defined]
+    return handler
+
+
+def trading_approval_rpc_handler(
+    *,
+    allowance: int = 0,
+    approved: bool = False,
+    nonce: int = 7,
+    gas_price: int = 30_000_000_000,
+    gas_estimate: int = 100_000,
+    send_response: str | None = None,
+    receipt_responses: list[dict[str, object] | None] | None = None,
+    chain_id: int = 137,
+) -> Callable[[httpx.Request], httpx.Response]:
+    captured: list[dict[str, object]] = []
+    receipt_iter = iter(receipt_responses or [])
+    allowance_selector = "0x" + keccak(b"allowance(address,address)")[:4].hex()
+    approved_selector = "0x" + keccak(b"isApprovedForAll(address,address)")[:4].hex()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        captured.append(body)
+        method = body["method"]
+        if method == "eth_call":
+            data = body["params"][0]["data"]
+            if data.startswith(allowance_selector):
+                result: object = "0x" + hex(allowance)[2:].rjust(64, "0")
+            elif data.startswith(approved_selector):
+                result = "0x" + ("1" if approved else "0").rjust(64, "0")
+            else:
+                result = "0x" + "0" * 64
+        elif method == "eth_chainId":
+            result = hex(chain_id)
         elif method == "eth_getTransactionCount":
             result = hex(nonce)
         elif method == "eth_gasPrice":
@@ -379,4 +439,5 @@ __all__ = [
     "make_sync_proxy_client",
     "make_sync_safe_client",
     "request_json",
+    "trading_approval_rpc_handler",
 ]

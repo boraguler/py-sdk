@@ -169,14 +169,22 @@ def test_create_rejects_bool_nonce() -> None:
         )
 
 
-def test_create_defaults_wallet_to_signer_when_omitted() -> None:
+def test_create_defaults_wallet_to_current_deposit_wallet() -> None:
+    from eth_account import Account
+
+    from polymarket._internal.wallet import derive_uups_deposit_wallet_address
+    from polymarket.environments import PRODUCTION
+
+    signer = Account.from_key(PRIVATE_KEY)
+    expected = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+
     with SecureClient._create(
         private_key=PRIVATE_KEY,
         credentials=FAKE_CREDS,
         validate_credentials=False,
     ) as client:
-        assert client.wallet_type == "EOA"
-        assert str(client.wallet) == SIGNER_ADDRESS
+        assert client.wallet_type == "DEPOSIT_WALLET"
+        assert str(client.wallet) == expected
 
 
 def test_create_rejects_invalid_wallet_address() -> None:

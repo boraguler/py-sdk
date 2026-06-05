@@ -68,11 +68,20 @@ def test_fetch_relayer_nonce_with_builder_auth(
 
 
 @pytest.mark.integration
-@pytest.mark.metered
-def test_is_gasless_ready_live(require_env: Callable[[str], str]) -> None:
-    async def run() -> bool:
-        async with _secure_client(require_env) as client:
-            return await client.is_gasless_ready()
+def test_secure_client_create_defaults_to_deposit_wallet(
+    require_env: Callable[[str], str],
+) -> None:
+    async def run() -> None:
+        expected_wallet = require_env("POLYMARKET_DEPOSIT_WALLET")
+        client = await AsyncSecureClient.create(
+            private_key=require_env("POLYMARKET_PRIVATE_KEY"),
+            credentials=_existing_user_credentials(),
+        )
+        try:
+            assert client.wallet_type == "DEPOSIT_WALLET"
+            assert str(client.wallet).lower() == expected_wallet.lower()
+        finally:
+            await client.close()
 
     asyncio.run(asyncio.wait_for(run(), timeout=30.0))
 

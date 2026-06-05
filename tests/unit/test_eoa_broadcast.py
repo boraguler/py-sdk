@@ -8,10 +8,11 @@ from _relayer_helpers import (
     make_eoa_client_with_rpc,
     make_rpc_handler,
 )
+from eth_utils.crypto import keccak
 
 from polymarket import TransactionCall
 from polymarket.errors import TimeoutError, TransactionFailedError, UserInputError
-from polymarket.transactions import EoaTransactionHandle
+from polymarket.transactions import DeprecatedTransactionHandle, EoaTransactionHandle
 from polymarket.types import EvmAddress
 
 _TOKEN = EvmAddress("0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB")
@@ -134,10 +135,10 @@ def test_eoa_transfer_erc20_dispatches_to_rpc() -> None:
     asyncio.run(run())
 
 
-def test_eoa_setup_trading_approvals_submits_eleven_sequentially() -> None:
+def test_eoa_setup_trading_approvals_submits_and_waits_for_eleven_sequentially() -> None:
     send_hashes = ["0x" + f"{i:02x}" * 32 for i in range(1, 12)]
     send_iter = iter(send_hashes)
-    receipts: list[dict[str, object] | None] = [{"status": "0x1"} for _ in range(10)]
+    receipts: list[dict[str, object] | None] = [{"status": "0x1"} for _ in range(11)]
     receipt_iter = iter(receipts)
     calls: list[dict[str, object]] = []
 
@@ -149,6 +150,14 @@ def test_eoa_setup_trading_approvals_submits_eleven_sequentially() -> None:
         method = body["method"]
         if method == "eth_chainId":
             result: object = hex(137)
+        elif method == "eth_call":
+            data = body["params"][0]["data"]
+            allowance_selector = "0x" + keccak(b"allowance(address,address)")[:4].hex()
+            approved_selector = "0x" + keccak(b"isApprovedForAll(address,address)")[:4].hex()
+            if data.startswith(allowance_selector) or data.startswith(approved_selector):
+                result = "0x" + "0" * 64
+            else:
+                result = "0x" + "0" * 64
         elif method == "eth_getTransactionCount":
             result = hex(7)
         elif method == "eth_gasPrice":
@@ -182,12 +191,12 @@ def test_eoa_setup_trading_approvals_submits_eleven_sequentially() -> None:
             await client.close()
 
     handle = asyncio.run(run())
-    assert isinstance(handle, EoaTransactionHandle)
-    assert handle.transaction_hash == send_hashes[-1]
+    assert isinstance(handle, DeprecatedTransactionHandle)
+    assert handle.transaction_hash is None
     send_methods = [c for c in calls if c["method"] == "eth_sendRawTransaction"]
     assert len(send_methods) == 11
     receipt_methods = [c for c in calls if c["method"] == "eth_getTransactionReceipt"]
-    assert len(receipt_methods) >= 10
+    assert len(receipt_methods) >= 11
 
 
 def test_rpc_client_closes_with_client() -> None:

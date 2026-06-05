@@ -210,7 +210,7 @@ _SPEC_TYPES: tuple[
 _S = TypeVar("_S", bound=Subscription)
 
 
-def _normalize_specs(specs: _S | Sequence[_S]) -> list[_S]:
+def normalize_specs(specs: _S | Sequence[_S]) -> list[_S]:
     if isinstance(specs, _SPEC_TYPES):
         return [specs]
     if not isinstance(specs, Sequence) or isinstance(specs, str | bytes):
@@ -240,5 +240,5 @@ __all__ = [
     "SportsSpec",
     "Subscription",
     "UserSpec",
-    "_normalize_specs",
+    "normalize_specs",
 ]
