@@ -9,13 +9,13 @@ from polymarket._internal.request import (
 from polymarket.errors import UserInputError
 
 
-def test_list_events_spec_default_has_no_params() -> None:
+def test_list_events_spec_defaults_to_open_events() -> None:
     spec = gamma_actions.list_events_spec()
 
     assert isinstance(spec, KeysetPaginatedSpec)
     assert spec.service == "gamma"
     assert spec.path == "/events/keyset"
-    assert spec.base_params is None
+    assert spec.base_params == {"closed": False}
 
 
 def test_list_events_spec_collects_filter_params() -> None:
@@ -44,7 +44,7 @@ def test_list_events_spec_rejects_invalid_tag_match() -> None:
 def test_list_events_spec_omits_empty_sequences() -> None:
     spec = gamma_actions.list_events_spec(ids=[])
 
-    assert spec.base_params is None
+    assert spec.base_params == {"closed": False}
 
 
 def test_list_markets_spec_default_has_no_params() -> None:
@@ -206,7 +206,7 @@ def test_list_markets_spec_accepts_list_of_slugs() -> None:
 def test_list_events_spec_treats_bare_int_id_as_single_item() -> None:
     spec = gamma_actions.list_events_spec(ids=10)
 
-    assert spec.base_params == {"id": (10,)}
+    assert spec.base_params == {"closed": False, "id": (10,)}
 
 
 def test_list_events_spec_rejects_bytes_param() -> None:

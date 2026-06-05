@@ -540,7 +540,7 @@ class PublicClient:
         self,
         *,
         ascending: bool | None = None,
-        closed: bool | None = None,
+        closed: bool = False,
         cyom: bool | None = None,
         end_date_max: TimestampFilter | None = None,
         end_date_min: TimestampFilter | None = None,
@@ -580,6 +580,8 @@ class PublicClient:
         page_size: int = 20,
     ) -> Paginator[Event]:
         """List events.
+
+        Defaults to open events. Pass ``closed=True`` to list settled events.
 
         Returns:
             A paginator over matching events.

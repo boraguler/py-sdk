@@ -1026,7 +1026,7 @@ class AsyncSecureClient:
         self,
         *,
         ascending: bool | None = None,
-        closed: bool | None = None,
+        closed: bool = False,
         cyom: bool | None = None,
         end_date_max: TimestampFilter | None = None,
         end_date_min: TimestampFilter | None = None,
@@ -1066,6 +1066,8 @@ class AsyncSecureClient:
         page_size: int = 20,
     ) -> AsyncPaginator[Event]:
         """List events.
+
+        Defaults to open events. Pass ``closed=True`` to list settled events.
 
         Returns:
             An async paginator over matching events.
