@@ -5,7 +5,7 @@ from typing import cast
 from polymarket._internal.actions.orders.types import BYTES32_ZERO
 from polymarket._internal.context import AsyncClientContext, SyncClientContext
 from polymarket._internal.validation import require_nonempty, validate_builder_code
-from polymarket.errors import UnexpectedResponseError, UserInputError
+from polymarket.errors import RequestRejectedError, UnexpectedResponseError, UserInputError
 from polymarket.models.clob.builder import BuilderFeeRates
 from polymarket.models.types import ConditionId, TokenId
 
@@ -78,7 +78,12 @@ async def fetch_builder_fee_rates(ctx: AsyncClientContext, *, builder_code: str)
         raise UserInputError(
             "builder_code must be a real builder; zero (0x000…000) represents no attribution."
         )
-    data = await ctx.clob.get_json(f"/fees/builder-fees/{validated}")
+    try:
+        data = await ctx.clob.get_json(f"/fees/builder-fees/{validated}")
+    except RequestRejectedError as error:
+        if error.status == 404:
+            raise UserInputError(f"Unknown builder code: {validated}") from error
+        raise
     return BuilderFeeRates.parse_response(data)
 
 
@@ -88,7 +93,12 @@ def fetch_builder_fee_rates_sync(ctx: SyncClientContext, *, builder_code: str) -
         raise UserInputError(
             "builder_code must be a real builder; zero (0x000…000) represents no attribution."
         )
-    data = ctx.clob.get_json(f"/fees/builder-fees/{validated}")
+    try:
+        data = ctx.clob.get_json(f"/fees/builder-fees/{validated}")
+    except RequestRejectedError as error:
+        if error.status == 404:
+            raise UserInputError(f"Unknown builder code: {validated}") from error
+        raise
     return BuilderFeeRates.parse_response(data)
 
 
