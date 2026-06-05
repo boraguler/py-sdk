@@ -11,9 +11,10 @@ from polymarket import (
     Market,
     Position,
 )
-from polymarket.errors import InsufficientLiquidityError
+from polymarket.errors import InsufficientLiquidityError, UserInputError
 
 pytestmark = pytest.mark.anyio
+UNKNOWN_BUILDER_CODE = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
 
 
 def _minimum_order_size(market: Market) -> Decimal:
@@ -131,6 +132,23 @@ async def test_estimate_market_price_fok_raises_on_insufficient_liquidity(
             side="BUY",
             amount=Decimal("1000000000"),
             order_type="FOK",
+        )
+
+
+@pytest.mark.integration
+async def test_create_market_order_reports_unknown_builder_code_as_user_input(
+    deposit_wallet_client: AsyncSecureClient,
+    tradable_market: Market,
+) -> None:
+    amount = _minimum_order_size(tradable_market)
+
+    with pytest.raises(UserInputError, match="Unknown builder code"):
+        await deposit_wallet_client.create_market_order(
+            token_id=_yes_token_id(tradable_market),
+            side="BUY",
+            amount=amount,
+            max_spend=amount,
+            builder_code=UNKNOWN_BUILDER_CODE,
         )
 
 
