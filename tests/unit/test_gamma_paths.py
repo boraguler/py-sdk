@@ -28,9 +28,20 @@ def test_build_market_path_by_url() -> None:
         build_market_path(
             id=None,
             slug=None,
-            url="https://polymarket.com/market/some-slug",
+            url="https://polymarket.com/event/some-slug",
         )
         == "/markets/slug/some-slug"
+    )
+
+
+def test_build_market_path_by_selected_market_event_url() -> None:
+    assert (
+        build_market_path(
+            id=None,
+            slug=None,
+            url="https://polymarket.com/event/event-slug/market-slug",
+        )
+        == "/markets/slug/market-slug"
     )
 
 
@@ -74,9 +85,9 @@ def test_build_market_path_rejects_other_domain() -> None:
         build_market_path(id=None, slug=None, url="https://evil.com/market/some-slug")
 
 
-def test_build_market_path_rejects_event_url() -> None:
+def test_build_market_path_rejects_unsupported_polymarket_url() -> None:
     with pytest.raises(UserInputError, match="Polymarket market URL"):
-        build_market_path(id=None, slug=None, url="https://polymarket.com/event/some-slug")
+        build_market_path(id=None, slug=None, url="https://polymarket.com/tag/politics")
 
 
 def test_build_market_path_rejects_url_with_extra_segments() -> None:

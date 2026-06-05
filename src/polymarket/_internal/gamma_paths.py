@@ -91,6 +91,9 @@ def _parse_polymarket_url(raw_url: str, kind: str) -> str:
         raise UserInputError("Expected a valid Polymarket URL.")
 
     segments = [segment for segment in parsed.path.split("/") if segment]
+    if kind == "market" and 2 <= len(segments) <= 3 and segments[0] == "event":
+        return segments[-1]
+
     if len(segments) != 2 or segments[0] != kind:
         raise UserInputError(f"Expected a Polymarket {kind} URL.")
 
