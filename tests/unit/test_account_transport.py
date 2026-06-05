@@ -156,7 +156,7 @@ def test_list_open_orders_paginates_until_end_cursor() -> None:
         try:
             _install_secure_clob(client, httpx.MockTransport(handler))
             ids: list[str] = []
-            async for order in client.list_open_orders(market="0xMARKET").items():
+            async for order in client.list_open_orders(market="0xMARKET").iter_items():
                 ids.append(order.id)
             return ids
         finally:
@@ -220,7 +220,7 @@ def test_list_account_trades_paginates_and_passes_filters() -> None:
             collected: list[str] = []
             async for trade in client.list_account_trades(
                 market="0xMARKET", maker_address="0xMAKER"
-            ).items():
+            ).iter_items():
                 collected.append(trade.id)
             return collected
         finally:

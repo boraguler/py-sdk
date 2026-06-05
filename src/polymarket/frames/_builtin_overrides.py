@@ -13,8 +13,10 @@ if TYPE_CHECKING:
 
 @register_override(OrderBook)
 def _orderbook_to_arrow(value: object) -> pa.Table:  # pyright: ignore[reportUnusedFunction]
-    # Single book -> [side, level, price, size]; sequence of books ->
-    # [market, token_id, side, level, price, size] so rows stay attributable.
+    # Single book -> [side, level, price, size]. Sequence of books ->
+    # [market, token_id, timestamp, hash, side, level, price, size] so
+    # rows stay attributable across instruments AND snapshots of the same
+    # instrument over time.
     from polymarket.frames._arrow import _build_table_from_rows
 
     if isinstance(value, OrderBook):
@@ -24,8 +26,14 @@ def _orderbook_to_arrow(value: object) -> pa.Table:  # pyright: ignore[reportUnu
     rows: list[dict[str, object]] = []
     for book in value:
         assert isinstance(book, OrderBook)
+        identity = {
+            "market": book.market,
+            "token_id": book.token_id,
+            "timestamp": book.timestamp,
+            "hash": book.hash,
+        }
         for r in _orderbook_rows(book):
-            rows.append({"market": book.market, "token_id": book.token_id, **r})
+            rows.append({**identity, **r})
     return _build_table_from_rows(rows)
 
 

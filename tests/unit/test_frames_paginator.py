@@ -172,6 +172,20 @@ def test_paginator_to_arrow_limit_none() -> None:
     assert table.num_rows == 3
 
 
+def test_paginator_to_arrow_truncated_sets_schema_metadata() -> None:
+    paginator, _ = _three_page_sync()
+    table = paginator.to_arrow(limit=2)
+    md = table.schema.metadata or {}
+    assert md.get(b"polymarket_truncated") == b"true"
+
+
+def test_paginator_to_arrow_not_truncated_omits_metadata() -> None:
+    paginator, _ = _three_page_sync()
+    table = paginator.to_arrow(limit=None)
+    md = table.schema.metadata or {}
+    assert b"polymarket_truncated" not in md
+
+
 def _run(coro: Coroutine[Any, Any, object]) -> object:
     return asyncio.run(coro)
 
@@ -201,6 +215,16 @@ def test_async_paginator_limit_none_drains() -> None:
         df = await paginator.to_pandas(limit=None)
         assert len(df) == 3
         assert fetched == [None, "p2", "p3"]
+
+    _run(go())
+
+
+def test_async_paginator_to_arrow_truncated_sets_schema_metadata() -> None:
+    async def go() -> None:
+        paginator, _ = _three_page_async()
+        table = await paginator.to_arrow(limit=1)
+        md = table.schema.metadata or {}
+        assert md.get(b"polymarket_truncated") == b"true"
 
     _run(go())
 

@@ -65,9 +65,13 @@ class Paginator(Generic[T]):
     def __iter__(self) -> Iterator[Page[T]]:
         return self._iter_pages()
 
-    def items(self) -> Iterator[T]:
+    def iter_items(self) -> Iterator[T]:
         for page in self._iter_pages():
             yield from page.items
+
+    def items(self) -> Iterator[T]:
+        # Deprecated alias for iter_items(); reads ambiguously like dict.items().
+        return self.iter_items()
 
     def _iter_pages(self) -> Iterator[Page[T]]:
         cursor = self._initial_cursor
@@ -83,8 +87,9 @@ class Paginator(Generic[T]):
             cursor = page.next_cursor
 
     def to_arrow(self, *, limit: LimitArg) -> Any:
-        items, _truncated = _drain_paginator(self, limit)
-        return _frames_func("to_arrow")(tuple(items))
+        items, truncated = _drain_paginator(self, limit)
+        table = _frames_func("to_arrow")(tuple(items))
+        return _mark_arrow_truncated(table) if truncated else table
 
     def to_pandas(
         self,
@@ -105,6 +110,8 @@ class Paginator(Generic[T]):
         limit: LimitArg,
         explode: Sequence[str] | None = None,
     ) -> Any:
+        # Polars has no stable per-frame metadata surface in supported versions.
+        # Keep truncation markers to pandas attrs and Arrow schema metadata.
         items, _truncated = _drain_paginator(self, limit)
         return _frames_func("to_polars")(tuple(items), explode=explode)
 
@@ -129,7 +136,11 @@ class AsyncPaginator(Generic[T]):
     def __aiter__(self) -> AsyncIterator[Page[T]]:
         return self._iter_pages()
 
+    def iter_items(self) -> AsyncIterator[T]:
+        return self._iter_items()
+
     def items(self) -> AsyncIterator[T]:
+        # Deprecated alias for iter_items(); reads ambiguously like dict.items().
         return self._iter_items()
 
     async def _iter_pages(self) -> AsyncIterator[Page[T]]:
@@ -151,8 +162,9 @@ class AsyncPaginator(Generic[T]):
                 yield item
 
     async def to_arrow(self, *, limit: LimitArg) -> Any:
-        items, _truncated = await _drain_async_paginator(self, limit)
-        return _frames_func("to_arrow")(tuple(items))
+        items, truncated = await _drain_async_paginator(self, limit)
+        table = _frames_func("to_arrow")(tuple(items))
+        return _mark_arrow_truncated(table) if truncated else table
 
     async def to_pandas(
         self,
@@ -177,9 +189,16 @@ class AsyncPaginator(Generic[T]):
         return _frames_func("to_polars")(tuple(items), explode=explode)
 
 
+def _mark_arrow_truncated(table: Any) -> Any:
+    # Arrow has no df.attrs equivalent; stash the marker in schema metadata.
+    existing: dict[bytes, bytes] = dict(table.schema.metadata or {})
+    existing[b"polymarket_truncated"] = b"true"
+    return table.replace_schema_metadata(existing)
+
+
 def _drain_paginator(paginator: Paginator[T], limit: int | None) -> tuple[list[T], bool]:
     if limit is None:
-        return list(paginator.items()), False
+        return list(paginator.iter_items()), False
     if limit < 0:
         from polymarket.errors import UserInputError
 
@@ -189,7 +208,7 @@ def _drain_paginator(paginator: Paginator[T], limit: int | None) -> tuple[list[T
         return [], False
     out: list[T] = []
     truncated = False
-    for item in paginator.items():
+    for item in paginator.iter_items():
         if len(out) >= limit:
             truncated = True
             break
@@ -202,7 +221,7 @@ async def _drain_async_paginator(
 ) -> tuple[list[T], bool]:
     if limit is None:
         out: list[T] = []
-        async for item in paginator.items():
+        async for item in paginator.iter_items():
             out.append(item)
         return out, False
     if limit < 0:
@@ -213,7 +232,7 @@ async def _drain_async_paginator(
         return [], False
     out2: list[T] = []
     truncated = False
-    async for item in paginator.items():
+    async for item in paginator.iter_items():
         if len(out2) >= limit:
             truncated = True
             break

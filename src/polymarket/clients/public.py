@@ -685,7 +685,7 @@ class PublicClient:
 
             Iterate over every market item::
 
-                for market in client.list_markets(closed=False).items():
+                for market in client.list_markets(closed=False).iter_items():
                     print(market.question)
         """
         spec = _gamma_actions.list_markets_spec(
@@ -871,7 +871,7 @@ class PublicClient:
         Examples:
             Search markets and events::
 
-                for result in client.search(q="election").items():
+                for result in client.search(q="election").iter_items():
                     print(result)
         """
         spec = _gamma_actions.search_spec(

@@ -164,7 +164,7 @@ def test_sync_paginate_offset_round_trip_next_cursor() -> None:
         _install_sync_data_transport(client, handler)
         spec = _spec(base_params={"user": "0xA"})
         paginator = sync_paginate_offset(client._ctx, spec, page_size=10)
-        all_items = list(paginator.items())
+        all_items = list(paginator.iter_items())
 
     assert all_items == list(range(13))
     assert len(captured) == 2

@@ -21,6 +21,13 @@ def to_pandas(
     decimal: DecimalMode = "decimal",
     explode: Sequence[str] | None = None,
 ) -> pd.DataFrame:
+    """Convert SDK objects to a pandas DataFrame.
+
+    ``decimal="float"`` casts only top-level Arrow decimal columns to
+    ``float64``. Decimal values nested inside struct/list columns stay
+    precision-preserving; explode or normalize those columns first if you
+    want to cast them explicitly.
+    """
     pa, pd = _require_pandas_stack()
 
     if decimal not in ("decimal", "float"):
