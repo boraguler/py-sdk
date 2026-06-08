@@ -397,8 +397,6 @@ def test_async_paginator_iter_items_flattens_pages() -> None:
     assert asyncio.run(run()) == [1, 2, 3, 4]
 
 
-
-
 def test_async_paginator_from_cursor_none_yields_empty() -> None:
     fetch_count = [0]
 
