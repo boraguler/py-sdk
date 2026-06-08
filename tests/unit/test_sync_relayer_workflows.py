@@ -152,7 +152,7 @@ def test_split_position_routes_through_collateral_adapter() -> None:
     assert inner["target"].lower() == PRODUCTION.collateral_adapter.lower()
 
 
-def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> None:
+def test_setup_trading_approvals_bundles_required_calls_for_deposit_wallet() -> None:
     captured: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -190,7 +190,7 @@ def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> No
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     body = request_json(submit_calls[0])
     inner_calls = body["depositWalletParams"]["calls"]
-    assert len(inner_calls) == 11
+    assert len(inner_calls) == 16
 
 
 def test_setup_trading_approvals_skips_submit_when_already_approved() -> None:
