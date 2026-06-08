@@ -26,7 +26,7 @@ pytestmark = pytest.mark.anyio
 RFQ_ID = "rfq-123"
 QUOTE_ID = "quote-456"
 TX_HASH = "0x1111111111111111111111111111111111111111111111111111111111111111"
-CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
+CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
 YES_POSITION_ID = "99878393523957043401217108863095556720659532630565063651671026144852955005052"
 NO_POSITION_ID = "14961555500324159061633734348998856463418381831586644199915991405148322060881"
 
@@ -203,6 +203,58 @@ async def test_rfq_session_quotes_explicit_inventory_size(
     assert signed_order["side"] == 1
     assert signed_order["makerAmount"] == "500000"
     assert signed_order["takerAmount"] == "225000"
+
+
+@pytest.mark.integration
+async def test_rfq_session_normalizes_combo_condition_id_wire_form(
+    require_env: Callable[[str], str],
+) -> None:
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+                await ws.send(
+                    json.dumps(_quote_request_message(condition_id=f"{CONDITION_ID}01"))
+                )
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        async for event in session:
+            assert isinstance(event, RfqQuoteRequestEvent)
+            assert event.condition_id == CONDITION_ID
+            break
+
+
+@pytest.mark.integration
+async def test_rfq_session_rejects_non_combo_condition_id(
+    require_env: Callable[[str], str],
+) -> None:
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+                await ws.send(
+                    json.dumps(
+                        _quote_request_message(
+                            condition_id="0x022def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
+                        )
+                    )
+                )
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        with pytest.raises(UnexpectedResponseError, match="combo condition ID"):
+            await session.__anext__()
 
 
 @pytest.mark.integration
@@ -583,13 +635,13 @@ async def test_rfq_session_opens_fresh_session_after_close(
         assert connection_count == 2
 
 
-def _quote_request_message() -> dict[str, object]:
+def _quote_request_message(*, condition_id: str = CONDITION_ID) -> dict[str, object]:
     return {
         "type": "RFQ_REQUEST",
         "rfq_id": RFQ_ID,
         "requestor_public_id": "requestor-abc",
         "leg_position_ids": [YES_POSITION_ID, NO_POSITION_ID],
-        "condition_id": CONDITION_ID,
+        "condition_id": condition_id,
         "yes_position_id": YES_POSITION_ID,
         "no_position_id": NO_POSITION_ID,
         "direction": "BUY",

@@ -22,7 +22,7 @@ from polymarket.models.gamma.common import (
 )
 from polymarket.models.types import (
     ClobRewardId,
-    ConditionId,
+    CtfConditionId,
     EventId,
     MarketId,
     PositionId,
@@ -279,7 +279,7 @@ class ClobReward(BaseModel):
     """Reward configuration attached to a market condition."""
 
     id: ClobRewardId
-    condition_id: ConditionId = Field(validation_alias="conditionId")
+    condition_id: CtfConditionId = Field(validation_alias="conditionId")
     asset_address: str = Field(validation_alias="assetAddress")
     rewards_amount: Decimal = Field(validation_alias="rewardsAmount")
     rewards_daily_rate: Decimal = Field(validation_alias="rewardsDailyRate")
@@ -370,7 +370,7 @@ class Market(BaseModel):
 
     id: MarketId
     slug: str | None = None
-    condition_id: ConditionId | None = Field(
+    condition_id: CtfConditionId | None = Field(
         default=None,
         validation_alias=AliasChoices("conditionId", "condition"),
     )

@@ -90,8 +90,10 @@ from polymarket.models.gamma import (
     Team,
 )
 from polymarket.models.types import (
+    ComboConditionId,
     CommentId,
     ConditionId,
+    CtfConditionId,
     EventId,
     MarketId,
     OrderId,
@@ -102,6 +104,8 @@ from polymarket.models.types import (
     SeriesId,
     TagId,
     TokenId,
+    to_combo_condition_id,
+    to_ctf_condition_id,
 )
 
 __all__ = [
@@ -153,7 +157,9 @@ __all__ = [
     "ClosedPosition",
     "Comment",
     "CommentId",
+    "ComboConditionId",
     "ConditionId",
+    "CtfConditionId",
     "ConversionActivity",
     "Event",
     "EventId",
@@ -196,6 +202,8 @@ __all__ = [
     "TagReference",
     "Team",
     "TokenId",
+    "to_combo_condition_id",
+    "to_ctf_condition_id",
     "Trade",
     "TradeActivity",
     "TradedMarketCount",

@@ -29,7 +29,13 @@ from polymarket.errors import (
     TimeoutError as SDKTimeoutError,
 )
 from polymarket.models import ApiKeyCreds
-from polymarket.models.types import ConditionId, OrderSide, PositionId, TokenId
+from polymarket.models.types import (
+    ComboConditionId,
+    OrderSide,
+    PositionId,
+    TokenId,
+    to_combo_condition_id,
+)
 from polymarket.rfq import (
     RfqCancelQuoteAck,
     RfqCancelQuoteRejectedError,
@@ -559,7 +565,7 @@ def _parse_quote_request(raw: dict[str, object], session: RfqQuoterSession) -> R
         leg_position_ids=tuple(
             PositionId(item) for item in _expect_str_list(raw, "leg_position_ids")
         ),
-        condition_id=ConditionId(_expect_str(raw, "condition_id")),
+        condition_id=_expect_combo_condition_id(raw, "condition_id"),
         yes_position_id=PositionId(_expect_str(raw, "yes_position_id")),
         no_position_id=PositionId(_expect_str(raw, "no_position_id")),
         direction=RfqDirection(_expect_str(raw, "direction")),
@@ -583,7 +589,7 @@ def _parse_confirmation_request(
         leg_position_ids=tuple(
             PositionId(item) for item in _expect_str_list(raw, "leg_position_ids")
         ),
-        condition_id=ConditionId(_expect_str(raw, "condition_id")),
+        condition_id=_expect_combo_condition_id(raw, "condition_id"),
         yes_position_id=PositionId(_expect_str(raw, "yes_position_id")),
         no_position_id=PositionId(_expect_str(raw, "no_position_id")),
         direction=RfqDirection(_expect_str(raw, "direction")),
@@ -678,6 +684,14 @@ def _quote_cancel_ack_key(rfq_id: RfqId, quote_id: RfqQuoteId) -> str:
 
 def _confirmation_ack_key(rfq_id: RfqId, quote_id: RfqQuoteId) -> str:
     return f"ACK_RFQ_CONFIRMATION_RESPONSE:{rfq_id}:{quote_id}"
+
+
+def _expect_combo_condition_id(raw: dict[str, object], field: str) -> ComboConditionId:
+    value = _expect_str(raw, field)
+    try:
+        return to_combo_condition_id(value)
+    except TypeError as error:
+        raise UnexpectedResponseError(str(error)) from error
 
 
 def _expect_str(raw: dict[str, object], field: str) -> str:
