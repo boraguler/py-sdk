@@ -126,6 +126,24 @@ def test_paginator_limit_int_larger_than_available() -> None:
     assert "polymarket_truncated" not in df.attrs
 
 
+def test_paginator_limit_at_page_boundary_does_not_fetch_extra_page() -> None:
+    """limit landing exactly on a full page that reports has_more=True
+    must read truncation from page metadata, not by fetching the next page."""
+    paginator, fetched = _three_page_sync()
+    df = paginator.to_pandas(limit=2)
+    assert len(df) == 2
+    assert df.attrs.get("polymarket_truncated") is True
+    assert fetched == [None, "p2"]
+
+
+def test_paginator_limit_at_first_page_boundary_fetches_only_one_page() -> None:
+    paginator, fetched = _three_page_sync()
+    df = paginator.to_pandas(limit=1)
+    assert len(df) == 1
+    assert df.attrs.get("polymarket_truncated") is True
+    assert fetched == [None]
+
+
 def test_paginator_limit_zero_returns_empty_dataframe_without_fetching() -> None:
     paginator, fetched = _three_page_sync()
     df = paginator.to_pandas(limit=0)
@@ -205,6 +223,17 @@ def test_async_paginator_limit_int_truncated() -> None:
         df = await paginator.to_pandas(limit=2)
         assert len(df) == 2
         assert df.attrs.get("polymarket_truncated") is True
+
+    _run(go())
+
+
+def test_async_paginator_limit_at_page_boundary_does_not_fetch_extra_page() -> None:
+    async def go() -> None:
+        paginator, fetched = _three_page_async()
+        df = await paginator.to_pandas(limit=1)
+        assert len(df) == 1
+        assert df.attrs.get("polymarket_truncated") is True
+        assert fetched == [None]
 
     _run(go())
 

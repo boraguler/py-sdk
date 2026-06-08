@@ -198,14 +198,19 @@ def _drain_paginator(paginator: Paginator[T], limit: int | None) -> tuple[list[T
     if limit == 0:
         # Skip the fetch entirely; with no observation we can't claim truncation.
         return [], False
+    # Drain page-by-page so that hitting `limit` exactly at a page boundary can
+    # read truncation from page.has_more instead of fetching the next page.
     out: list[T] = []
-    truncated = False
-    for item in paginator.iter_items():
+    for page in paginator:
+        for item in page.items:
+            if len(out) >= limit:
+                return out, True
+            out.append(item)
         if len(out) >= limit:
-            truncated = True
-            break
-        out.append(item)
-    return out, truncated
+            return out, page.has_more
+        if not page.has_more:
+            return out, False
+    return out, False
 
 
 async def _drain_async_paginator(
@@ -223,13 +228,16 @@ async def _drain_async_paginator(
     if limit == 0:
         return [], False
     out2: list[T] = []
-    truncated = False
-    async for item in paginator.iter_items():
+    async for page in paginator:
+        for item in page.items:
+            if len(out2) >= limit:
+                return out2, True
+            out2.append(item)
         if len(out2) >= limit:
-            truncated = True
-            break
-        out2.append(item)
-    return out2, truncated
+            return out2, page.has_more
+        if not page.has_more:
+            return out2, False
+    return out2, False
 
 
 class _EmptyPaginator(Paginator[object]):
