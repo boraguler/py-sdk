@@ -298,6 +298,14 @@ def test_parse_order_book_rejects_malformed_timestamp() -> None:
         parse_order_book(payload)
 
 
+@pytest.mark.parametrize("bad_value", [" 1716000000000", "1716000000000 ", "+1", "-1"])
+def test_parse_order_book_rejects_loose_numeric_timestamp_strings(bad_value: str) -> None:
+    payload = {**_ORDER_BOOK_PAYLOAD, "timestamp": bad_value}
+
+    with pytest.raises(UnexpectedResponseError):
+        parse_order_book(payload)
+
+
 def test_parse_order_book_rejects_missing_required_field() -> None:
     payload = {k: v for k, v in _ORDER_BOOK_PAYLOAD.items() if k != "asset_id"}
 
