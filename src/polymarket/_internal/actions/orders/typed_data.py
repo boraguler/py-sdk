@@ -65,8 +65,10 @@ _TYPED_DATA_SIGN_FIELDS = [
 ]
 
 
-def build_order_typed_data(order: UnsignedOrder) -> dict[str, Any]:
-    standard = _build_standard_typed_data(order)
+def build_order_typed_data(
+    order: UnsignedOrder, *, protocol_version: str = _PROTOCOL_VERSION
+) -> dict[str, Any]:
+    standard = _build_standard_typed_data(order, protocol_version=protocol_version)
     if order.signature_type != _POLY_1271_SIGNATURE_TYPE:
         return standard
     return {
@@ -78,7 +80,7 @@ def build_order_typed_data(order: UnsignedOrder) -> dict[str, Any]:
         "primaryType": "TypedDataSign",
         "domain": {
             "name": _PROTOCOL_NAME,
-            "version": _PROTOCOL_VERSION,
+            "version": protocol_version,
             "chainId": order.chain_id,
             "verifyingContract": order.exchange_address,
         },
@@ -93,10 +95,12 @@ def build_order_typed_data(order: UnsignedOrder) -> dict[str, Any]:
     }
 
 
-def build_order_signature(order: UnsignedOrder, signature: HexString) -> HexString:
+def build_order_signature(
+    order: UnsignedOrder, signature: HexString, *, protocol_version: str = _PROTOCOL_VERSION
+) -> HexString:
     if order.signature_type != _POLY_1271_SIGNATURE_TYPE:
         return signature
-    app_domain_separator = _app_domain_separator(order)
+    app_domain_separator = _app_domain_separator(order, protocol_version=protocol_version)
     contents_hash = _order_contents_hash(order)
     contents_type = _ORDER_TYPE_STRING.encode("utf-8").hex()
     contents_type_length = f"{len(_ORDER_TYPE_STRING):04x}"
@@ -106,7 +110,9 @@ def build_order_signature(order: UnsignedOrder, signature: HexString) -> HexStri
     return HexString(signature + trailer)
 
 
-def _build_standard_typed_data(order: UnsignedOrder) -> dict[str, Any]:
+def _build_standard_typed_data(
+    order: UnsignedOrder, *, protocol_version: str
+) -> dict[str, Any]:
     return {
         "types": {
             "EIP712Domain": _EIP712_DOMAIN_FIELDS,
@@ -115,7 +121,7 @@ def _build_standard_typed_data(order: UnsignedOrder) -> dict[str, Any]:
         "primaryType": "Order",
         "domain": {
             "name": _PROTOCOL_NAME,
-            "version": _PROTOCOL_VERSION,
+            "version": protocol_version,
             "chainId": order.chain_id,
             "verifyingContract": order.exchange_address,
         },
@@ -139,13 +145,14 @@ def _order_message(order: UnsignedOrder) -> dict[str, Any]:
     }
 
 
-def _app_domain_separator(order: UnsignedOrder) -> str:
+def _app_domain_separator(order: UnsignedOrder, *, protocol_version: str) -> str:
+    protocol_version_hash = keccak(protocol_version.encode("utf-8"))
     encoded = abi_encode(
         ["bytes32", "bytes32", "bytes32", "uint256", "address"],
         [
             _DOMAIN_TYPE_HASH,
             _PROTOCOL_NAME_HASH,
-            _PROTOCOL_VERSION_HASH,
+            protocol_version_hash,
             order.chain_id,
             order.exchange_address,
         ],

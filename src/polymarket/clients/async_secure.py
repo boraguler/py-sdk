@@ -202,10 +202,12 @@ from polymarket.transactions import (
 from polymarket.types import EvmAddress, HexString
 
 if TYPE_CHECKING:
+    from polymarket._internal.rfq import RfqQuoterSession
     from polymarket._internal.streams.clob.market import ClobMarketStreamManager
     from polymarket._internal.streams.clob.user import ClobUserStreamManager
     from polymarket._internal.streams.rtds.manager import RtdsStreamManager
     from polymarket._internal.streams.sports.manager import SportsStreamManager
+    from polymarket.rfq import RfqSession
 
 
 _CREATE_TOKEN = object()
@@ -235,6 +237,7 @@ class AsyncSecureClient:
         self._sports_manager: SportsStreamManager | None = None
         self._rtds_manager: RtdsStreamManager | None = None
         self._user_manager: ClobUserStreamManager | None = None
+        self._rfq_session: RfqQuoterSession | None = None
         self._streams_logger = logger
 
     @property
@@ -562,6 +565,36 @@ class AsyncSecureClient:
     async def _resolve_api_key_credentials(self) -> ApiKeyCreds:
         return self._ctx.credentials
 
+    async def open_rfq_session(self) -> "RfqSession":
+        """Open an RFQ event session.
+
+        The returned session is an async iterator of RFQ events and an async
+        context manager. Iterate over it to receive quote requests,
+        confirmation requests, and execution updates.
+        """
+        if self._rfq_session is not None:
+            raise RuntimeError("An RFQ session is already open for this client.")
+        from polymarket._internal.rfq import RfqQuoterSession
+
+        session = RfqQuoterSession(
+            chain_id=self._ctx.environment.chain_id,
+            credentials=self._ctx.credentials,
+            exchange=EvmAddress(self._ctx.environment.exchange_v3),
+            headers=self._ctx.environment.rfq_quoter_ws_headers,
+            logger=self._streams_logger,
+            on_close=lambda: setattr(self, "_rfq_session", None),
+            signer=self._ctx.signer,
+            url=self._ctx.environment.rfq_quoter_ws_url,
+            wallet=self._ctx.wallet,
+            wallet_type=self._ctx.wallet_type,
+        )
+        try:
+            self._rfq_session = await session.open()
+            return self._rfq_session
+        except BaseException:
+            self._rfq_session = None
+            raise
+
     async def __aenter__(self) -> Self:
         return self
 
@@ -593,21 +626,25 @@ class AsyncSecureClient:
                             await self._user_manager.close()
                     finally:
                         try:
-                            await ctx.gamma.close()
+                            if self._rfq_session is not None:
+                                await self._rfq_session.close()
                         finally:
                             try:
-                                await ctx.data.close()
+                                await ctx.gamma.close()
                             finally:
                                 try:
-                                    await ctx.clob.close()
+                                    await ctx.data.close()
                                 finally:
                                     try:
-                                        await ctx.secure_clob.close()
+                                        await ctx.clob.close()
                                     finally:
                                         try:
-                                            await ctx.relayer.close()
+                                            await ctx.secure_clob.close()
                                         finally:
-                                            await ctx.rpc.close()
+                                            try:
+                                                await ctx.relayer.close()
+                                            finally:
+                                                await ctx.rpc.close()
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user

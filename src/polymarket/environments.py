@@ -38,6 +38,9 @@ class Environment:
     rtds_ws_url: str
     sports_ws_url: str
     rpc_url: str
+    exchange_v3: str = "0xe3333700cA9d93003F00f0F71f8515005F6c00Aa"
+    rfq_quoter_ws_url: str = "wss://combos-rfq-gateway-quoter-preprod.polymarket.sh/ws/rfq"
+    rfq_quoter_ws_headers: dict[str, str] | None = None
     relayer_max_polls: int = 100
     relayer_poll_frequency_ms: int = 2000
 
