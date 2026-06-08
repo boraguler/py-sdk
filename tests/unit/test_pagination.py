@@ -317,13 +317,6 @@ def test_paginator_iter_items_flattens_pages() -> None:
     assert list(paginator.iter_items()) == [1, 2, 3, 4]
 
 
-def test_paginator_items_alias_matches_iter_items() -> None:
-    """``items()`` is a back-compat alias; behaviour must match ``iter_items()``."""
-    pages = [Page(items=(1, 2), has_more=False)]
-    paginator = Paginator[int](fetch=lambda _c: pages[0])
-    assert list(paginator.items()) == list(paginator.iter_items())
-
-
 def test_paginator_from_cursor_returns_new_paginator() -> None:
     seen: list[str | None] = []
 
@@ -404,20 +397,6 @@ def test_async_paginator_iter_items_flattens_pages() -> None:
     assert asyncio.run(run()) == [1, 2, 3, 4]
 
 
-def test_async_paginator_items_alias_still_works() -> None:
-    pages = [Page(items=(1, 2), has_more=False)]
-
-    async def fetch(_cursor: str | None) -> Page[int]:
-        return pages[0]
-
-    async def run() -> list[int]:
-        paginator = AsyncPaginator[int](fetch=fetch)
-        collected: list[int] = []
-        async for item in paginator.items():
-            collected.append(item)
-        return collected
-
-    assert asyncio.run(run()) == [1, 2]
 
 
 def test_async_paginator_from_cursor_none_yields_empty() -> None:

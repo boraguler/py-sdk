@@ -69,10 +69,6 @@ class Paginator(Generic[T]):
         for page in self._iter_pages():
             yield from page.items
 
-    def items(self) -> Iterator[T]:
-        # Deprecated alias for iter_items(); reads ambiguously like dict.items().
-        return self.iter_items()
-
     def _iter_pages(self) -> Iterator[Page[T]]:
         cursor = self._initial_cursor
         while True:
@@ -137,10 +133,6 @@ class AsyncPaginator(Generic[T]):
         return self._iter_pages()
 
     def iter_items(self) -> AsyncIterator[T]:
-        return self._iter_items()
-
-    def items(self) -> AsyncIterator[T]:
-        # Deprecated alias for iter_items(); reads ambiguously like dict.items().
         return self._iter_items()
 
     async def _iter_pages(self) -> AsyncIterator[Page[T]]:
