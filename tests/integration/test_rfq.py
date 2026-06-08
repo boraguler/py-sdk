@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -10,7 +11,7 @@ import pytest
 from websockets.asyncio.server import ServerConnection, serve
 
 from polymarket import PRODUCTION, ApiKeyCreds, AsyncSecureClient
-from polymarket.errors import TransportError
+from polymarket.errors import TransportError, UnexpectedResponseError
 from polymarket.rfq import (
     RfqConfirmationRequestEvent,
     RfqExecutionStatus,
@@ -284,7 +285,8 @@ async def test_rfq_session_declines_confirmation_request(
         async for event in session:
             assert isinstance(event, RfqConfirmationRequestEvent)
             ack = await event.decline()
-            assert ack.decision == "DECLINE"
+            assert ack.rfq_id == RFQ_ID
+            assert ack.quote_id == QUOTE_ID
             break
 
     confirmation = _first_frame(received, "RFQ_CONFIRMATION_RESPONSE")
@@ -344,6 +346,150 @@ async def test_rfq_session_quote_rejection_raises_typed_error(
             with pytest.raises(RfqQuoteRejectedError, match="quote rejected"):
                 await event.quote(price=Decimal("0.45"))
             break
+
+
+@pytest.mark.integration
+async def test_rfq_session_uncorrelated_error_fails_session(
+    require_env: Callable[[str], str],
+) -> None:
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+                await ws.send(json.dumps(_quote_request_message()))
+            elif frame["type"] == "RFQ_QUOTE":
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "RFQ_ERROR",
+                            "request_type": "RFQ_QUOTE",
+                            "code": "INVALID_QUOTE",
+                            "error": "quote rejected",
+                        }
+                    )
+                )
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        async for event in session:
+            assert isinstance(event, RfqQuoteRequestEvent)
+            with pytest.raises(TransportError, match="Uncorrelated RFQ quoter error"):
+                await event.quote(price=Decimal("0.45"))
+            break
+
+
+@pytest.mark.integration
+async def test_rfq_session_malformed_frame_fails_and_clears_client_session(
+    require_env: Callable[[str], str],
+) -> None:
+    connection_count = 0
+
+    async def handler(ws: ServerConnection) -> None:
+        nonlocal connection_count
+        connection_count += 1
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] != "auth":
+                continue
+            await ws.send(json.dumps({"type": "auth", "success": True}))
+            if connection_count == 1:
+                await ws.send(json.dumps({"type": "RFQ_REQUEST", "rfq_id": RFQ_ID}))
+
+    async with _ws_server(handler) as ws_url, _rfq_client(require_env, ws_url) as client:
+        session = await client.open_rfq_session()
+        with pytest.raises(UnexpectedResponseError, match="requestor_public_id"):
+            await session.__anext__()
+
+        next_session = await client.open_rfq_session()
+        assert next_session is not session
+        assert connection_count == 2
+
+
+@pytest.mark.integration
+async def test_rfq_session_reuses_existing_open_session(
+    require_env: Callable[[str], str],
+) -> None:
+    connection_count = 0
+
+    async def handler(ws: ServerConnection) -> None:
+        nonlocal connection_count
+        connection_count += 1
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as first,
+    ):
+        second = await client.open_rfq_session()
+        assert second is first
+        assert connection_count == 1
+
+
+@pytest.mark.integration
+async def test_rfq_session_reuses_in_flight_open(
+    require_env: Callable[[str], str],
+) -> None:
+    auth_received = asyncio.Event()
+    allow_auth = asyncio.Event()
+    connection_count = 0
+
+    async def handler(ws: ServerConnection) -> None:
+        nonlocal connection_count
+        connection_count += 1
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                auth_received.set()
+                await allow_auth.wait()
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+
+    async with _ws_server(handler) as ws_url, _rfq_client(require_env, ws_url) as client:
+        first_task = asyncio.create_task(client.open_rfq_session().__aenter__())
+        await auth_received.wait()
+        second_task = asyncio.create_task(client.open_rfq_session().__aenter__())
+        await asyncio.sleep(0)
+        assert connection_count == 1
+
+        allow_auth.set()
+        first, second = await asyncio.gather(first_task, second_task)
+        assert first is second
+        await first.close()
+
+
+@pytest.mark.integration
+async def test_rfq_session_opens_fresh_session_after_close(
+    require_env: Callable[[str], str],
+) -> None:
+    connection_count = 0
+
+    async def handler(ws: ServerConnection) -> None:
+        nonlocal connection_count
+        connection_count += 1
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+
+    async with _ws_server(handler) as ws_url, _rfq_client(require_env, ws_url) as client:
+        first = await client.open_rfq_session()
+        await first.close()
+
+        second = await client.open_rfq_session()
+        assert second is not first
+        assert connection_count == 2
 
 
 def _quote_request_message() -> dict[str, object]:

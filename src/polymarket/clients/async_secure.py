@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import logging
 import time
@@ -253,6 +254,7 @@ class AsyncSecureClient:
         self._rtds_manager: RtdsStreamManager | None = None
         self._user_manager: ClobUserStreamManager | None = None
         self._rfq_session: RfqQuoterSession | None = None
+        self._rfq_session_opening: asyncio.Task[RfqQuoterSession] | None = None
         self._streams_logger = logger
 
     @property
@@ -591,8 +593,30 @@ class AsyncSecureClient:
 
     async def _open_rfq_session(self) -> "RfqQuoterSession":
         if self._rfq_session is not None:
-            raise RuntimeError("An RFQ session is already open for this client.")
+            if not self._rfq_session.closed:
+                return self._rfq_session
+            self._rfq_session = None
+
+        if self._rfq_session_opening is not None:
+            return await self._rfq_session_opening
+
+        task = asyncio.create_task(self._create_rfq_session())
+        self._rfq_session_opening = task
+        try:
+            self._rfq_session = await task
+            return self._rfq_session
+        finally:
+            if self._rfq_session_opening is task:
+                self._rfq_session_opening = None
+
+    async def _create_rfq_session(self) -> "RfqQuoterSession":
         from polymarket._internal.rfq import RfqQuoterSession
+
+        session: RfqQuoterSession | None = None
+
+        def clear_session() -> None:
+            if self._rfq_session is session:
+                self._rfq_session = None
 
         session = RfqQuoterSession(
             chain_id=self._ctx.environment.chain_id,
@@ -600,18 +624,13 @@ class AsyncSecureClient:
             exchange=EvmAddress(self._ctx.environment.exchange_v3),
             headers=self._ctx.environment.rfq_quoter_ws_headers,
             logger=self._streams_logger,
-            on_close=lambda: setattr(self, "_rfq_session", None),
+            on_close=clear_session,
             signer=self._ctx.signer,
             url=self._ctx.environment.rfq_quoter_ws_url,
             wallet=self._ctx.wallet,
             wallet_type=self._ctx.wallet_type,
         )
-        try:
-            self._rfq_session = await session.open()
-            return self._rfq_session
-        except BaseException:
-            self._rfq_session = None
-            raise
+        return await session.open()
 
     async def __aenter__(self) -> Self:
         return self

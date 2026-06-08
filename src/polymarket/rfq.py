@@ -98,7 +98,6 @@ class RfqCancelQuoteAck:
 class RfqConfirmationAck:
     rfq_id: RfqId
     quote_id: RfqQuoteId
-    decision: RfqConfirmationDecision
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

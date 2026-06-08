@@ -56,7 +56,7 @@ from polymarket.types import EvmAddress, HexString, TransactionHash
 
 _E6 = 1_000_000
 _POLY_1271_SIGNATURE_TYPE = 3
-_ACK_TIMEOUT_S = 10.0
+_ACK_TIMEOUT_S = 30.0
 _QUEUE_SIZE = 1024
 _PROTOCOL_VERSION_V3 = "3"
 
@@ -158,7 +158,12 @@ class RfqQuoterSession:
         self._queue: asyncio.Queue[RfqEvent | _EndSentinel] = asyncio.Queue(maxsize=_QUEUE_SIZE)
         self._pending: dict[str, asyncio.Future[Any]] = {}
         self._end_error: BaseException | None = None
+        self._ended = False
         self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
 
     def __await__(self) -> Generator[Any, None, Self]:
         async def current() -> Self:
@@ -406,7 +411,6 @@ class RfqQuoterSession:
                 event = RfqConfirmationAck(
                     rfq_id=_expect_str(message, "rfq_id"),
                     quote_id=_expect_str(message, "quote_id"),
-                    decision=RfqConfirmationDecision(_expect_str(message, "decision")),
                 )
                 self._resolve(_confirmation_ack_key(event.rfq_id, event.quote_id), event)
             elif message_type == "RFQ_EXECUTION_UPDATE":
@@ -423,7 +427,7 @@ class RfqQuoterSession:
                 self._handle_rfq_error(message)
         except BaseException as error:
             self._logger.warning("invalid RFQ quoter message: %r", error)
-            self._end(error)
+            self._fail(error)
 
     def _handle_auth(self, raw: dict[str, object]) -> None:
         if raw.get("success") is True:
@@ -462,11 +466,14 @@ class RfqQuoterSession:
                 _confirmation_ack_key(rfq_id, quote_id),
                 RfqConfirmationRejectedError(text, rfq_id=rfq_id, quote_id=quote_id, code=code),
             )
+        else:
+            raise TransportError("Uncorrelated RFQ quoter error.")
 
     def _on_close(self) -> None:
         if self._on_session_close is not None:
             self._on_session_close()
         if not self._closed:
+            self._closed = True
             self._end(TransportError("RFQ quoter websocket closed."))
 
     def _on_error(self, exc: BaseException) -> None:
@@ -502,15 +509,33 @@ class RfqQuoterSession:
         with contextlib.suppress(asyncio.QueueFull):
             self._queue.put_nowait(event)
 
+    def _fail(self, error: BaseException) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._end(error)
+        if self._on_session_close is not None:
+            self._on_session_close()
+        asyncio.create_task(self._connection.close())
+
     def _end(self, error: BaseException | None = None) -> None:
+        if self._ended:
+            return
+        self._ended = True
         if error is not None:
             self._end_error = error
             for future in tuple(self._pending.values()):
                 if not future.done():
                     future.set_exception(error)
             self._pending.clear()
-        with contextlib.suppress(asyncio.QueueFull):
+        try:
             self._queue.put_nowait(_END)
+            return
+        except asyncio.QueueFull:
+            pass
+        with contextlib.suppress(asyncio.QueueEmpty):
+            self._queue.get_nowait()
+        self._queue.put_nowait(_END)
 
 
 async def _with_timeout(future: asyncio.Future[Any], message: str) -> object:
@@ -678,10 +703,11 @@ def _expect_str_list(raw: dict[str, object], field: str) -> tuple[str, ...]:
 
 def _parse_error_code(value: object) -> RfqErrorCode | None:
     if not isinstance(value, str):
-        return None
-    with contextlib.suppress(ValueError):
+        raise UnexpectedResponseError("Expected RFQ error code to be a string.")
+    try:
         return RfqErrorCode(value)
-    return None
+    except ValueError as error:
+        raise UnexpectedResponseError(f"Unknown RFQ error code: {value}") from error
 
 
 __all__ = ["RfqQuoterSession", "RfqSessionContext"]
