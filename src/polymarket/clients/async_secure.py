@@ -106,6 +106,7 @@ from polymarket._internal.eoa.broadcast import broadcast_eoa_call
 from polymarket._internal.eoa.rpc import JsonRpcClient
 from polymarket._internal.hmac import build_hmac_signature
 from polymarket._internal.l1_auth import sign_api_key_auth
+from polymarket._internal.rfq import RfqSessionContext
 from polymarket._internal.streams.handle import AsyncSubscriptionHandle, SubscriptionHandle
 from polymarket._internal.wallet import (
     WalletType,
@@ -586,8 +587,6 @@ class AsyncSecureClient:
         context manager. Iterate over it to receive quote requests,
         confirmation requests, and execution updates.
         """
-        from polymarket._internal.rfq import RfqSessionContext
-
         return RfqSessionContext(self._open_rfq_session)
 
     async def _open_rfq_session(self) -> "RfqQuoterSession":
