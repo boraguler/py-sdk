@@ -67,11 +67,38 @@ class AcceptedOrder(BaseModel):
     trade_ids: tuple[str, ...]
     transactions_hashes: tuple[TransactionHash, ...]
 
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr, truncate_mid
+
+        @safe_html_repr
+        def render(self: AcceptedOrder) -> str:
+            title = f"OrderResponse  ·  accepted  ·  {self.status}"
+            rows: list[tuple[str, str]] = [
+                ("order_id", truncate_mid(self.order_id)),
+                ("making_amount", str(self.making_amount)),
+                ("taking_amount", str(self.taking_amount)),
+                ("trades", str(len(self.trade_ids))),
+                ("tx hashes", str(len(self.transactions_hashes))),
+            ]
+            return card(title, rows=rows)
+
+        return render(self)
+
 
 class RejectedOrder(BaseModel):
     ok: Literal[False] = False
     code: OrderResponseErrorCode
     message: str
+
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr
+
+        @safe_html_repr
+        def render(self: RejectedOrder) -> str:
+            title = f"OrderResponse  ·  rejected  ·  {self.code}"
+            return card(title, rows=[("message", self.message)])
+
+        return render(self)
 
 
 OrderResponse: TypeAlias = AcceptedOrder | RejectedOrder

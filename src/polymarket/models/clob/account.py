@@ -80,6 +80,23 @@ class OpenOrder(BaseModel):
     def _parse_expires_at(cls, value: object) -> datetime | None:
         return _parse_optional_epoch(value)
 
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr, truncate_mid
+
+        @safe_html_repr
+        def render(self: OpenOrder) -> str:
+            title = f"OpenOrder  ·  {self.side}  ·  {self.status}"
+            rows: list[tuple[str, str]] = [
+                ("id", truncate_mid(self.id)),
+                ("price", str(self.price)),
+                ("size", str(self.original_size)),
+                ("matched", str(self.size_matched)),
+                ("market", truncate_mid(self.market)),
+            ]
+            return card(title, rows=rows)
+
+        return render(self)
+
 
 class MakerOrder(BaseModel):
     """Maker-side fill information attached to a trade."""
@@ -126,6 +143,22 @@ class ClobTrade(BaseModel):
     @classmethod
     def _parse_epoch_field(cls, value: object) -> datetime:
         return _parse_epoch(value)
+
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr, truncate_mid
+
+        @safe_html_repr
+        def render(self: ClobTrade) -> str:
+            title = f"Trade  ·  {self.side}  ·  {self.matched_at.isoformat()}"
+            rows: list[tuple[str, str]] = [
+                ("price", str(self.price)),
+                ("size", str(self.size)),
+                ("market", truncate_mid(self.market)),
+                ("id", truncate_mid(self.id)),
+            ]
+            return card(title, rows=rows)
+
+        return render(self)
 
 
 class Notification(BaseModel):
