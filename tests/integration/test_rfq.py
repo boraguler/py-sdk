@@ -398,7 +398,7 @@ async def test_rfq_session_ignores_unsupported_error_request_type(
                         {
                             "type": "RFQ_ERROR",
                             "request_type": "RFQ_FUTURE_REQUEST",
-                            "code": "FUTURE_ERROR_CODE",
+                            "code": "REQUEST_FAILED",
                             "error": "future request failed",
                         }
                     )
@@ -414,6 +414,36 @@ async def test_rfq_session_ignores_unsupported_error_request_type(
             assert isinstance(event, RfqQuoteRequestEvent)
             assert event.rfq_id == RFQ_ID
             break
+
+
+@pytest.mark.integration
+async def test_rfq_session_rejects_unsupported_error_request_type_with_unknown_code(
+    require_env: Callable[[str], str],
+) -> None:
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "RFQ_ERROR",
+                            "request_type": "RFQ_FUTURE_REQUEST",
+                            "code": "FUTURE_ERROR_CODE",
+                            "error": "future request failed",
+                        }
+                    )
+                )
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        with pytest.raises(UnexpectedResponseError, match="Unknown RFQ error code"):
+            await session.__anext__()
 
 
 @pytest.mark.integration
