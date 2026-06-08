@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 from types import TracebackType
-from typing import Any, Protocol, TypeAlias, runtime_checkable
+from typing import Any, Literal, Protocol, TypeAlias, runtime_checkable
 
 from polymarket.errors import PolymarketError
 from polymarket.models.types import ConditionId, PositionId
@@ -102,7 +102,7 @@ class RfqConfirmationAck:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RfqExecutionUpdateEvent:
-    type: str
+    type: Literal["execution_update"]
     rfq_id: RfqId
     status: RfqExecutionStatus
     tx_hash: TransactionHash | None = None
@@ -110,7 +110,7 @@ class RfqExecutionUpdateEvent:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RfqQuoteRequestEvent:
-    type: str
+    type: Literal["quote_request"]
     rfq_id: RfqId
     requestor_public_id: RfqRequestorPublicId
     leg_position_ids: tuple[PositionId, ...]
@@ -135,7 +135,7 @@ class RfqQuoteRequestEvent:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RfqConfirmationRequestEvent:
-    type: str
+    type: Literal["confirmation_request"]
     rfq_id: RfqId
     quote_id: RfqQuoteId
     signer_address: EvmAddress
