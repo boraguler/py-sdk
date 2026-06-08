@@ -4,7 +4,17 @@ import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal, Self, TypeAlias, assert_never, cast, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Protocol,
+    Self,
+    TypeAlias,
+    assert_never,
+    cast,
+    overload,
+)
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -213,6 +223,10 @@ if TYPE_CHECKING:
 _CREATE_TOKEN = object()
 
 _L2HeaderResolver: TypeAlias = Callable[[str, str, str | None], Awaitable[Mapping[str, str]]]
+
+
+class AsyncCloseable(Protocol):
+    async def close(self) -> None: ...
 
 
 class AsyncSecureClient:
@@ -614,42 +628,19 @@ class AsyncSecureClient:
     async def close(self) -> None:
         """Close the underlying network transports and any open streams."""
         ctx = self._ctx_inner
-        try:
-            if self._market_manager is not None:
-                await self._market_manager.close()
-        finally:
-            try:
-                if self._sports_manager is not None:
-                    await self._sports_manager.close()
-            finally:
-                try:
-                    if self._rtds_manager is not None:
-                        await self._rtds_manager.close()
-                finally:
-                    try:
-                        if self._user_manager is not None:
-                            await self._user_manager.close()
-                    finally:
-                        try:
-                            if self._rfq_session is not None:
-                                await self._rfq_session.close()
-                        finally:
-                            try:
-                                await ctx.gamma.close()
-                            finally:
-                                try:
-                                    await ctx.data.close()
-                                finally:
-                                    try:
-                                        await ctx.clob.close()
-                                    finally:
-                                        try:
-                                            await ctx.secure_clob.close()
-                                        finally:
-                                            try:
-                                                await ctx.relayer.close()
-                                            finally:
-                                                await ctx.rpc.close()
+        await _close_all(
+            self._market_manager,
+            self._sports_manager,
+            self._rtds_manager,
+            self._user_manager,
+            self._rfq_session,
+            ctx.gamma,
+            ctx.data,
+            ctx.clob,
+            ctx.secure_clob,
+            ctx.relayer,
+            ctx.rpc,
+        )
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user
@@ -2314,6 +2305,22 @@ def _validate_nonce(nonce: object) -> None:
         raise UserInputError("nonce must be a non-negative integer.")
     if nonce < 0:
         raise UserInputError("nonce must be a non-negative integer.")
+
+
+async def _close_all(*resources: AsyncCloseable | None) -> None:
+    first_error: BaseException | None = None
+
+    for resource in resources:
+        if resource is None:
+            continue
+        try:
+            await resource.close()
+        except BaseException as error:
+            if first_error is None:
+                first_error = error
+
+    if first_error is not None:
+        raise first_error
 
 
 async def _bootstrap_credentials(
