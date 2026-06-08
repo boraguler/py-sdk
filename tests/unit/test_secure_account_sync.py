@@ -135,7 +135,7 @@ def test_list_open_orders_paginates_until_end_cursor() -> None:
 
     with _make_client() as client:
         _install_secure_clob(client, httpx.MockTransport(handler))
-        ids = [order.id for order in client.list_open_orders(market="0xMARKET").items()]
+        ids = [order.id for order in client.list_open_orders(market="0xMARKET").iter_items()]
 
     assert ids == ["order-1", "order-2"]
     assert len(captured) == 2
@@ -176,7 +176,9 @@ def test_list_account_trades_paginates_and_passes_filters() -> None:
         _install_secure_clob(client, httpx.MockTransport(handler))
         trades = [
             t.id
-            for t in client.list_account_trades(market="0xMARKET", maker_address="0xMAKER").items()
+            for t in client.list_account_trades(
+                market="0xMARKET", maker_address="0xMAKER"
+            ).iter_items()
         ]
 
     assert trades == ["trade-1"]

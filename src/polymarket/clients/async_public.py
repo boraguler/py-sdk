@@ -833,7 +833,7 @@ class AsyncPublicClient:
         Examples:
             Iterate over individual market items::
 
-                async for market in client.list_markets(closed=False).items():
+                async for market in client.list_markets(closed=False).iter_items():
                     print(market.question)
         """
         spec = _gamma_actions.list_markets_spec(

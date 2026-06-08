@@ -90,7 +90,7 @@ def test_list_user_earnings_for_day_passes_signature_type_and_date() -> None:
 
     with _make_client() as client:
         _install_secure_clob(client, _capture(captured, 200, page_payload))
-        earnings = list(client.list_user_earnings_for_day(date="2026-01-01").items())
+        earnings = list(client.list_user_earnings_for_day(date="2026-01-01").iter_items())
 
     assert len(earnings) == 1
     request = captured[0]

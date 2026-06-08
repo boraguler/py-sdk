@@ -308,13 +308,13 @@ def test_paginator_is_reusable() -> None:
     assert fetch_count[0] == 2
 
 
-def test_paginator_items_flattens_pages() -> None:
+def test_paginator_iter_items_flattens_pages() -> None:
     pages = [
         Page(items=(1, 2), has_more=True, next_cursor="c1"),
         Page(items=(3, 4), has_more=False),
     ]
     paginator = Paginator[int](fetch=lambda cursor: pages[0] if cursor is None else pages[1])
-    assert list(paginator.items()) == [1, 2, 3, 4]
+    assert list(paginator.iter_items()) == [1, 2, 3, 4]
 
 
 def test_paginator_from_cursor_returns_new_paginator() -> None:
@@ -378,7 +378,7 @@ def test_async_paginator_raises_when_has_more_without_cursor() -> None:
         asyncio.run(run())
 
 
-def test_async_paginator_items_flattens_pages() -> None:
+def test_async_paginator_iter_items_flattens_pages() -> None:
     pages = [
         Page(items=(1, 2), has_more=True, next_cursor="c1"),
         Page(items=(3, 4), has_more=False),
@@ -390,7 +390,7 @@ def test_async_paginator_items_flattens_pages() -> None:
     async def run() -> list[int]:
         paginator = AsyncPaginator[int](fetch=fetch)
         collected: list[int] = []
-        async for item in paginator.items():
+        async for item in paginator.iter_items():
             collected.append(item)
         return collected
 

@@ -316,7 +316,7 @@ class TestAsyncPublicClientListBuilderTrades:
                 ids: list[str] = []
                 async for trade in client.list_builder_trades(
                     builder_code=_VALID_BUILDER_CODE
-                ).items():
+                ).iter_items():
                     ids.append(trade.id)
                 return ids
 
