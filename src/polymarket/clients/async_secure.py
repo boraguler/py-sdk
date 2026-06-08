@@ -231,6 +231,14 @@ class AsyncCloseable(Protocol):
     async def close(self) -> None: ...
 
 
+class _RfqSessionCloser:
+    def __init__(self, close: Callable[[], Awaitable[None]]) -> None:
+        self._close = close
+
+    async def close(self) -> None:
+        await self._close()
+
+
 class AsyncSecureClient:
     """Async client for authenticated account, trading, wallet, and stream workflows.
 
@@ -254,6 +262,7 @@ class AsyncSecureClient:
         self._rtds_manager: RtdsStreamManager | None = None
         self._user_manager: ClobUserStreamManager | None = None
         self._rfq_session: RfqQuoterSession | None = None
+        self._rfq_session_connecting: RfqQuoterSession | None = None
         self._rfq_session_opening: asyncio.Task[RfqQuoterSession] | None = None
         self._streams_logger = logger
 
@@ -630,7 +639,12 @@ class AsyncSecureClient:
             wallet=self._ctx.wallet,
             wallet_type=self._ctx.wallet_type,
         )
-        return await session.open()
+        self._rfq_session_connecting = session
+        try:
+            return await session.open()
+        finally:
+            if self._rfq_session_connecting is session:
+                self._rfq_session_connecting = None
 
     async def __aenter__(self) -> Self:
         return self
@@ -651,7 +665,7 @@ class AsyncSecureClient:
             self._sports_manager,
             self._rtds_manager,
             self._user_manager,
-            self._rfq_session,
+            _RfqSessionCloser(self._close_rfq_session),
             ctx.gamma,
             ctx.data,
             ctx.clob,
@@ -659,6 +673,21 @@ class AsyncSecureClient:
             ctx.relayer,
             ctx.rpc,
         )
+
+    async def _close_rfq_session(self) -> None:
+        opening = self._rfq_session_opening
+        first_error: BaseException | None = None
+        try:
+            await _close_all(self._rfq_session_connecting, self._rfq_session)
+        except BaseException as error:
+            first_error = error
+        if opening is not None:
+            with contextlib.suppress(BaseException):
+                await opening
+            if self._rfq_session_opening is opening:
+                self._rfq_session_opening = None
+        if first_error is not None:
+            raise first_error
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user
