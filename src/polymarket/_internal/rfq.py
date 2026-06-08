@@ -5,7 +5,7 @@ import contextlib
 import logging
 import secrets
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Generator, Mapping
 from decimal import Decimal, InvalidOperation
 from types import TracebackType
 from typing import Any, Self, cast
@@ -61,6 +61,67 @@ _QUEUE_SIZE = 1024
 _PROTOCOL_VERSION_V3 = "3"
 
 
+class RfqSessionContext:
+    def __init__(self, open_session: Callable[[], Awaitable[RfqQuoterSession]]) -> None:
+        self._open_session = open_session
+        self._session: RfqQuoterSession | None = None
+
+    def __await__(self) -> Generator[Any, None, RfqQuoterSession]:
+        return self._ensure_open().__await__()
+
+    def __aiter__(self) -> AsyncIterator[RfqEvent]:
+        return self
+
+    async def __anext__(self) -> RfqEvent:
+        session = await self._ensure_open()
+        return await session.__anext__()
+
+    async def __aenter__(self) -> RfqQuoterSession:
+        return await self._ensure_open()
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        await self.close()
+
+    async def close(self) -> None:
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
+
+    async def cancel_quote(self, quote: RfqQuoteReference) -> RfqCancelQuoteAck:
+        session = await self._ensure_open()
+        return await session.cancel_quote(quote)
+
+    async def quote(
+        self,
+        request: RfqQuoteRequestEvent,
+        *,
+        price: Decimal | int | float | str,
+        size: Decimal | int | float | str | None = None,
+        source: RfqQuoteSource | str = RfqQuoteSource.COLLATERAL,
+    ) -> RfqQuoteReference:
+        session = await self._ensure_open()
+        return await session.quote(request, price=price, size=size, source=source)
+
+    async def respond_to_confirmation(
+        self,
+        rfq_id: RfqId,
+        quote_id: RfqQuoteId,
+        decision: RfqConfirmationDecision,
+    ) -> RfqConfirmationAck:
+        session = await self._ensure_open()
+        return await session.respond_to_confirmation(rfq_id, quote_id, decision)
+
+    async def _ensure_open(self) -> RfqQuoterSession:
+        if self._session is None:
+            self._session = await self._open_session()
+        return self._session
+
+
 class _EndSentinel:
     __slots__ = ()
 
@@ -98,6 +159,12 @@ class RfqQuoterSession:
         self._pending: dict[str, asyncio.Future[Any]] = {}
         self._end_error: BaseException | None = None
         self._closed = False
+
+    def __await__(self) -> Generator[Any, None, Self]:
+        async def current() -> Self:
+            return self
+
+        return current().__await__()
 
     async def open(self) -> Self:
         await self._connection.connect(
@@ -617,4 +684,4 @@ def _parse_error_code(value: object) -> RfqErrorCode | None:
     return None
 
 
-__all__ = ["RfqQuoterSession"]
+__all__ = ["RfqQuoterSession", "RfqSessionContext"]

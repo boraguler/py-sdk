@@ -10,9 +10,11 @@ import pytest
 from websockets.asyncio.server import ServerConnection, serve
 
 from polymarket import PRODUCTION, ApiKeyCreds, AsyncSecureClient
+from polymarket.errors import TransportError
 from polymarket.rfq import (
     RfqConfirmationRequestEvent,
     RfqExecutionStatus,
+    RfqQuoteRejectedError,
     RfqQuoteRequestEvent,
     RfqQuoteSource,
     RfqRequestedSizeUnit,
@@ -50,6 +52,22 @@ async def _ws_server(handler: Handler) -> AsyncGenerator[str, None]:
     finally:
         server.close()
         await server.wait_closed()
+
+
+@asynccontextmanager
+async def _rfq_client(
+    require_env: Callable[[str], str], ws_url: str
+) -> AsyncGenerator[AsyncSecureClient, None]:
+    client = await AsyncSecureClient.create(
+        private_key=require_env("POLYMARKET_PRIVATE_KEY"),
+        wallet=require_env("POLYMARKET_DEPOSIT_WALLET"),
+        credentials=_existing_credentials(),
+        environment=replace(PRODUCTION, rfq_quoter_ws_url=ws_url),
+    )
+    try:
+        yield client
+    finally:
+        await client.close()
 
 
 @pytest.mark.integration
@@ -99,34 +117,26 @@ async def test_rfq_session_quotes_confirms_and_receives_execution_update(
                     )
                 )
 
-    async with _ws_server(handler) as ws_url:
-        client = await AsyncSecureClient.create(
-            private_key=require_env("POLYMARKET_PRIVATE_KEY"),
-            wallet=require_env("POLYMARKET_DEPOSIT_WALLET"),
-            credentials=_existing_credentials(),
-            environment=replace(PRODUCTION, rfq_quoter_ws_url=ws_url),
-        )
-        try:
-            async with await client.open_rfq_session() as session:
-                async for event in session:
-                    if isinstance(event, RfqQuoteRequestEvent):
-                        assert event.requested_size.unit is RfqRequestedSizeUnit.NOTIONAL
-                        assert event.requested_size.value == Decimal("1")
-                        quote = await event.quote(
-                            price=Decimal("0.45"), source=RfqQuoteSource.COLLATERAL
-                        )
-                        assert quote.rfq_id == RFQ_ID
-                        assert quote.quote_id == QUOTE_ID
-                    elif isinstance(event, RfqConfirmationRequestEvent):
-                        ack = await event.confirm()
-                        assert ack.rfq_id == RFQ_ID
-                        assert ack.quote_id == QUOTE_ID
-                    else:
-                        assert event.status is RfqExecutionStatus.MINED
-                        assert event.tx_hash == TX_HASH
-                        break
-        finally:
-            await client.close()
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        async for event in session:
+            if isinstance(event, RfqQuoteRequestEvent):
+                assert event.requested_size.unit is RfqRequestedSizeUnit.NOTIONAL
+                assert event.requested_size.value == Decimal("1")
+                quote = await event.quote(price=Decimal("0.45"), source=RfqQuoteSource.COLLATERAL)
+                assert quote.rfq_id == RFQ_ID
+                assert quote.quote_id == QUOTE_ID
+            elif isinstance(event, RfqConfirmationRequestEvent):
+                ack = await event.confirm()
+                assert ack.rfq_id == RFQ_ID
+                assert ack.quote_id == QUOTE_ID
+            else:
+                assert event.status is RfqExecutionStatus.MINED
+                assert event.tx_hash == TX_HASH
+                break
 
     auth = _first_frame(received, "auth")
     assert auth["auth"]["apiKey"]
@@ -152,6 +162,188 @@ async def test_rfq_session_quotes_confirms_and_receives_execution_update(
         "quote_id": QUOTE_ID,
         "decision": "CONFIRM",
     }
+
+
+@pytest.mark.integration
+async def test_rfq_session_quotes_explicit_inventory_size(
+    require_env: Callable[[str], str],
+) -> None:
+    received: list[dict[str, Any]] = []
+
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            received.append(frame)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+                await ws.send(json.dumps(_quote_request_message()))
+            elif frame["type"] == "RFQ_QUOTE":
+                await ws.send(json.dumps(_quote_ack_message()))
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        async for event in session:
+            assert isinstance(event, RfqQuoteRequestEvent)
+            await event.quote(
+                price=Decimal("0.45"),
+                size=Decimal("0.5"),
+                source=RfqQuoteSource.INVENTORY,
+            )
+            break
+
+    quote = _first_frame(received, "RFQ_QUOTE")
+    assert quote["size_e6"] == "500000"
+    signed_order = quote["signed_order"]
+    assert signed_order["tokenId"] == YES_POSITION_ID
+    assert signed_order["side"] == 1
+    assert signed_order["makerAmount"] == "500000"
+    assert signed_order["takerAmount"] == "225000"
+
+
+@pytest.mark.integration
+async def test_rfq_session_cancels_submitted_quote(
+    require_env: Callable[[str], str],
+) -> None:
+    received: list[dict[str, Any]] = []
+
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            received.append(frame)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+                await ws.send(json.dumps(_quote_request_message()))
+            elif frame["type"] == "RFQ_QUOTE":
+                await ws.send(json.dumps(_quote_ack_message()))
+            elif frame["type"] == "RFQ_QUOTE_CANCEL":
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "ACK_RFQ_QUOTE_CANCEL",
+                            "rfq_id": RFQ_ID,
+                            "quote_id": QUOTE_ID,
+                        }
+                    )
+                )
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        async for event in session:
+            assert isinstance(event, RfqQuoteRequestEvent)
+            quote = await event.quote(price=Decimal("0.45"))
+            ack = await session.cancel_quote(quote)
+            assert ack.rfq_id == RFQ_ID
+            assert ack.quote_id == QUOTE_ID
+            break
+
+    cancel = _first_frame(received, "RFQ_QUOTE_CANCEL")
+    assert cancel["rfq_id"] == RFQ_ID
+    assert cancel["quote_id"] == QUOTE_ID
+    assert cancel["maker_address"].lower() == require_env("POLYMARKET_DEPOSIT_WALLET").lower()
+
+
+@pytest.mark.integration
+async def test_rfq_session_declines_confirmation_request(
+    require_env: Callable[[str], str],
+) -> None:
+    received: list[dict[str, Any]] = []
+
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            received.append(frame)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+                await ws.send(json.dumps(_confirmation_request_message(_manual_quote_frame())))
+            elif frame["type"] == "RFQ_CONFIRMATION_RESPONSE":
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "ACK_RFQ_CONFIRMATION_RESPONSE",
+                            "rfq_id": RFQ_ID,
+                            "quote_id": QUOTE_ID,
+                            "decision": frame["decision"],
+                        }
+                    )
+                )
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        async for event in session:
+            assert isinstance(event, RfqConfirmationRequestEvent)
+            ack = await event.decline()
+            assert ack.decision == "DECLINE"
+            break
+
+    confirmation = _first_frame(received, "RFQ_CONFIRMATION_RESPONSE")
+    assert confirmation["decision"] == "DECLINE"
+
+
+@pytest.mark.integration
+async def test_rfq_session_auth_failure_raises_transport_error(
+    require_env: Callable[[str], str],
+) -> None:
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                await ws.send(
+                    json.dumps({"type": "auth", "success": False, "error": "bad credentials"})
+                )
+
+    async with _ws_server(handler) as ws_url, _rfq_client(require_env, ws_url) as client:
+        with pytest.raises(TransportError, match="bad credentials"):
+            async with client.open_rfq_session():
+                pass
+
+
+@pytest.mark.integration
+async def test_rfq_session_quote_rejection_raises_typed_error(
+    require_env: Callable[[str], str],
+) -> None:
+    async def handler(ws: ServerConnection) -> None:
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+                await ws.send(json.dumps(_quote_request_message()))
+            elif frame["type"] == "RFQ_QUOTE":
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "RFQ_ERROR",
+                            "request_type": "RFQ_QUOTE",
+                            "rfq_id": RFQ_ID,
+                            "code": "INVALID_QUOTE",
+                            "error": "quote rejected",
+                        }
+                    )
+                )
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        async for event in session:
+            assert isinstance(event, RfqQuoteRequestEvent)
+            with pytest.raises(RfqQuoteRejectedError, match="quote rejected"):
+                await event.quote(price=Decimal("0.45"))
+            break
 
 
 def _quote_request_message() -> dict[str, object]:
@@ -188,6 +380,29 @@ def _confirmation_request_message(quote: dict[str, Any]) -> dict[str, object]:
         "fill_size_e6": quote["size_e6"],
         "price_e6": quote["price_e6"],
         "confirm_by": 1780805866000,
+    }
+
+
+def _quote_ack_message() -> dict[str, object]:
+    return {
+        "type": "ACK_RFQ_QUOTE",
+        "rfq_id": RFQ_ID,
+        "quote_id": QUOTE_ID,
+    }
+
+
+def _manual_quote_frame() -> dict[str, Any]:
+    return {
+        "type": "RFQ_QUOTE",
+        "rfq_id": RFQ_ID,
+        "quote_id": QUOTE_ID,
+        "price_e6": "450000",
+        "size_e6": "500000",
+        "signed_order": {
+            "maker": "0x0000000000000000000000000000000000000001",
+            "signer": "0x0000000000000000000000000000000000000001",
+            "signatureType": 0,
+        },
     }
 
 

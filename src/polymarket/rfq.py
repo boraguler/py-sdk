@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Generator
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 from types import TracebackType
-from typing import Protocol, TypeAlias, runtime_checkable
+from typing import Any, Protocol, TypeAlias, runtime_checkable
 
 from polymarket.errors import PolymarketError
 from polymarket.models.types import ConditionId, TokenId
@@ -206,6 +206,7 @@ class RfqConfirmationRejectedError(PolymarketError):
 
 @runtime_checkable
 class RfqSession(Protocol):
+    def __await__(self) -> Generator[Any, None, RfqSession]: ...
     def __aiter__(self) -> AsyncIterator[RfqEvent]: ...
     async def __anext__(self) -> RfqEvent: ...
     async def close(self) -> None: ...

@@ -565,13 +565,18 @@ class AsyncSecureClient:
     async def _resolve_api_key_credentials(self) -> ApiKeyCreds:
         return self._ctx.credentials
 
-    async def open_rfq_session(self) -> "RfqSession":
+    def open_rfq_session(self) -> "RfqSession":
         """Open an RFQ event session.
 
         The returned session is an async iterator of RFQ events and an async
         context manager. Iterate over it to receive quote requests,
         confirmation requests, and execution updates.
         """
+        from polymarket._internal.rfq import RfqSessionContext
+
+        return RfqSessionContext(self._open_rfq_session)
+
+    async def _open_rfq_session(self) -> "RfqQuoterSession":
         if self._rfq_session is not None:
             raise RuntimeError("An RFQ session is already open for this client.")
         from polymarket._internal.rfq import RfqQuoterSession
