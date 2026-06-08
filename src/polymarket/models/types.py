@@ -19,6 +19,7 @@ InternalUserId = NewType("InternalUserId", str)
 MarketId = NewType("MarketId", str)
 OrderId = NewType("OrderId", str)
 PartnerId = NewType("PartnerId", int)
+PositionId = NewType("PositionId", str)
 QuestionId = NewType("QuestionId", str)
 ResolutionRequestId = NewType("ResolutionRequestId", str)
 SeriesId = NewType("SeriesId", str)
@@ -45,6 +46,7 @@ __all__ = [
     "OrderId",
     "OrderSide",
     "PartnerId",
+    "PositionId",
     "QuestionId",
     "ResolutionRequestId",
     "SeriesId",

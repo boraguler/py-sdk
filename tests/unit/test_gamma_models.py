@@ -31,6 +31,7 @@ def _minimal_market_payload(**overrides: object) -> dict[str, object]:
         "outcomes": ["Yes", "No"],
         "outcomePrices": ["0.6", "0.4"],
         "clobTokenIds": ["TOKEN-YES", "TOKEN-NO"],
+        "positionIds": ["POSITION-YES", "POSITION-NO"],
         "marketMakerAddress": "0xMM",
     }
     payload.update(overrides)
@@ -47,6 +48,7 @@ def test_market_parses_minimal_payload() -> None:
     assert market.outcomes.no.label == "No"
     assert market.outcomes.no.token_id == "TOKEN-NO"
     assert market.outcomes.no.price == Decimal("0.4")
+    assert market.position_ids == ("POSITION-YES", "POSITION-NO")
 
 
 def test_market_normalizes_groups_from_flat_payload() -> None:
@@ -189,6 +191,11 @@ def test_market_rejects_non_string_clob_token_ids() -> None:
 def test_market_rejects_integer_clob_token_ids() -> None:
     with pytest.raises(UnexpectedResponseError):
         Market.parse_response(_minimal_market_payload(clobTokenIds=[123, 456]))
+
+
+def test_market_rejects_non_string_position_ids() -> None:
+    with pytest.raises(UnexpectedResponseError):
+        Market.parse_response(_minimal_market_payload(positionIds=[None, "POSITION-NO"]))
 
 
 def test_market_rejects_malformed_outcome_price() -> None:

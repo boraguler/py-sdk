@@ -8,7 +8,7 @@ from types import TracebackType
 from typing import Any, Protocol, TypeAlias, runtime_checkable
 
 from polymarket.errors import PolymarketError
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import ConditionId, PositionId
 from polymarket.types import EvmAddress, TransactionHash
 
 RfqId: TypeAlias = str
@@ -113,10 +113,10 @@ class RfqQuoteRequestEvent:
     type: str
     rfq_id: RfqId
     requestor_public_id: RfqRequestorPublicId
-    leg_position_ids: tuple[TokenId, ...]
+    leg_position_ids: tuple[PositionId, ...]
     condition_id: ConditionId
-    yes_position_id: TokenId
-    no_position_id: TokenId
+    yes_position_id: PositionId
+    no_position_id: PositionId
     direction: RfqDirection
     side: RfqSide
     requested_size: RfqRequestedSize
@@ -141,10 +141,10 @@ class RfqConfirmationRequestEvent:
     signer_address: EvmAddress
     maker_address: EvmAddress
     signature_type: int
-    leg_position_ids: tuple[TokenId, ...]
+    leg_position_ids: tuple[PositionId, ...]
     condition_id: ConditionId
-    yes_position_id: TokenId
-    no_position_id: TokenId
+    yes_position_id: PositionId
+    no_position_id: PositionId
     direction: RfqDirection
     side: RfqSide
     fill_size: Decimal

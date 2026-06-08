@@ -29,7 +29,7 @@ from polymarket.errors import (
     TimeoutError as SDKTimeoutError,
 )
 from polymarket.models import ApiKeyCreds
-from polymarket.models.types import ConditionId, OrderSide, TokenId
+from polymarket.models.types import ConditionId, OrderSide, PositionId, TokenId
 from polymarket.rfq import (
     RfqCancelQuoteAck,
     RfqCancelQuoteRejectedError,
@@ -356,7 +356,7 @@ class RfqQuoterSession:
             signer=self._order_signer_address(),
             taker_amount=_taker_amount(side, order_price, size_e6),
             timestamp=int(time.time()),
-            token_id=_quote_order_token_id(request, source),
+            token_id=TokenId(_quote_order_token_id(request, source)),
         )
         typed_data = build_order_typed_data(unsigned, protocol_version=_PROTOCOL_VERSION_V3)
         try:
@@ -556,10 +556,12 @@ def _parse_quote_request(raw: dict[str, object], session: RfqQuoterSession) -> R
         type="quote_request",
         rfq_id=_expect_str(raw, "rfq_id"),
         requestor_public_id=_expect_str(raw, "requestor_public_id"),
-        leg_position_ids=tuple(TokenId(item) for item in _expect_str_list(raw, "leg_position_ids")),
+        leg_position_ids=tuple(
+            PositionId(item) for item in _expect_str_list(raw, "leg_position_ids")
+        ),
         condition_id=ConditionId(_expect_str(raw, "condition_id")),
-        yes_position_id=TokenId(_expect_str(raw, "yes_position_id")),
-        no_position_id=TokenId(_expect_str(raw, "no_position_id")),
+        yes_position_id=PositionId(_expect_str(raw, "yes_position_id")),
+        no_position_id=PositionId(_expect_str(raw, "no_position_id")),
         direction=RfqDirection(_expect_str(raw, "direction")),
         side=RfqSide(_expect_str(raw, "side")),
         requested_size=_parse_requested_size(_expect_dict(raw, "requested_size")),
@@ -578,10 +580,12 @@ def _parse_confirmation_request(
         signer_address=EvmAddress(_expect_str(raw, "signer_address")),
         maker_address=EvmAddress(_expect_str(raw, "maker_address")),
         signature_type=_expect_int(raw, "signature_type"),
-        leg_position_ids=tuple(TokenId(item) for item in _expect_str_list(raw, "leg_position_ids")),
+        leg_position_ids=tuple(
+            PositionId(item) for item in _expect_str_list(raw, "leg_position_ids")
+        ),
         condition_id=ConditionId(_expect_str(raw, "condition_id")),
-        yes_position_id=TokenId(_expect_str(raw, "yes_position_id")),
-        no_position_id=TokenId(_expect_str(raw, "no_position_id")),
+        yes_position_id=PositionId(_expect_str(raw, "yes_position_id")),
+        no_position_id=PositionId(_expect_str(raw, "no_position_id")),
         direction=RfqDirection(_expect_str(raw, "direction")),
         side=RfqSide(_expect_str(raw, "side")),
         fill_size=_e6_to_decimal(_expect_str(raw, "fill_size_e6")),
@@ -631,7 +635,7 @@ def _default_quote_size(requested_size: RfqRequestedSize, price_e6: int) -> int:
     return (value_e6 * _E6) // price_e6
 
 
-def _quote_order_token_id(request: RfqQuoteRequestEvent, source: RfqQuoteSource) -> TokenId:
+def _quote_order_token_id(request: RfqQuoteRequestEvent, source: RfqQuoteSource) -> PositionId:
     if request.direction == RfqDirection.BUY:
         if source == RfqQuoteSource.COLLATERAL:
             return request.no_position_id

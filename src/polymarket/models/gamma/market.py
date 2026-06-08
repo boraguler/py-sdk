@@ -25,6 +25,7 @@ from polymarket.models.types import (
     ConditionId,
     EventId,
     MarketId,
+    PositionId,
     QuestionId,
     ResolutionRequestId,
     TagId,
@@ -388,6 +389,10 @@ class Market(BaseModel):
     sports: MarketSportsMetadata
     events: tuple[MarketEvent, ...]
     tags: tuple[MarketTag, ...]
+    position_ids: tuple[PositionId, ...] = Field(
+        default=(),
+        validation_alias="positionIds",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -404,6 +409,9 @@ class Market(BaseModel):
             parse_decimal(item) for item in parse_sequence(data.get("outcomePrices"))
         )
         token_ids = parse_string_sequence(data.get("clobTokenIds"))
+        position_ids = tuple(
+            PositionId(item) for item in parse_string_sequence(data.get("positionIds"))
+        )
 
         if len(outcomes) != 2:
             msg = f"Expected binary market outcomes, received {len(outcomes)}"
@@ -508,6 +516,7 @@ class Market(BaseModel):
                 }
                 for tag in parse_dicts(data.get("tags"))
             ],
+            "position_ids": position_ids,
         }
 
 

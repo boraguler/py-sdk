@@ -471,6 +471,7 @@ def list_markets_spec(
     locale: str | None = None,
     market_maker_addresses: str | Sequence[str] | None = None,
     order: str | None = None,
+    position_ids: str | Sequence[str] | None = None,
     question_ids: str | Sequence[str] | None = None,
     related_tags: bool | None = None,
     rfq_enabled: bool | None = None,
@@ -504,6 +505,7 @@ def list_markets_spec(
     _add_optional(params, "locale", locale)
     _add_optional_seq(params, "market_maker_address", market_maker_addresses)
     _add_optional(params, "order", order)
+    _add_optional_seq(params, "position_ids", position_ids)
     _add_optional_seq(params, "question_ids", question_ids)
     _add_optional(params, "related_tags", related_tags)
     _add_optional(params, "rfq_enabled", rfq_enabled)
