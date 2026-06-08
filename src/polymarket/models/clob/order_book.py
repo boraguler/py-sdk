@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import Field, field_validator
@@ -9,6 +8,7 @@ from pydantic import Field, field_validator
 from polymarket._frames_bridge import frames_func as _frames_func
 from polymarket.models.base import BaseModel
 from polymarket.models.clob._validators import (
+    EpochMsTimestamp,
     _DecimalFromString,  # pyright: ignore[reportPrivateUsage]
 )
 from polymarket.models.types import TokenId
@@ -24,7 +24,7 @@ class OrderBookLevel(BaseModel):
 class OrderBook(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
-    timestamp: datetime | None = None
+    timestamp: EpochMsTimestamp = None
     bids: tuple[OrderBookLevel, ...]
     """Ascending price order, lowest bid first."""
     asks: tuple[OrderBookLevel, ...]
@@ -34,27 +34,6 @@ class OrderBook(BaseModel):
     neg_risk: bool
     last_trade_price: _DecimalFromString | None = None
     hash: str
-
-    @field_validator("timestamp", mode="before")
-    @classmethod
-    def _parse_timestamp(cls, value: object) -> datetime | None:
-        if value in (None, ""):
-            return None
-        if isinstance(value, datetime):
-            return value
-        if isinstance(value, str):
-            try:
-                ms = int(value)
-            except ValueError as error:
-                msg = f"invalid epoch-ms timestamp: {value!r}"
-                raise ValueError(msg) from error
-            try:
-                return datetime.fromtimestamp(ms / 1000, tz=UTC)
-            except (OverflowError, OSError, ValueError) as error:
-                msg = f"invalid epoch-ms timestamp: {value!r}"
-                raise ValueError(msg) from error
-        msg = f"expected a string epoch-ms timestamp, got {type(value).__name__}"
-        raise ValueError(msg)
 
     @field_validator("last_trade_price", mode="before")
     @classmethod
