@@ -285,6 +285,30 @@ class Event(BaseModel):
     tags: tuple[EventTag, ...]
     creators: tuple[EventCreator, ...]
 
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr
+
+        @safe_html_repr
+        def render(self: Event) -> str:
+            if self.state.closed or self.state.ended:
+                status = "closed"
+            elif self.state.active:
+                status = "open"
+            elif self.state.archived:
+                status = "archived"
+            else:
+                status = "unknown"
+            title = f"{self.title or '(no title)'}  ·  {status}"
+            rows: list[tuple[str, str]] = []
+            if self.slug:
+                rows.append(("slug", self.slug))
+            rows.append(("markets", str(len(self.markets))))
+            if self.schedule.end_date is not None:
+                rows.append(("end", self.schedule.end_date.date().isoformat()))
+            return card(title, rows=rows)
+
+        return render(self)
+
     @field_validator("id", mode="before")
     @classmethod
     def _coerce_id(cls, value: object) -> object:

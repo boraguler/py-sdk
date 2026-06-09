@@ -332,7 +332,7 @@ class PublicClient:
         """List builder-attributed trades.
 
         Returns:
-            A paginator. Use ``first_page()``, iterate over pages, or call ``items()``
+            A paginator. Use ``first_page()``, iterate over pages, or call ``iter_items()``
             to stream individual trades.
         """
 

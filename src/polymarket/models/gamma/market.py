@@ -389,6 +389,35 @@ class Market(BaseModel):
     events: tuple[MarketEvent, ...]
     tags: tuple[MarketTag, ...]
 
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr, truncate_mid
+
+        @safe_html_repr
+        def render(self: Market) -> str:
+            if self.state.closed:
+                status = "closed"
+            elif self.state.active:
+                status = "open"
+            elif self.state.archived:
+                status = "archived"
+            else:
+                status = "unknown"
+            title = f"{self.question or '(no question)'}  ·  {status}"
+            rows: list[tuple[str, str]] = []
+            if self.slug:
+                rows.append(("slug", self.slug))
+            if self.condition_id:
+                rows.append(("condition", truncate_mid(self.condition_id)))
+            if self.state.end_date is not None:
+                rows.append(("end", self.state.end_date.date().isoformat()))
+            yes = self.outcomes.yes.price
+            no = self.outcomes.no.price
+            if yes is not None and no is not None:
+                rows.append(("yes / no", f"{yes} / {no}"))
+            return card(title, rows=rows)
+
+        return render(self)
+
     @model_validator(mode="before")
     @classmethod
     def _normalize_market(cls, value: object) -> object:

@@ -84,6 +84,28 @@ class Position(BaseModel):
     def _parse_end_date(cls, value: object) -> date | None:
         return parse_optional_date(value)
 
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr, truncate_mid
+
+        @safe_html_repr
+        def render(self: Position) -> str:
+            label = self.title or truncate_mid(self.condition_id)
+            title = f"Position  ·  {label}"
+            rows: list[tuple[str, str]] = []
+            if self.outcome:
+                rows.append(("side", self.outcome))
+            if self.size is not None:
+                rows.append(("size", str(self.size)))
+            if self.avg_price is not None:
+                rows.append(("avg_price", str(self.avg_price)))
+            if self.cur_price is not None:
+                rows.append(("current", str(self.cur_price)))
+            if self.cash_pnl is not None:
+                rows.append(("pnl", str(self.cash_pnl)))
+            return card(title, rows=rows)
+
+        return render(self)
+
 
 class ClosedPosition(BaseModel):
     """Closed market position for a wallet."""
