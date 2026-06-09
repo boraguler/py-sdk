@@ -4,12 +4,20 @@ from eth_utils.crypto import keccak
 
 from polymarket._internal.actions.relayer.calls import (
     MAX_UINT256,
+    combinatorial_prepare_condition_call,
     ctf_redeem_positions_call,
+    decode_erc1155_balance_of_batch_result,
+    decode_erc1155_balance_of_result,
     erc20_approval_call,
     erc20_transfer_call,
+    erc1155_balance_of_batch_call,
+    erc1155_balance_of_call,
     erc1155_set_approval_for_all_call,
     merge_positions_call,
+    merge_v2_call,
+    redeem_v2_call,
     split_position_call,
+    split_v2_call,
 )
 from polymarket.errors import UserInputError
 from polymarket.types import EvmAddress
@@ -20,6 +28,7 @@ _NEG_RISK_ADAPTER = EvmAddress("0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296")
 _STANDARD_EXCHANGE = EvmAddress("0xE111180000d2663C0091e4f400237545B87B996B")
 _RECIPIENT = EvmAddress("0x000000000000000000000000000000000000dEaD")
 _CONDITION_ID = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+_COMBO_CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
 _ZERO_BYTES32 = b"\x00" * 32
 
 
@@ -166,6 +175,84 @@ def test_ctf_redeem_positions_call_golden_calldata() -> None:
     )
     assert call.to == _CTF
     assert call.data == expected
+
+
+def test_split_v2_call_golden_calldata() -> None:
+    call = split_v2_call(router=_STANDARD_EXCHANGE, condition_id=_COMBO_CONDITION_ID, amount=7)
+    expected = (
+        "0x"
+        + (
+            _sel("split(bytes31,uint256)")
+            + abi_encode(["bytes31", "uint256"], [bytes.fromhex(_COMBO_CONDITION_ID[2:]), 7])
+        ).hex()
+    )
+    assert call.to == _STANDARD_EXCHANGE
+    assert call.data == expected
+
+
+def test_merge_v2_call_normalizes_binary_wire_condition_id() -> None:
+    call = merge_v2_call(
+        router=_STANDARD_EXCHANGE,
+        condition_id=f"{_COMBO_CONDITION_ID}01",
+        amount=8,
+    )
+    expected = (
+        "0x"
+        + (
+            _sel("merge(bytes31,uint256)")
+            + abi_encode(["bytes31", "uint256"], [bytes.fromhex(_COMBO_CONDITION_ID[2:]), 8])
+        ).hex()
+    )
+    assert call.data == expected
+
+
+def test_redeem_v2_call_golden_calldata() -> None:
+    call = redeem_v2_call(
+        router=_STANDARD_EXCHANGE,
+        condition_id=_COMBO_CONDITION_ID,
+        outcome_index=1,
+        amount=9,
+    )
+    expected = (
+        "0x"
+        + (
+            _sel("redeem(bytes31,uint256,uint256)")
+            + abi_encode(
+                ["bytes31", "uint256", "uint256"],
+                [bytes.fromhex(_COMBO_CONDITION_ID[2:]), 1, 9],
+            )
+        ).hex()
+    )
+    assert call.data == expected
+
+
+def test_combinatorial_prepare_condition_call_golden_calldata() -> None:
+    call = combinatorial_prepare_condition_call(
+        combinatorial_module=_STANDARD_EXCHANGE,
+        legs=[1, 2],
+    )
+    expected = (
+        "0x"
+        + (_sel("prepareCondition(uint256[])") + abi_encode(["uint256[]"], [[1, 2]])).hex()
+    )
+    assert call.to == _STANDARD_EXCHANGE
+    assert call.data == expected
+
+
+def test_erc1155_balance_calls_and_decoders() -> None:
+    single = erc1155_balance_of_call(token_address=_CTF, owner=_RECIPIENT, token_id="123")
+    assert single.data.startswith("0x" + _sel("balanceOf(address,uint256)").hex())
+    assert decode_erc1155_balance_of_result("0x" + abi_encode(["uint256"], [42]).hex()) == 42
+
+    batch = erc1155_balance_of_batch_call(
+        token_address=_CTF,
+        owners=[_RECIPIENT, _RECIPIENT],
+        token_ids=["123", "456"],
+    )
+    assert batch.data.startswith("0x" + _sel("balanceOfBatch(address[],uint256[])").hex())
+    assert decode_erc1155_balance_of_batch_result(
+        "0x" + abi_encode(["uint256[]"], [[10, 20]]).hex()
+    ) == (10, 20)
 
 
 def test_erc20_approval_call_max_amount() -> None:

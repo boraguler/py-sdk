@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from polymarket.models.data import (
     BuilderVolumeEntry,
+    ComboPosition,
     Holder,
     LiveVolume,
     MetaHolder,
@@ -124,3 +125,66 @@ def test_builder_volume_entry_handles_missing_fields() -> None:
     assert entry.bucket_at is None
     assert entry.builder is None
     assert entry.volume is None
+
+
+def test_combo_position_parses_payload() -> None:
+    payload = {
+        "combo_condition_id": "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000",
+        "combo_position_id": "123",
+        "module_id": 3,
+        "user_address": "0x0000000000000000000000000000000000000001",
+        "shares_balance": "42.5",
+        "entry_avg_price_usdc": "0.12",
+        "entry_cost_usdc": "5.1",
+        "status": "OPEN",
+        "first_entry_at": "2026-06-01T12:00:00Z",
+        "resolved_at": None,
+        "legs_total": 2,
+        "legs_resolved": 1,
+        "legs_pending": 1,
+        "legs": [
+            {
+                "leg_index": 0,
+                "leg_position_id": "456",
+                "leg_condition_id": (
+                    "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                ),
+                "leg_outcome_index": 1,
+                "leg_outcome_label": "Yes",
+                "leg_status": "PARTIAL",
+                "leg_resolved_at": None,
+                "leg_current_price": "0.77",
+                "market": {
+                    "market_id": "789",
+                    "slug": "market-slug",
+                    "title": "Market title",
+                    "outcome": "Yes",
+                    "image_url": "https://example.test/image.png",
+                    "icon_url": "https://example.test/icon.png",
+                    "category": "Politics",
+                    "subcategory": None,
+                    "tags": ["a", "b"],
+                    "end_date": "2026-07-01T00:00:00Z",
+                    "event": {
+                        "event_id": "event-1",
+                        "event_slug": "event-slug",
+                        "event_title": "Event title",
+                        "event_image": "https://example.test/event.png",
+                    },
+                },
+            }
+        ],
+    }
+
+    combo = ComboPosition.parse_response(payload)
+
+    assert combo.condition_id == payload["combo_condition_id"]
+    assert combo.position_id == "123"
+    assert combo.shares == Decimal("42.5")
+    assert combo.status == "OPEN"
+    assert combo.legs[0].leg_position_id == "456"
+    assert combo.legs[0].leg_current_price == Decimal("0.77")
+    assert combo.legs[0].market is not None
+    assert combo.legs[0].market.market_id == "789"
+    assert combo.legs[0].market.event is not None
+    assert combo.legs[0].market.event.event_slug == "event-slug"

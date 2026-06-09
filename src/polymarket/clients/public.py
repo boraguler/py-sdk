@@ -15,6 +15,7 @@ from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
     ClosedPositionSortBy,
+    ComboPositionStatus,
     MarketPositionSortBy,
     MarketPositionStatus,
     PositionSortBy,
@@ -71,6 +72,7 @@ from polymarket.models.data import (
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
     ClosedPosition,
+    ComboPosition,
     LeaderboardCategory,
     LeaderboardEntry,
     LeaderboardOrderBy,
@@ -406,6 +408,28 @@ class PublicClient:
             title=title,
             sort_by=sort_by,
             sort_direction=sort_direction,
+        )
+        return sync_paginate_offset(self._ctx, spec, page_size=page_size)
+
+    def list_combo_positions(
+        self,
+        *,
+        user: str,
+        status: ComboPositionStatus | None = None,
+        condition_id: str | None = None,
+        position_id: str | None = None,
+        page_size: int = 20,
+    ) -> Paginator[ComboPosition]:
+        """List combo positions for a user.
+
+        Returns:
+            A paginator over matching combo positions.
+        """
+        spec = _data_actions.list_combo_positions_spec(
+            user=user,
+            status=status,
+            condition_id=condition_id,
+            position_id=position_id,
         )
         return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 

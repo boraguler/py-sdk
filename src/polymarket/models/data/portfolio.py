@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import Field, field_validator
 
@@ -11,8 +12,16 @@ from polymarket.models.gamma.common import (
     parse_optional_date,
     parse_optional_decimal,
 )
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import (
+    ComboConditionId,
+    ConditionId,
+    CtfConditionId,
+    PositionId,
+    TokenId,
+)
 from polymarket.types import EvmAddress
+
+ComboPositionStatus = Literal["OPEN", "PARTIAL", "RESOLVED_WIN", "RESOLVED_LOSS"]
 
 
 class PortfolioValue(BaseModel):
@@ -128,4 +137,74 @@ class ClosedPosition(BaseModel):
         return parse_optional_date(value)
 
 
-__all__ = ["ClosedPosition", "PortfolioValue", "Position", "TradedMarketCount"]
+class ComboPositionMarketEvent(BaseModel):
+    event_id: str | None = None
+    event_slug: str | None = None
+    event_title: str | None = None
+    event_image: str | None = None
+
+
+class ComboPositionMarket(BaseModel):
+    market_id: str | None = None
+    slug: str | None = None
+    title: str | None = None
+    outcome: str | None = None
+    image_url: str | None = None
+    icon_url: str | None = None
+    category: str | None = None
+    subcategory: str | None = None
+    tags: tuple[str, ...] | None = None
+    end_date: datetime | None = None
+    event: ComboPositionMarketEvent | None = None
+
+
+class ComboPositionLeg(BaseModel):
+    leg_index: int
+    leg_position_id: PositionId
+    leg_condition_id: CtfConditionId
+    leg_outcome_index: int
+    leg_outcome_label: str | None = None
+    leg_status: ComboPositionStatus
+    leg_resolved_at: datetime | None = None
+    leg_current_price: Decimal | None = None
+    market: ComboPositionMarket | None = None
+
+    @field_validator("leg_current_price", mode="before")
+    @classmethod
+    def _parse_decimal(cls, value: object) -> Decimal | None:
+        return parse_optional_decimal(value)
+
+
+class ComboPosition(BaseModel):
+    condition_id: ComboConditionId = Field(validation_alias="combo_condition_id")
+    position_id: PositionId = Field(validation_alias="combo_position_id")
+    module_id: int = Field(validation_alias="module_id")
+    user_address: EvmAddress = Field(validation_alias="user_address")
+    shares: Decimal = Field(validation_alias="shares_balance")
+    entry_avg_price_usdc: Decimal | None = None
+    entry_cost_usdc: Decimal | None = None
+    status: ComboPositionStatus
+    first_entry_at: datetime
+    resolved_at: datetime | None = None
+    legs_total: int
+    legs_resolved: int
+    legs_pending: int
+    legs: tuple[ComboPositionLeg, ...]
+
+    @field_validator("shares", "entry_avg_price_usdc", "entry_cost_usdc", mode="before")
+    @classmethod
+    def _parse_decimal(cls, value: object) -> Decimal | None:
+        return parse_optional_decimal(value)
+
+
+__all__ = [
+    "ClosedPosition",
+    "ComboPosition",
+    "ComboPositionLeg",
+    "ComboPositionMarket",
+    "ComboPositionMarketEvent",
+    "ComboPositionStatus",
+    "PortfolioValue",
+    "Position",
+    "TradedMarketCount",
+]

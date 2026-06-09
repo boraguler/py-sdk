@@ -1,15 +1,37 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
+from eth_abi.abi import encode as abi_encode
+from eth_utils.crypto import keccak
+
 from polymarket.errors import UnexpectedResponseError, UserInputError
 from polymarket.models.data.portfolio import Position
+from polymarket.models.types import ComboConditionId, PositionId, to_combo_condition_id
 
 _TOKEN_DECIMALS = 1_000_000
+_UINT256_MAX = (1 << 256) - 1
+_UINT256_BYTE_LENGTH = 32
+_COMBINATORIAL_MODULE_ID = 3
+_MAX_COMBO_LEGS = 50
 
 BinaryPositions = tuple[Position | None, Position | None]
+CanonicalComboLegs = tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ComboPositionContext:
+    condition_id: ComboConditionId
+    position_ids: tuple[PositionId, PositionId]
+
+
+@dataclass(frozen=True, slots=True)
+class DecodedComboOutcomePositionId:
+    condition_id: ComboConditionId
+    outcome_index: Literal[0, 1]
 
 
 def expect_binary_positions(positions: Sequence[Position]) -> BinaryPositions:
@@ -99,6 +121,89 @@ def resolve_merge_amount(
     return requested
 
 
+def resolve_merge_amount_from_balances(
+    condition_id: str,
+    balances: Sequence[int],
+    requested: int | Literal["max"],
+) -> int:
+    max_amount = calculate_max_merge_amount_from_balances(balances)
+    if max_amount == 0:
+        raise UserInputError(
+            f"You have no complementary positions to merge for condition {condition_id}"
+        )
+    if requested == "max":
+        return max_amount
+    if requested <= 0:
+        raise UserInputError("Merge amount must be positive")
+    if requested > max_amount:
+        raise UserInputError(
+            f"Requested merge amount {requested} exceeds the maximum mergeable "
+            f"amount {max_amount} for condition {condition_id}"
+        )
+    return requested
+
+
+def calculate_max_merge_amount_from_balances(balances: Sequence[int]) -> int:
+    if len(balances) != 2:
+        raise UnexpectedResponseError(f"Expected two position balances, got {len(balances)}")
+    yes_amount, no_amount = balances
+    return min(yes_amount, no_amount)
+
+
+def canonicalize_combo_legs(legs: Sequence[str]) -> CanonicalComboLegs:
+    if not 1 <= len(legs) <= _MAX_COMBO_LEGS:
+        raise UserInputError(f"Combo legs must include 1 to {_MAX_COMBO_LEGS} position IDs")
+
+    positions: list[tuple[int, str]] = []
+    for leg in legs:
+        value = _parse_position_id(leg)
+        encoded = f"{value:0{_UINT256_BYTE_LENGTH * 2}x}"
+        module_id = int(encoded[:2], 16)
+        outcome_index = int(encoded[-2:], 16)
+        if module_id not in (1, 2) or outcome_index > 1:
+            raise UserInputError("Combo legs must be binary or neg-risk YES/NO position IDs")
+        positions.append((value, encoded[:-2]))
+
+    positions.sort(key=lambda item: item[0])
+    for index in range(1, len(positions)):
+        previous_value, previous_condition = positions[index - 1]
+        current_value, current_condition = positions[index]
+        if previous_value == current_value:
+            raise UserInputError("Combo legs must not contain duplicate position IDs")
+        if previous_condition == current_condition:
+            raise UserInputError("Combo legs must not contain both outcomes for the same condition")
+
+    return tuple(value for value, _ in positions)
+
+
+def derive_combo_position_context(legs: CanonicalComboLegs) -> ComboPositionContext:
+    encoded_legs = abi_encode(["uint256[]"], [list(legs)])
+    base_hash = keccak(abi_encode(["uint256", "bytes"], [_COMBINATORIAL_MODULE_ID, encoded_legs]))
+    condition_id = to_combo_condition_id(f"0x03{base_hash.hex()[32:]}{'0' * 28}")
+    return ComboPositionContext(
+        condition_id=condition_id,
+        position_ids=(
+            PositionId(str(int(f"{condition_id}00", 16))),
+            PositionId(str(int(f"{condition_id}01", 16))),
+        ),
+    )
+
+
+def decode_combo_outcome_position_id(position_id: str) -> DecodedComboOutcomePositionId:
+    value = _parse_position_id(position_id)
+    encoded = f"{value:0{_UINT256_BYTE_LENGTH * 2}x}"
+    module_id = int(encoded[:2], 16)
+    outcome_index = int(encoded[-2:], 16)
+    if module_id != _COMBINATORIAL_MODULE_ID:
+        raise UserInputError("Combo position ID must use the combinatorial module")
+    if outcome_index not in (0, 1):
+        raise UserInputError("Combo position ID must be a YES/NO position ID")
+    return DecodedComboOutcomePositionId(
+        condition_id=to_combo_condition_id(f"0x{encoded[:-2]}"),
+        outcome_index=outcome_index,
+    )
+
+
 def _to_position_amount(position: Position | None, *, expected_outcome_index: Literal[0, 1]) -> int:
     if position is None:
         return 0
@@ -115,11 +220,31 @@ def _to_position_amount(position: Position | None, *, expected_outcome_index: Li
     return int(position.size * Decimal(_TOKEN_DECIMALS))
 
 
+def _parse_position_id(position_id: str) -> int:
+    if not position_id.strip():
+        raise UserInputError("Position ID must be a uint256 value")
+    try:
+        value = int(position_id.strip())
+    except ValueError as error:
+        raise UserInputError("Position ID must be a uint256 value") from error
+    if value < 0 or value > _UINT256_MAX:
+        raise UserInputError("Position ID must be a uint256 value")
+    return value
+
+
 __all__ = [
     "BinaryPositions",
+    "CanonicalComboLegs",
+    "ComboPositionContext",
+    "DecodedComboOutcomePositionId",
     "calculate_max_merge_amount",
+    "calculate_max_merge_amount_from_balances",
+    "canonicalize_combo_legs",
+    "decode_combo_outcome_position_id",
+    "derive_combo_position_context",
     "expect_binary_positions",
     "expect_negative_risk_flag",
     "resolve_binary_positions_condition_id",
     "resolve_merge_amount",
+    "resolve_merge_amount_from_balances",
 ]

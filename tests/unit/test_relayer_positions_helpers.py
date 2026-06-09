@@ -6,6 +6,9 @@ import pytest
 from polymarket._internal.actions.relayer.positions import (
     _derive_binary_position_amounts,
     calculate_max_merge_amount,
+    canonicalize_combo_legs,
+    decode_combo_outcome_position_id,
+    derive_combo_position_context,
     expect_binary_positions,
     expect_negative_risk_flag,
     resolve_binary_positions_condition_id,
@@ -15,6 +18,7 @@ from polymarket.errors import UnexpectedResponseError, UserInputError
 from polymarket.models.data.portfolio import Position
 
 _CONDITION_ID = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+_COMBO_CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
 
 
 def _pos(
@@ -196,3 +200,50 @@ def test_derive_binary_position_amounts_rejects_infinity() -> None:
     no_pos = _pos(outcome_index=1, size=Decimal("0"), negative_risk=True)
     with pytest.raises(UnexpectedResponseError, match="finite number"):
         _derive_binary_position_amounts((yes_pos, no_pos))
+
+
+def test_canonicalize_combo_legs_sorts_unordered_legs() -> None:
+    legs = canonicalize_combo_legs([_leg_position(2, 1), _leg_position(1, 0)])
+
+    assert tuple(str(leg) for leg in legs) == (_leg_position(1, 0), _leg_position(2, 1))
+
+
+def test_canonicalize_combo_legs_rejects_both_outcomes() -> None:
+    with pytest.raises(UserInputError, match="both outcomes"):
+        canonicalize_combo_legs([_leg_position(1, 0), _leg_position(1, 1)])
+
+
+def test_derive_combo_position_context_matches_ts_golden() -> None:
+    context = derive_combo_position_context(
+        (int(_leg_position(1, 0)), int(_leg_position(2, 1)))
+    )
+
+    assert context.condition_id == _COMBO_CONDITION_ID
+    assert context.position_ids == (
+        _combo_position(_COMBO_CONDITION_ID, 0),
+        _combo_position(_COMBO_CONDITION_ID, 1),
+    )
+
+
+def test_decode_combo_outcome_position_id() -> None:
+    decoded = decode_combo_outcome_position_id(_combo_position(_COMBO_CONDITION_ID, 1))
+
+    assert decoded.condition_id == _COMBO_CONDITION_ID
+    assert decoded.outcome_index == 1
+
+
+def test_decode_combo_outcome_position_id_rejects_non_combo() -> None:
+    with pytest.raises(UserInputError, match="combinatorial module"):
+        decode_combo_outcome_position_id(_leg_position(1, 0))
+
+
+def _leg_position(marker: int, outcome: int) -> str:
+    raw = bytearray(32)
+    raw[0] = 1
+    raw[30] = marker
+    raw[31] = outcome
+    return str(int("0x" + raw.hex(), 16))
+
+
+def _combo_position(condition_id: str, outcome: int) -> str:
+    return str(int(f"{condition_id}{outcome:02x}", 16))

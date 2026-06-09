@@ -40,6 +40,7 @@ class Environment:
     rpc_url: str
     exchange_v3: str = "0xe3333700cA9d93003F00f0F71f8515005F6c00Aa"
     protocol_v2_router: str = "0x12121212006e4CD160D18e3f00711DA5c3372600"
+    combinatorial_module: str = "0x30000034706c7d8e12009dab006be20000c031a8"
     position_manager: str = "0x006F54F7f9A22e0000CC2AB60031000000ae9fEF"
     rfq_quoter_ws_url: str = "wss://combos-rfq-gateway-quoter-preprod.polymarket.sh/ws/rfq"
     rfq_quoter_ws_headers: dict[str, str] | None = None

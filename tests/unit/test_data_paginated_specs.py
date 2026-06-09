@@ -43,6 +43,27 @@ def test_list_closed_positions_spec_builds_request() -> None:
     }
 
 
+def test_list_combo_positions_spec_builds_request() -> None:
+    spec = data_actions.list_combo_positions_spec(
+        user="0xWALLET",
+        status="OPEN",
+        condition_id="0x03abc",
+        position_id="123",
+    )
+    assert spec.path == "/v1/positions/combos"
+    assert spec.base_params == {
+        "user": "0xWALLET",
+        "status": "OPEN",
+        "combo_condition_id": "0x03abc",
+        "combo_position_id": "123",
+    }
+
+
+def test_list_combo_positions_spec_validates_status() -> None:
+    with pytest.raises(UserInputError, match="status"):
+        data_actions.list_combo_positions_spec(user="0xWALLET", status="CLOSED")  # type: ignore[arg-type]
+
+
 def test_list_market_positions_spec_requires_market() -> None:
     with pytest.raises(UserInputError, match="market is required"):
         data_actions.list_market_positions_spec(market="")
