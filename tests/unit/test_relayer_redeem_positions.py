@@ -135,21 +135,37 @@ def test_redeem_positions_rejects_neither_argument() -> None:
 
 def test_redeem_positions_accepts_market_id() -> None:
     captured: list[httpx.Request] = []
+    market_calls: list[dict[str, object]] = []
+    position_calls: list[dict[str, object]] = []
 
-    async def run() -> None:
-        client = await make_deposit_client()
-        _setup_relayer(client, captured, "tx-redeem-mkt")
-        client.list_positions = lambda **_: _StubPaginator(  # type: ignore[method-assign]
+    class _Market:
+        condition_id = _CONDITION_ID
+
+    def list_markets_stub(**kwargs: object) -> _StubPaginator:
+        market_calls.append(kwargs)
+        return _StubPaginator((_Market(),))
+
+    def list_positions_stub(**kwargs: object) -> _StubPaginator:
+        position_calls.append(kwargs)
+        return _StubPaginator(
             (
                 _pos(outcome_index=0, size="10.0", negative_risk=False),
                 _pos(outcome_index=1, size="0", negative_risk=False),
             )
         )
+
+    async def run() -> None:
+        client = await make_deposit_client()
+        _setup_relayer(client, captured, "tx-redeem-mkt")
+        client.list_markets = list_markets_stub  # type: ignore[method-assign]
+        client.list_positions = list_positions_stub  # type: ignore[method-assign]
         try:
-            await client.redeem_positions(market_id="market-123")
+            await client.redeem_positions(market_id="123")
         finally:
             await client.close()
 
     asyncio.run(run())
+    assert market_calls == [{"ids": [123], "page_size": 1}]
+    assert position_calls[0]["market"] == [_CONDITION_ID]
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     assert len(submit_calls) == 1
