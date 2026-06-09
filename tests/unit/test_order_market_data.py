@@ -17,7 +17,7 @@ from polymarket._internal.actions.orders.market_data import (
 )
 from polymarket.clients._transport import AsyncTransport
 from polymarket.errors import UnexpectedResponseError, UserInputError
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import CtfConditionId, TokenId
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
@@ -138,7 +138,7 @@ def test_fetch_platform_fee_info_defaults_to_zero_when_field_missing() -> None:
         try:
             _install_public_clob(client, _capture([], 200, {"t": []}))
             info = await fetch_platform_fee_info(
-                client._ctx, condition_id=ConditionId(_CONDITION_ID)
+                client._ctx, condition_id=CtfConditionId(_CONDITION_ID)
             )
             return info.rate, info.exponent
         finally:
@@ -156,7 +156,7 @@ def test_fetch_platform_fee_info_rejects_malformed_condition_id_before_request()
         client = await _make_client()
         try:
             _install_public_clob(client, _capture(captured, 200, {"t": []}))
-            await fetch_platform_fee_info(client._ctx, condition_id=ConditionId("0x1234"))
+            await fetch_platform_fee_info(client._ctx, condition_id=CtfConditionId("0x1234"))
         finally:
             await client.close()
 
@@ -171,7 +171,7 @@ def test_fetch_platform_fee_info_parses_rate_and_exponent() -> None:
         try:
             _install_public_clob(client, _capture([], 200, {"fd": {"r": 0.0005, "e": 1}, "t": []}))
             info = await fetch_platform_fee_info(
-                client._ctx, condition_id=ConditionId(_CONDITION_ID)
+                client._ctx, condition_id=CtfConditionId(_CONDITION_ID)
             )
             return info.rate, info.exponent
         finally:

@@ -186,7 +186,7 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
-from polymarket.models.types import ConditionId
+from polymarket.models.types import CtfConditionId
 from polymarket.pagination import Page, Paginator
 from polymarket.transactions import (
     SyncDeprecatedTransactionHandle,
@@ -1362,7 +1362,7 @@ class SecureClient:
 
         def fetch(cursor: str | None) -> Page[MarketReward]:
             path, params = _rewards_actions.build_list_market_rewards_request(
-                condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor
+                condition_id=CtfConditionId(condition_id), sponsored=sponsored, cursor=cursor
             )
             return _rewards_actions.parse_market_rewards_page(
                 self._ctx.clob.get_json(path, params=params)

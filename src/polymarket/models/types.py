@@ -13,6 +13,7 @@ CommentId = NewType("CommentId", str)
 ComboConditionId = NewType("ComboConditionId", str)
 CtfConditionId = NewType("CtfConditionId", str)
 ConditionId = CtfConditionId
+"""Deprecated legacy alias for CtfConditionId. Use CtfConditionId for new code."""
 EventCreatorId = NewType("EventCreatorId", str)
 EventExternalPartnerMappingId = NewType("EventExternalPartnerMappingId", int)
 EventId = NewType("EventId", str)

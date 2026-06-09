@@ -21,7 +21,7 @@ from polymarket.models.clob.rewards import (
     UserEarning,
     UserRewardsEarning,
 )
-from polymarket.models.types import ConditionId, validate_ctf_condition_id
+from polymarket.models.types import CtfConditionId, validate_ctf_condition_id
 from polymarket.pagination import Page
 
 _MAX_PAGE_SIZE = 500
@@ -81,7 +81,7 @@ def parse_current_rewards_page(data: object) -> Page[CurrentReward]:
 
 def build_list_market_rewards_request(
     *,
-    condition_id: ConditionId,
+    condition_id: CtfConditionId,
     sponsored: bool | None = None,
     cursor: str | None = None,
 ) -> tuple[str, dict[str, QueryParamValue]]:
@@ -284,7 +284,7 @@ def parse_reward_percentages(data: object) -> RewardsPercentages:
             raise UnexpectedResponseError(
                 f"reward percentages value for {key!r} must be numeric, got {type(value).__name__}"
             )
-        result[ConditionId(key)] = float(value)
+        result[CtfConditionId(key)] = float(value)
     return result
 
 

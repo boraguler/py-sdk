@@ -22,7 +22,7 @@ from polymarket._internal.actions.rewards import (
     parse_user_rewards_earnings_page,
 )
 from polymarket.errors import UnexpectedResponseError, UserInputError
-from polymarket.models.types import ConditionId
+from polymarket.models.types import CtfConditionId
 
 _CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
 
@@ -168,7 +168,7 @@ def test_parse_current_rewards_page_raises_on_empty_string_next_cursor() -> None
 
 def test_build_list_market_rewards_request_includes_path_and_query() -> None:
     path, params = build_list_market_rewards_request(
-        condition_id=ConditionId(_CONDITION_ID), sponsored=False, cursor="next"
+        condition_id=CtfConditionId(_CONDITION_ID), sponsored=False, cursor="next"
     )
     assert path == f"/rewards/markets/{_CONDITION_ID}"
     assert params == {"sponsored": False, "next_cursor": "next"}
@@ -176,12 +176,12 @@ def test_build_list_market_rewards_request_includes_path_and_query() -> None:
 
 def test_build_list_market_rewards_request_rejects_empty_condition_id() -> None:
     with pytest.raises(UserInputError):
-        build_list_market_rewards_request(condition_id=ConditionId(""))
+        build_list_market_rewards_request(condition_id=CtfConditionId(""))
 
 
 def test_build_list_market_rewards_request_rejects_malformed_condition_id() -> None:
     with pytest.raises(UserInputError, match="31-byte or 32-byte hex string"):
-        build_list_market_rewards_request(condition_id=ConditionId("0x1234"))
+        build_list_market_rewards_request(condition_id=CtfConditionId("0x1234"))
 
 
 def test_parse_market_rewards_page_parses_tokens_and_config() -> None:

@@ -10,7 +10,7 @@ from polymarket.errors import UnexpectedResponseError
 from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import parse_epoch_seconds_optional, parse_optional_decimal
 from polymarket.models.types import (
-    ConditionId,
+    CtfConditionId,
     TokenId,
     validate_ctf_condition_id,
     validate_optional_ctf_condition_id,
@@ -21,7 +21,7 @@ from polymarket.types import EvmAddress, TransactionHash
 class Trade(BaseModel):
     wallet: EvmAddress | None = Field(default=None, validation_alias="proxyWallet")
     token_id: TokenId | None = Field(default=None, validation_alias="asset")
-    condition_id: ConditionId | None = Field(default=None, validation_alias="conditionId")
+    condition_id: CtfConditionId | None = Field(default=None, validation_alias="conditionId")
     side: Literal["BUY", "SELL"] | None = None
     size: Decimal | None = None
     price: Decimal | None = None
@@ -45,7 +45,7 @@ class Trade(BaseModel):
 
     @field_validator("condition_id", mode="before")
     @classmethod
-    def _validate_condition_id(cls, value: object) -> ConditionId | None:
+    def _validate_condition_id(cls, value: object) -> CtfConditionId | None:
         return validate_optional_ctf_condition_id(value)
 
     @field_validator("size", "price", mode="before")
@@ -92,7 +92,7 @@ class _KnownActivityBase(BaseModel):
 
 class TradeActivity(_KnownActivityBase):
     type: Literal["TRADE"]
-    condition_id: ConditionId = Field(validation_alias="conditionId")
+    condition_id: CtfConditionId = Field(validation_alias="conditionId")
     token_id: TokenId = Field(validation_alias="asset")
     side: Literal["BUY", "SELL"]
     shares: Decimal = Field(validation_alias="size")
@@ -107,7 +107,7 @@ class TradeActivity(_KnownActivityBase):
 
     @field_validator("condition_id", mode="before")
     @classmethod
-    def _validate_condition_id(cls, value: object) -> ConditionId:
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
         return validate_ctf_condition_id(value)
 
     @field_validator("shares", "amount", "price", mode="before")
@@ -117,7 +117,7 @@ class TradeActivity(_KnownActivityBase):
 
 
 class _MarketEventActivity(_KnownActivityBase):
-    condition_id: ConditionId = Field(validation_alias="conditionId")
+    condition_id: CtfConditionId = Field(validation_alias="conditionId")
     amount: Decimal
     title: str
     slug: str
@@ -126,7 +126,7 @@ class _MarketEventActivity(_KnownActivityBase):
 
     @field_validator("condition_id", mode="before")
     @classmethod
-    def _validate_condition_id(cls, value: object) -> ConditionId:
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
         return validate_ctf_condition_id(value)
 
     @field_validator("amount", mode="before")

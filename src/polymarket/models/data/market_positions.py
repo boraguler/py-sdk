@@ -6,7 +6,7 @@ from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import parse_optional_decimal
-from polymarket.models.types import ConditionId, TokenId, validate_optional_ctf_condition_id
+from polymarket.models.types import CtfConditionId, TokenId, validate_optional_ctf_condition_id
 from polymarket.types import EvmAddress
 
 
@@ -16,7 +16,7 @@ class MarketPosition(BaseModel):
     profile_image: str | None = Field(default=None, validation_alias="profileImage")
     verified: bool | None = None
     token_id: TokenId | None = Field(default=None, validation_alias="asset")
-    condition_id: ConditionId | None = Field(default=None, validation_alias="conditionId")
+    condition_id: CtfConditionId | None = Field(default=None, validation_alias="conditionId")
     avg_price: Decimal | None = Field(default=None, validation_alias="avgPrice")
     size: Decimal | None = None
     cur_price: Decimal | None = Field(default=None, validation_alias="currPrice")
@@ -30,7 +30,7 @@ class MarketPosition(BaseModel):
 
     @field_validator("condition_id", mode="before")
     @classmethod
-    def _validate_condition_id(cls, value: object) -> ConditionId | None:
+    def _validate_condition_id(cls, value: object) -> CtfConditionId | None:
         return validate_optional_ctf_condition_id(value)
 
     @field_validator(

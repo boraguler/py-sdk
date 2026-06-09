@@ -14,7 +14,6 @@ from polymarket.models.gamma.common import (
 )
 from polymarket.models.types import (
     ComboConditionId,
-    ConditionId,
     CtfConditionId,
     PositionId,
     TokenId,
@@ -49,7 +48,7 @@ class TradedMarketCount(BaseModel):
 class Position(BaseModel):
     """Open market position held by a wallet."""
 
-    condition_id: ConditionId = Field(validation_alias="conditionId")
+    condition_id: CtfConditionId = Field(validation_alias="conditionId")
     wallet: EvmAddress | None = Field(default=None, validation_alias="proxyWallet")
     token_id: TokenId | None = Field(default=None, validation_alias="asset")
     size: Decimal | None = None
@@ -78,7 +77,7 @@ class Position(BaseModel):
 
     @field_validator("condition_id", mode="before")
     @classmethod
-    def _validate_condition_id(cls, value: object) -> ConditionId:
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
         return validate_ctf_condition_id(value)
 
     @field_validator(
@@ -107,7 +106,7 @@ class ClosedPosition(BaseModel):
 
     wallet: EvmAddress | None = Field(default=None, validation_alias="proxyWallet")
     token_id: TokenId | None = Field(default=None, validation_alias="asset")
-    condition_id: ConditionId | None = Field(default=None, validation_alias="conditionId")
+    condition_id: CtfConditionId | None = Field(default=None, validation_alias="conditionId")
     avg_price: Decimal | None = Field(default=None, validation_alias="avgPrice")
     total_bought: Decimal | None = Field(default=None, validation_alias="totalBought")
     realized_pnl: Decimal | None = Field(default=None, validation_alias="realizedPnl")
@@ -125,7 +124,7 @@ class ClosedPosition(BaseModel):
 
     @field_validator("condition_id", mode="before")
     @classmethod
-    def _validate_condition_id(cls, value: object) -> ConditionId | None:
+    def _validate_condition_id(cls, value: object) -> CtfConditionId | None:
         return validate_optional_ctf_condition_id(value)
 
     @field_validator(
