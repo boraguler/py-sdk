@@ -1,5 +1,6 @@
 # pyright: reportPrivateUsage=false
 import asyncio
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlparse
 
@@ -26,16 +27,16 @@ class _StubPaginator:
         return Page(items=self._items, has_more=False)
 
 
-def _make_market_stub(neg_risk: bool | None):
-    class _MarketState:
-        def __init__(self, neg_risk_value: bool | None) -> None:
-            self.neg_risk = neg_risk_value
-
-    class _Market:
-        def __init__(self, neg_risk_value: bool | None) -> None:
-            self.state = _MarketState(neg_risk_value)
-
-    return _Market(neg_risk)
+def _make_market_stub(neg_risk: bool | None) -> SimpleNamespace:
+    return SimpleNamespace(
+        id="123",
+        condition_id=_CONDITION_ID,
+        state=SimpleNamespace(neg_risk=neg_risk),
+        outcomes=SimpleNamespace(
+            yes=SimpleNamespace(token_id="101"),
+            no=SimpleNamespace(token_id="202"),
+        ),
+    )
 
 
 def test_split_position_uses_collateral_adapter_when_neg_risk_false() -> None:
@@ -129,7 +130,7 @@ def test_split_position_rejects_when_neg_risk_flag_missing() -> None:
             (_make_market_stub(neg_risk=None),)
         )
         try:
-            with pytest.raises(UnexpectedResponseError, match="negRisk"):
+            with pytest.raises(UnexpectedResponseError, match="negative-risk"):
                 await client.split_position(condition_id=_CONDITION_ID, amount=1)
         finally:
             await client.close()

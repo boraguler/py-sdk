@@ -2,6 +2,7 @@
 import asyncio
 import json
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import cast
 from urllib.parse import urlparse
 
@@ -94,7 +95,6 @@ def test_redeem_positions_with_combo_position_id_uses_onchain_balance() -> None:
 def test_redeem_positions_market_id_resolves_condition_before_fetching_positions() -> None:
     captured: list[httpx.Request] = []
     market_calls: list[dict[str, object]] = []
-    position_calls: list[dict[str, object]] = []
 
     async def run() -> None:
         client = await make_deposit_client()
@@ -102,9 +102,7 @@ def test_redeem_positions_market_id_resolves_condition_before_fetching_positions
         client.list_markets = _async_list_markets_stub(  # type: ignore[method-assign]
             market_calls, (_stub_market(_CONDITION_ID),)
         )
-        client.list_positions = _async_list_positions_stub(  # type: ignore[method-assign]
-            position_calls, condition_id=_CONDITION_ID, neg_risk=True
-        )
+        client.list_positions = _fail_list_positions  # type: ignore[method-assign]
         try:
             await client.redeem_positions(market_id="123")
         finally:
@@ -113,7 +111,6 @@ def test_redeem_positions_market_id_resolves_condition_before_fetching_positions
     asyncio.run(run())
 
     assert market_calls == [{"ids": [123], "page_size": 1}]
-    assert position_calls[0]["market"] == [_CONDITION_ID]
     body = _submit_body(captured)
     calls = _deposit_wallet_calls(body)
     assert calls[0]["target"].lower() == PRODUCTION.neg_risk_collateral_adapter.lower()
@@ -198,11 +195,19 @@ def _deposit_wallet_calls(body: dict[str, object]) -> list[dict[str, str]]:
 
 
 def _stub_market(condition_id: str | None):  # type: ignore[no-untyped-def]
-    class _Market:
-        def __init__(self) -> None:
-            self.condition_id = condition_id
+    return SimpleNamespace(
+        id="123",
+        condition_id=condition_id,
+        state=SimpleNamespace(neg_risk=True),
+        outcomes=SimpleNamespace(
+            yes=SimpleNamespace(token_id="101"),
+            no=SimpleNamespace(token_id="202"),
+        ),
+    )
 
-    return _Market()
+
+def _fail_list_positions(**_: object) -> None:
+    raise AssertionError("list_positions should not be called")
 
 
 class _AsyncStubPaginator:
@@ -226,37 +231,6 @@ def _async_list_markets_stub(calls: list[dict[str, object]], items: tuple[object
         return _AsyncStubPaginator(items)
 
     return list_markets
-
-
-def _async_list_positions_stub(
-    calls: list[dict[str, object]], *, condition_id: str, neg_risk: bool
-):  # type: ignore[no-untyped-def]
-    from polymarket.models.data.portfolio import Position
-
-    positions = (
-        Position.parse_response(
-            {
-                "conditionId": condition_id,
-                "outcomeIndex": 0,
-                "size": "111.0",
-                "negativeRisk": neg_risk,
-            }
-        ),
-        Position.parse_response(
-            {
-                "conditionId": condition_id,
-                "outcomeIndex": 1,
-                "size": "0",
-                "negativeRisk": neg_risk,
-            }
-        ),
-    )
-
-    def list_positions(**kwargs: object):  # type: ignore[no-untyped-def]
-        calls.append(kwargs)
-        return _AsyncStubPaginator(positions)
-
-    return list_positions
 
 
 def _leg_position(marker: int, outcome: int) -> str:

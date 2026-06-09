@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 
 from eth_abi.abi import encode as abi_encode
@@ -10,7 +10,16 @@ from eth_utils.crypto import keccak
 
 from polymarket.errors import UnexpectedResponseError, UserInputError
 from polymarket.models.data.portfolio import Position
-from polymarket.models.types import ComboConditionId, PositionId, to_combo_condition_id
+from polymarket.models.gamma.market import Market
+from polymarket.models.types import (
+    ComboConditionId,
+    CtfConditionId,
+    MarketId,
+    PositionId,
+    TokenId,
+    to_combo_condition_id,
+)
+from polymarket.types import EvmAddress
 
 _TOKEN_DECIMALS = 1_000_000
 _UINT256_MAX = (1 << 256) - 1
@@ -29,9 +38,61 @@ class ComboPositionContext:
 
 
 @dataclass(frozen=True, slots=True)
+class MarketPositionContext:
+    market_id: MarketId
+    condition_id: CtfConditionId
+    neg_risk: bool
+    adapter_address: EvmAddress
+    position_erc1155_address: EvmAddress
+    token_ids: tuple[TokenId, TokenId]
+
+
+@dataclass(frozen=True, slots=True)
 class DecodedComboOutcomePositionId:
     condition_id: ComboConditionId
     outcome_index: Literal[0, 1]
+
+
+def parse_market_id(market_id: str) -> int:
+    try:
+        parsed = Decimal(market_id.strip())
+    except (InvalidOperation, ValueError) as error:
+        raise UserInputError(f"Market ID must be an integer, received {market_id}") from error
+    if not parsed.is_finite() or parsed != parsed.to_integral_value():
+        raise UserInputError(f"Market ID must be an integer, received {market_id}")
+    return int(parsed)
+
+
+def normalize_market_position_context(
+    market: Market,
+    *,
+    context: str,
+    collateral_adapter: EvmAddress,
+    neg_risk_collateral_adapter: EvmAddress,
+    conditional_tokens: EvmAddress,
+    neg_risk_adapter: EvmAddress,
+) -> MarketPositionContext:
+    condition_id = market.condition_id
+    if condition_id is None:
+        raise UnexpectedResponseError(f"Missing condition ID for {context}")
+
+    neg_risk = market.state.neg_risk
+    if neg_risk is None:
+        raise UnexpectedResponseError(f"Missing negative-risk flag for {context}")
+
+    yes_token_id = market.outcomes.yes.token_id
+    no_token_id = market.outcomes.no.token_id
+    if yes_token_id is None or no_token_id is None:
+        raise UnexpectedResponseError(f"Missing market token IDs for {context}")
+
+    return MarketPositionContext(
+        market_id=market.id,
+        condition_id=condition_id,
+        neg_risk=neg_risk,
+        adapter_address=neg_risk_collateral_adapter if neg_risk else collateral_adapter,
+        position_erc1155_address=neg_risk_adapter if neg_risk else conditional_tokens,
+        token_ids=(yes_token_id, no_token_id),
+    )
 
 
 def expect_binary_positions(positions: Sequence[Position]) -> BinaryPositions:
@@ -237,6 +298,7 @@ __all__ = [
     "CanonicalComboLegs",
     "ComboPositionContext",
     "DecodedComboOutcomePositionId",
+    "MarketPositionContext",
     "calculate_max_merge_amount",
     "calculate_max_merge_amount_from_balances",
     "canonicalize_combo_legs",
@@ -244,6 +306,8 @@ __all__ = [
     "derive_combo_position_context",
     "expect_binary_positions",
     "expect_negative_risk_flag",
+    "normalize_market_position_context",
+    "parse_market_id",
     "resolve_binary_positions_condition_id",
     "resolve_merge_amount",
     "resolve_merge_amount_from_balances",

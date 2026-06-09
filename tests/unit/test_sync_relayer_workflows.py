@@ -1,6 +1,7 @@
 # pyright: reportPrivateUsage=false
 import dataclasses
 import json
+from types import SimpleNamespace
 from urllib.parse import urlparse
 
 import httpx
@@ -17,6 +18,7 @@ from _relayer_helpers import (
     request_json,
     trading_approval_rpc_handler,
 )
+from eth_abi.abi import encode as abi_encode
 
 from polymarket import SecureClient
 from polymarket.environments import PRODUCTION
@@ -117,17 +119,6 @@ def test_split_position_routes_through_collateral_adapter() -> None:
 
             return Page(items=self._items, has_more=False, next_cursor=None, total_count=1)
 
-    def _market_stub(neg_risk: bool):  # type: ignore[no-untyped-def]
-        class _MarketState:
-            def __init__(self) -> None:
-                self.neg_risk = neg_risk
-
-        class _Market:
-            def __init__(self) -> None:
-                self.state = _MarketState()
-
-        return _Market()
-
     def handler(request: httpx.Request) -> httpx.Response:
         captured.append(request)
         path = urlparse(str(request.url)).path
@@ -145,8 +136,11 @@ def test_split_position_routes_through_collateral_adapter() -> None:
             )
         return httpx.Response(404, request=request)
 
+    def list_markets_stub(**_: object):  # type: ignore[no-untyped-def]
+        return _StubPaginator((_stub_market(_CONDITION_ID, neg_risk=False),))
+
     with make_sync_deposit_client() as client:
-        client.list_markets = lambda **_: _StubPaginator((_market_stub(neg_risk=False),))  # type: ignore[method-assign]
+        client.list_markets = list_markets_stub  # type: ignore[method-assign]
         install_sync_relayer_handler(client, handler)
         client.split_position(condition_id=_CONDITION_ID, amount=1_000_000)
 
@@ -375,12 +369,22 @@ def _stub_binary_positions(  # type: ignore[no-untyped-def]
     client.list_positions = list_positions_stub  # type: ignore[method-assign]
 
 
-def _stub_market(condition_id: str | None):  # type: ignore[no-untyped-def]
-    class _Market:
-        def __init__(self) -> None:
-            self.condition_id = condition_id
-
-    return _Market()
+def _stub_market(
+    condition_id: str | None,
+    *,
+    neg_risk: bool | None = True,
+    yes_token_id: str | None = "101",
+    no_token_id: str | None = "202",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id="123",
+        condition_id=condition_id,
+        state=SimpleNamespace(neg_risk=neg_risk),
+        outcomes=SimpleNamespace(
+            yes=SimpleNamespace(token_id=yes_token_id),
+            no=SimpleNamespace(token_id=no_token_id),
+        ),
+    )
 
 
 def _stub_page(items: tuple[object, ...]):  # type: ignore[no-untyped-def]
@@ -397,8 +401,10 @@ def test_merge_positions_routes_through_collateral_adapter() -> None:
     captured: list[httpx.Request] = []
 
     with make_sync_deposit_client() as client:
-        _stub_binary_positions(client, neg_risk=False, yes_size="100.0", no_size="60.0")
+        client.list_markets = lambda **_: _stub_page((_stub_market(_CONDITION_ID, neg_risk=False),))  # type: ignore[method-assign]
+        client.list_positions = _fail_list_positions  # type: ignore[method-assign]
         install_sync_relayer_handler(client, _deposit_relayer_handler(captured))
+        install_sync_rpc_handler(client, _eth_call_result("uint256[]", [100_000_000, 60_000_000]))
         client.merge_positions(condition_id="0x" + "11" * 32, amount="max")
 
     submit = [r for r in captured if urlparse(str(r.url)).path == "/submit"][0]
@@ -411,7 +417,8 @@ def test_redeem_positions_routes_through_neg_risk_collateral_adapter() -> None:
     captured: list[httpx.Request] = []
 
     with make_sync_deposit_client() as client:
-        _stub_binary_positions(client, neg_risk=True, yes_size="111.0", no_size="0")
+        client.list_markets = lambda **_: _stub_page((_stub_market(_CONDITION_ID, neg_risk=True),))  # type: ignore[method-assign]
+        client.list_positions = _fail_list_positions  # type: ignore[method-assign]
         install_sync_relayer_handler(client, _deposit_relayer_handler(captured))
         client.redeem_positions(condition_id="0x" + "11" * 32)
 
@@ -424,27 +431,18 @@ def test_redeem_positions_routes_through_neg_risk_collateral_adapter() -> None:
 def test_redeem_positions_market_id_resolves_condition_before_fetching_positions() -> None:
     captured: list[httpx.Request] = []
     market_calls: list[dict[str, object]] = []
-    position_calls: list[dict[str, object]] = []
 
     def list_markets_stub(**kwargs: object):  # type: ignore[no-untyped-def]
         market_calls.append(kwargs)
-        return _stub_page((_stub_market(_CONDITION_ID),))
+        return _stub_page((_stub_market(_CONDITION_ID, neg_risk=True),))
 
     with make_sync_deposit_client() as client:
         client.list_markets = list_markets_stub  # type: ignore[method-assign]
-        _stub_binary_positions(
-            client,
-            neg_risk=True,
-            yes_size="111.0",
-            no_size="0",
-            condition_id=_CONDITION_ID,
-            calls=position_calls,
-        )
+        client.list_positions = _fail_list_positions  # type: ignore[method-assign]
         install_sync_relayer_handler(client, _deposit_relayer_handler(captured))
         client.redeem_positions(market_id="123")
 
     assert market_calls == [{"ids": [123], "page_size": 1}]
-    assert position_calls[0]["market"] == [_CONDITION_ID]
     submit = [r for r in captured if urlparse(str(r.url)).path == "/submit"][0]
     body = request_json(submit)
     inner = body["depositWalletParams"]["calls"][0]
@@ -470,24 +468,43 @@ def test_redeem_positions_market_id_raises_when_condition_missing() -> None:
 
 
 def test_split_position_raises_unexpected_response_when_neg_risk_flag_missing() -> None:
-    class _StubMarket:
-        class _State:
-            neg_risk: bool | None = None
-
-        state = _State()
-
     class _StubPaginator:
         def first_page(self):  # type: ignore[no-untyped-def]
             from polymarket.pagination import Page
 
-            return Page(items=(_StubMarket(),), has_more=False, next_cursor=None, total_count=1)
+            return Page(
+                items=(_stub_market(_CONDITION_ID, neg_risk=None),),
+                has_more=False,
+                next_cursor=None,
+                total_count=1,
+            )
 
     with (
-        pytest.raises(UnexpectedResponseError, match="Missing negRisk"),
+        pytest.raises(UnexpectedResponseError, match="Missing negative-risk"),
         make_sync_deposit_client() as client,
     ):
         client.list_markets = lambda **_: _StubPaginator()  # type: ignore[method-assign]
         client.split_position(condition_id="0x" + "11" * 32, amount=1)
+
+
+def _fail_list_positions(**_: object) -> None:
+    raise AssertionError("list_positions should not be called")
+
+
+def _eth_call_result(abi_type: str, value: object):  # type: ignore[no-untyped-def]
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": body["id"],
+                "result": "0x" + abi_encode([abi_type], [value]).hex(),
+            },
+            request=request,
+        )
+
+    return handler
 
 
 def _wait_relayer_handler(state: str, *, error_msg: str | None = None):  # type: ignore[no-untyped-def]

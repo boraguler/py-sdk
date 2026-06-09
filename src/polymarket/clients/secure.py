@@ -3,7 +3,7 @@
 import logging
 import time
 from collections.abc import Mapping, Sequence
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from types import TracebackType
 from typing import TYPE_CHECKING, Literal, Self, cast, overload
 
@@ -90,13 +90,12 @@ from polymarket._internal.actions.relayer.gasless import (
     submit_deposit_wallet_create_sync,
 )
 from polymarket._internal.actions.relayer.positions import (
+    MarketPositionContext,
     canonicalize_combo_legs,
     decode_combo_outcome_position_id,
     derive_combo_position_context,
-    expect_binary_positions,
-    expect_negative_risk_flag,
-    resolve_binary_positions_condition_id,
-    resolve_merge_amount,
+    normalize_market_position_context,
+    parse_market_id,
     resolve_merge_amount_from_balances,
 )
 from polymarket._internal.context import SyncSecureClientContext
@@ -122,7 +121,6 @@ from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import (
     RequestRejectedError,
     SigningError,
-    UnexpectedResponseError,
     UserInputError,
 )
 from polymarket.models import (
@@ -206,16 +204,6 @@ def _validate_nonce(nonce: object) -> None:
         raise UserInputError("nonce must be a non-negative integer.")
     if nonce < 0:
         raise UserInputError("nonce must be a non-negative integer.")
-
-
-def _parse_market_id_for_redeem(market_id: str) -> int:
-    try:
-        parsed = Decimal(market_id.strip())
-    except (InvalidOperation, ValueError) as error:
-        raise UserInputError(f"Market ID must be an integer, received {market_id}") from error
-    if not parsed.is_finite() or parsed != parsed.to_integral_value():
-        raise UserInputError(f"Market ID must be an integer, received {market_id}")
-    return int(parsed)
 
 
 class SecureClient:
@@ -2051,17 +2039,17 @@ class SecureClient:
             )
             return self._dispatch_calls(calls, metadata=resolved_metadata)
         assert condition_id is not None
-        neg_risk = self._resolve_market_neg_risk(condition_id)
+        context = self._resolve_market_position_context(condition_id=condition_id)
         call = split_position_call(
-            target=self._lifecycle_target_address(neg_risk),
+            target=context.adapter_address,
             collateral=cast(EvmAddress, env.collateral_token),
-            condition_id=condition_id,
+            condition_id=context.condition_id,
             amount=amount,
         )
         resolved_metadata = (
             metadata
             if metadata is not None
-            else f"Split {amount} positions for condition {condition_id}"
+            else f"Split {amount} positions for condition {context.condition_id}"
         )
         return self._dispatch_single_call(call, metadata=resolved_metadata)
 
@@ -2120,19 +2108,26 @@ class SecureClient:
             )
             return self._dispatch_calls(calls, metadata=resolved_metadata)
         assert condition_id is not None
-        binary = self._fetch_binary_positions(condition_id)
-        neg_risk = expect_negative_risk_flag(binary)
-        resolved_amount = resolve_merge_amount(binary, amount)
+        context = self._resolve_market_position_context(condition_id=condition_id)
+        balance_call = erc1155_balance_of_batch_call(
+            token_address=context.position_erc1155_address,
+            owners=[self._ctx.wallet, self._ctx.wallet],
+            token_ids=[str(token_id) for token_id in context.token_ids],
+        )
+        balances = decode_erc1155_balance_of_batch_result(
+            self._ctx.rpc.eth_call(to=str(balance_call.to), data=balance_call.data)
+        )
+        resolved_amount = resolve_merge_amount_from_balances(context.condition_id, balances, amount)
         call = merge_positions_call(
-            target=self._lifecycle_target_address(neg_risk),
+            target=context.adapter_address,
             collateral=cast(EvmAddress, env.collateral_token),
-            condition_id=condition_id,
+            condition_id=context.condition_id,
             amount=resolved_amount,
         )
         resolved_metadata = (
             metadata
             if metadata is not None
-            else f"Merge {resolved_amount} positions for condition {condition_id}"
+            else f"Merge {resolved_amount} positions for condition {context.condition_id}"
         )
         return self._dispatch_single_call(call, metadata=resolved_metadata)
 
@@ -2180,30 +2175,21 @@ class SecureClient:
                 metadata if metadata is not None else f"Redeem combo position {position_id}"
             )
             return self._dispatch_single_call(call, metadata=resolved_metadata)
-        if market_id is not None:
-            condition_id = self._resolve_redeem_market_condition_id(market_id)
-        assert condition_id is not None
-        binary = self._fetch_binary_positions(condition_id)
-        neg_risk = expect_negative_risk_flag(binary)
-        resolved_condition_id = resolve_binary_positions_condition_id(binary)
+        context = self._resolve_market_position_context(
+            condition_id=condition_id,
+            market_id=market_id,
+        )
         call = ctf_redeem_positions_call(
-            ctf=self._lifecycle_target_address(neg_risk),
+            ctf=context.adapter_address,
             collateral=cast(EvmAddress, env.collateral_token),
-            condition_id=resolved_condition_id,
+            condition_id=context.condition_id,
         )
         resolved_metadata = (
             metadata
             if metadata is not None
-            else f"Redeem positions for condition {resolved_condition_id}"
+            else f"Redeem positions for condition {context.condition_id}"
         )
         return self._dispatch_single_call(call, metadata=resolved_metadata)
-
-    def _lifecycle_target_address(self, neg_risk: bool) -> EvmAddress:
-        env = self._ctx.environment
-        return cast(
-            EvmAddress,
-            env.neg_risk_collateral_adapter if neg_risk else env.collateral_adapter,
-        )
 
     def _broadcast_eoa_call(self, call: TransactionCall) -> SyncEoaTransactionHandle:
         env = self._ctx.environment
@@ -2266,38 +2252,33 @@ class SecureClient:
         handle = submit_deposit_wallet_create_sync(ctx, metadata="Deploy Deposit Wallet")
         handle.wait()
 
-    def _resolve_market_neg_risk(self, condition_id: str) -> bool:
-        page = self.list_markets(condition_ids=[condition_id], page_size=2).first_page()
+    def _resolve_market_position_context(
+        self,
+        *,
+        condition_id: str | None = None,
+        market_id: str | None = None,
+    ) -> MarketPositionContext:
+        if (condition_id is None) == (market_id is None):
+            raise UserInputError("Provide exactly one of condition_id or market_id")
+        env = self._ctx.environment
+        if condition_id is not None:
+            context = f"condition {condition_id}"
+            page = self.list_markets(condition_ids=[condition_id], page_size=1).first_page()
+        else:
+            assert market_id is not None
+            context = f"market {market_id}"
+            page = self.list_markets(ids=[parse_market_id(market_id)], page_size=1).first_page()
         markets = page.items
         if len(markets) != 1:
-            raise UserInputError(
-                f"Expected exactly one market for condition {condition_id}, got {len(markets)}"
-            )
-        market = markets[0]
-        if market.state.neg_risk is None:
-            raise UnexpectedResponseError(f"Missing negRisk flag for condition {condition_id}")
-        return market.state.neg_risk
-
-    def _resolve_redeem_market_condition_id(self, market_id: str) -> CtfConditionId:
-        parsed_market_id = _parse_market_id_for_redeem(market_id)
-        page = self.list_markets(ids=[parsed_market_id], page_size=1).first_page()
-        markets = page.items
-        if len(markets) != 1:
-            raise UserInputError(
-                f"Expected exactly one market for market {market_id}, got {len(markets)}"
-            )
-        condition_id = markets[0].condition_id
-        if condition_id is None:
-            raise UnexpectedResponseError(f"Missing condition ID for market {market_id}")
-        return condition_id
-
-    def _fetch_binary_positions(self, market_id_or_condition_id: str):  # type: ignore[no-untyped-def]
-        page = self.list_positions(
-            user=str(self._ctx.wallet),
-            market=[market_id_or_condition_id],
-            size_threshold=0,
-        ).first_page()
-        return expect_binary_positions(page.items)
+            raise UserInputError(f"Expected exactly one market for {context}, got {len(markets)}")
+        return normalize_market_position_context(
+            markets[0],
+            context=context,
+            collateral_adapter=cast(EvmAddress, env.collateral_adapter),
+            neg_risk_collateral_adapter=cast(EvmAddress, env.neg_risk_collateral_adapter),
+            conditional_tokens=cast(EvmAddress, env.conditional_tokens),
+            neg_risk_adapter=cast(EvmAddress, env.neg_risk_adapter),
+        )
 
 
 def _bootstrap_credentials_sync(
