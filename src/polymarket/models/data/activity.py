@@ -89,6 +89,25 @@ class _KnownActivityBase(BaseModel):
     def _parse_timestamp(cls, value: object) -> datetime | None:
         return parse_epoch_seconds_optional(value)
 
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr, truncate_mid
+
+        @safe_html_repr
+        def render(self: _KnownActivityBase) -> str:
+            title = type(self).__name__
+            rows: list[tuple[str, str]] = [
+                ("timestamp", self.timestamp.isoformat()),
+                ("tx", truncate_mid(self.transaction_hash)),
+                ("wallet", truncate_mid(self.wallet)),
+            ]
+            for attr in ("amount", "shares", "price", "side", "outcome", "title"):
+                value = getattr(self, attr, None)
+                if value is not None:
+                    rows.append((attr, str(value)))
+            return card(title, rows=rows)
+
+        return render(self)
+
 
 class TradeActivity(_KnownActivityBase):
     type: Literal["TRADE"]
@@ -196,6 +215,22 @@ class UnknownActivity(BaseModel):
     @classmethod
     def _parse_timestamp(cls, value: object) -> datetime | None:
         return parse_epoch_seconds_optional(value)
+
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr, truncate_mid
+
+        @safe_html_repr
+        def render(self: UnknownActivity) -> str:
+            title = f"UnknownActivity  ·  {self.type or '(no type)'}"
+            rows: list[tuple[str, str]] = []
+            if self.timestamp is not None:
+                rows.append(("timestamp", self.timestamp.isoformat()))
+            if self.transaction_hash is not None:
+                rows.append(("tx", truncate_mid(self.transaction_hash)))
+            rows.append(("raw fields", str(len(self.raw))))
+            return card(title, rows=rows)
+
+        return render(self)
 
 
 Activity = (

@@ -26,6 +26,21 @@ class Page(Generic[T]):
     next_cursor: str | None = None
     total_count: int | None = None
 
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr, truncate_mid
+
+        @safe_html_repr
+        def render(self: Page[T]) -> str:
+            rows: list[tuple[str, str]] = []
+            if self.next_cursor is not None:
+                rows.append(("next_cursor", truncate_mid(self.next_cursor)))
+            if self.total_count is not None:
+                rows.append(("total_count", str(self.total_count)))
+            title = f"Page  ·  {len(self.items)} item(s)  ·  has_more={self.has_more}"
+            return card(title, rows=rows)
+
+        return render(self)
+
     def to_arrow(self) -> Any:
         return _frames_func("to_arrow")(self)
 
@@ -53,6 +68,14 @@ class Paginator(Generic[T]):
     ) -> None:
         self._fetch = fetch
         self._initial_cursor = initial_cursor
+
+    def __repr__(self) -> str:
+        return "Paginator(unfetched — call .first_page() or iterate)"
+
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card
+
+        return card("Paginator (unfetched — call .first_page() or iterate)")
 
     def first_page(self) -> Page[T]:
         return self._fetch(self._initial_cursor)
@@ -120,6 +143,14 @@ class AsyncPaginator(Generic[T]):
     ) -> None:
         self._fetch = fetch
         self._initial_cursor = initial_cursor
+
+    def __repr__(self) -> str:
+        return "AsyncPaginator(unfetched — call await .first_page() or async-iterate)"
+
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card
+
+        return card("AsyncPaginator (unfetched — call await .first_page() or async-iterate)")
 
     async def first_page(self) -> Page[T]:
         return await self._fetch(self._initial_cursor)

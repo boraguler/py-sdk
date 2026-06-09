@@ -18,6 +18,14 @@ class BuilderApiKey:
     def __repr__(self) -> str:
         return "BuilderApiKey(key=<redacted>, secret=<redacted>, passphrase=<redacted>)"
 
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card
+
+        return card(
+            "BuilderApiKey  ·  redacted",
+            rows=[("key", "***"), ("secret", "***"), ("passphrase", "***")],
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class RelayerApiKey:
@@ -34,6 +42,14 @@ class RelayerApiKey:
 
     def __repr__(self) -> str:
         return f"RelayerApiKey(key=<redacted>, address={self.address!r})"
+
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card
+
+        return card(
+            f"RelayerApiKey  ·  {self.address}",
+            rows=[("key", "***"), ("address", self.address)],
+        )
 
 
 ApiKey: TypeAlias = BuilderApiKey | RelayerApiKey

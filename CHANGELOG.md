@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.1.0-b4](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b3...polymarket-client-v0.1.0-b4) (2026-06-08)
+
+
+### Features
+
+* **client:** default secure clients to deposit wallet ([98ad0e9](https://github.com/Polymarket/py-sdk/commit/98ad0e995ef917d372cd025a66bccd9f59c852f4))
+* **client:** default secure clients to deposit wallet ([872c5de](https://github.com/Polymarket/py-sdk/commit/872c5ded24be3cecc344492d8a01063787747d56))
+* **frames:** add dataframe conversion foundation ([6d873f9](https://github.com/Polymarket/py-sdk/commit/6d873f95b0846a8694a29450bc9673ba4d70556f))
+* **frames:** add dataframe conversion foundation ([e17d5bb](https://github.com/Polymarket/py-sdk/commit/e17d5bbcf08f4f6c8db12f715cefd814d8cf1c5d))
+
+
+### Bug Fixes
+
+* **frames:** emit identity columns for OrderBook sequences ([a4a9601](https://github.com/Polymarket/py-sdk/commit/a4a9601820810fbbf0f159afdc1ccf9b0c1084b3))
+* **gamma:** accept event market URLs ([afcdca5](https://github.com/Polymarket/py-sdk/commit/afcdca59f1b2586c0eb235b96977427eabd203a4))
+* **gamma:** accept event market URLs ([c1e9893](https://github.com/Polymarket/py-sdk/commit/c1e9893e8f35a603d2166f9bcdaa19c95bcaae10))
+* **gamma:** default list_events to open events ([4f66139](https://github.com/Polymarket/py-sdk/commit/4f66139f289733ef4fdf814aac7635b03d7bbd7e))
+* **gamma:** default list_events to open events ([9d92d4f](https://github.com/Polymarket/py-sdk/commit/9d92d4f0d11d8ef6af901bbaea0c145082cc712c))
+* **gamma:** drop tag/series request params not honored upstream ([0e6c8f0](https://github.com/Polymarket/py-sdk/commit/0e6c8f0d11c21f93b9355b3f28623591481b37f2))
+* **gamma:** drop tag/series response fields not populated upstream ([24ff6f9](https://github.com/Polymarket/py-sdk/commit/24ff6f9ce20f53b46c2e84083739ab9b8ee5bf57))
+* **orders:** map unknown builder code to user input error ([67a00fb](https://github.com/Polymarket/py-sdk/commit/67a00fb3cf57b42c94ecd3d638d9104b6405930d))
+* **orders:** map unknown builder code to user input error ([6cace4f](https://github.com/Polymarket/py-sdk/commit/6cace4fa7e28853d21b287eea9a2168a862bc02b))
+* **pagination:** skip fetch when paginator drain limit is 0 ([8ae911c](https://github.com/Polymarket/py-sdk/commit/8ae911cafe18605b219f835a1367ebf8a42bc97d))
+
+
+### Performance Improvements
+
+* **pagination:** avoid extra fetch when drain limit hits page boundary ([ff38c8f](https://github.com/Polymarket/py-sdk/commit/ff38c8f3c05177b8a1673fcdf3dc8a81f7638970))
+
+
+### Documentation
+
+* fix get_market examples ([86c6606](https://github.com/Polymarket/py-sdk/commit/86c660685e9231bfa52d4e089e4d4a743f9f2f0f))
+* fix get_market examples ([4c893c9](https://github.com/Polymarket/py-sdk/commit/4c893c9327e2b89a8c3c5e52d30f888c9b80e748))
+
 ## [0.1.0-b3](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b2...polymarket-client-v0.1.0-b3) (2026-05-26)
 
 

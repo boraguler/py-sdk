@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import Field, field_validator
@@ -9,6 +8,7 @@ from pydantic import Field, field_validator
 from polymarket._frames_bridge import frames_func as _frames_func
 from polymarket.models.base import BaseModel
 from polymarket.models.clob._validators import (
+    EpochMsTimestamp,
     _DecimalFromString,  # pyright: ignore[reportPrivateUsage]
 )
 from polymarket.models.types import TokenId
@@ -24,7 +24,7 @@ class OrderBookLevel(BaseModel):
 class OrderBook(BaseModel):
     market: str
     token_id: TokenId = Field(validation_alias="asset_id")
-    timestamp: datetime | None = None
+    timestamp: EpochMsTimestamp = None
     bids: tuple[OrderBookLevel, ...]
     """Ascending price order, lowest bid first."""
     asks: tuple[OrderBookLevel, ...]
@@ -35,31 +35,36 @@ class OrderBook(BaseModel):
     last_trade_price: _DecimalFromString | None = None
     hash: str
 
-    @field_validator("timestamp", mode="before")
-    @classmethod
-    def _parse_timestamp(cls, value: object) -> datetime | None:
-        if value in (None, ""):
-            return None
-        if isinstance(value, datetime):
-            return value
-        if isinstance(value, str):
-            try:
-                ms = int(value)
-            except ValueError as error:
-                msg = f"invalid epoch-ms timestamp: {value!r}"
-                raise ValueError(msg) from error
-            try:
-                return datetime.fromtimestamp(ms / 1000, tz=UTC)
-            except (OverflowError, OSError, ValueError) as error:
-                msg = f"invalid epoch-ms timestamp: {value!r}"
-                raise ValueError(msg) from error
-        msg = f"expected a string epoch-ms timestamp, got {type(value).__name__}"
-        raise ValueError(msg)
-
     @field_validator("last_trade_price", mode="before")
     @classmethod
     def _parse_last_trade_price(cls, value: object) -> object:
         return None if value in (None, "") else value
+
+    def _repr_html_(self) -> str:
+        from polymarket._jupyter import card, safe_html_repr, truncate_mid
+
+        @safe_html_repr
+        def render(self: OrderBook) -> str:
+            best_bid = self.bids[-1].price if self.bids else None
+            best_ask = self.asks[-1].price if self.asks else None
+            spread = best_ask - best_bid if best_bid is not None and best_ask is not None else None
+            title = (
+                f"OrderBook  ·  {truncate_mid(self.market)}  ·  token {truncate_mid(self.token_id)}"
+            )
+            rows: list[tuple[str, str]] = [
+                (
+                    "bid / ask",
+                    f"{best_bid if best_bid is not None else '—'} / "
+                    f"{best_ask if best_ask is not None else '—'}",
+                ),
+                ("spread", str(spread) if spread is not None else "—"),
+                ("depth", f"{len(self.bids)} bids / {len(self.asks)} asks"),
+            ]
+            if self.timestamp is not None:
+                rows.append(("timestamp", self.timestamp.isoformat()))
+            return card(title, rows=rows, hint="Call .to_pandas() for level data.")
+
+        return render(self)
 
     def to_arrow(self) -> Any:
         """Flatten this book into ``[side, level, price, size]`` rows."""
