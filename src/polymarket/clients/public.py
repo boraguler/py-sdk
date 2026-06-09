@@ -15,6 +15,7 @@ from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
     ClosedPositionSortBy,
+    ComboPositionStatus,
     MarketPositionSortBy,
     MarketPositionStatus,
     PositionSortBy,
@@ -71,6 +72,7 @@ from polymarket.models.data import (
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
     ClosedPosition,
+    ComboPosition,
     LeaderboardCategory,
     LeaderboardEntry,
     LeaderboardOrderBy,
@@ -85,7 +87,7 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
-from polymarket.models.types import ConditionId
+from polymarket.models.types import CtfConditionId
 from polymarket.pagination import Page, Paginator
 
 
@@ -409,6 +411,28 @@ class PublicClient:
         )
         return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
+    def list_combo_positions(
+        self,
+        *,
+        user: str,
+        status: ComboPositionStatus | None = None,
+        condition_id: str | None = None,
+        position_id: str | None = None,
+        page_size: int = 20,
+    ) -> Paginator[ComboPosition]:
+        """List combo positions for a user.
+
+        Returns:
+            A paginator over matching combo positions.
+        """
+        spec = _data_actions.list_combo_positions_spec(
+            user=user,
+            status=status,
+            condition_id=condition_id,
+            position_id=position_id,
+        )
+        return sync_paginate_offset(self._ctx, spec, page_size=page_size)
+
     def list_market_positions(
         self,
         *,
@@ -659,6 +683,7 @@ class PublicClient:
         locale: str | None = None,
         market_maker_addresses: str | Sequence[str] | None = None,
         order: str | None = None,
+        position_ids: str | Sequence[str] | None = None,
         question_ids: str | Sequence[str] | None = None,
         related_tags: bool | None = None,
         rfq_enabled: bool | None = None,
@@ -707,6 +732,7 @@ class PublicClient:
             locale=locale,
             market_maker_addresses=market_maker_addresses,
             order=order,
+            position_ids=position_ids,
             question_ids=question_ids,
             related_tags=related_tags,
             rfq_enabled=rfq_enabled,
@@ -1039,7 +1065,7 @@ class PublicClient:
 
         def fetch(cursor: str | None) -> Page[MarketReward]:
             path, params = _rewards_actions.build_list_market_rewards_request(
-                condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor
+                condition_id=CtfConditionId(condition_id), sponsored=sponsored, cursor=cursor
             )
             return _rewards_actions.parse_market_rewards_page(
                 self._ctx.clob.get_json(path, params=params)

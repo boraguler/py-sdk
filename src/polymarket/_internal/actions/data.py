@@ -1,14 +1,16 @@
 from collections.abc import Callable, Sequence
-from typing import Literal, TypeVar, get_args
+from typing import Literal, TypeVar, cast, get_args
 
 from polymarket._internal.data_params import build_data_params
 from polymarket._internal.request import OffsetPaginatedSpec, QueryParamValue, RequestSpec
-from polymarket.errors import UserInputError
+from polymarket.errors import UnexpectedResponseError, UserInputError
 from polymarket.models.base import BaseModel
 from polymarket.models.data import (
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
     ClosedPosition,
+    ComboPosition,
+    ComboPositionStatus,
     LeaderboardCategory,
     LeaderboardEntry,
     LeaderboardOrderBy,
@@ -24,6 +26,7 @@ from polymarket.models.data import (
     TraderLeaderboardEntry,
 )
 from polymarket.models.data.activity import Activity, parse_activities
+from polymarket.models.types import to_combo_condition_id
 
 _BUILDER_VOLUME_TIME_PERIODS: tuple[str, ...] = get_args(BuilderVolumeTimePeriod)
 _LEADERBOARD_TIME_PERIODS: tuple[str, ...] = get_args(LeaderboardTimePeriod)
@@ -61,6 +64,8 @@ _POSITION_SORT_BY: tuple[str, ...] = get_args(PositionSortBy)
 
 ClosedPositionSortBy = Literal["REALIZEDPNL", "TITLE", "PRICE", "AVGPRICE", "TIMESTAMP"]
 _CLOSED_POSITION_SORT_BY: tuple[str, ...] = get_args(ClosedPositionSortBy)
+
+_COMBO_POSITION_STATUS: tuple[str, ...] = get_args(ComboPositionStatus)
 
 MarketPositionStatus = Literal["OPEN", "CLOSED", "ALL"]
 _MARKET_POSITION_STATUS: tuple[str, ...] = get_args(MarketPositionStatus)
@@ -243,6 +248,37 @@ def list_closed_positions_spec(
     )
 
 
+def list_combo_positions_spec(
+    *,
+    user: str,
+    status: ComboPositionStatus | None = None,
+    condition_id: str | None = None,
+    position_id: str | None = None,
+) -> OffsetPaginatedSpec[ComboPosition]:
+    if not user:
+        raise UserInputError("user is required.")
+    _check_enum("status", status, _COMBO_POSITION_STATUS)
+    if condition_id is not None:
+        try:
+            condition_id = to_combo_condition_id(condition_id)
+        except TypeError as error:
+            raise UserInputError(str(error)) from error
+
+    return OffsetPaginatedSpec(
+        service="data",
+        path="/v1/positions/combos",
+        base_params=build_data_params(
+            {
+                "user": user,
+                "status": status,
+                "combo_condition_id": condition_id,
+                "combo_position_id": position_id,
+            }
+        ),
+        parse_items=_parse_combo_positions,
+    )
+
+
 def list_market_positions_spec(
     *,
     market: str,
@@ -417,10 +453,19 @@ def _parser_for(model: type[_M]) -> Callable[[object], tuple[_M, ...]]:
     return parse
 
 
+def _parse_combo_positions(payload: object) -> tuple[ComboPosition, ...]:
+    if not isinstance(payload, dict):
+        raise UnexpectedResponseError("ComboPosition response did not match expected shape")
+    response = cast(dict[str, object], payload)
+    combos = response.get("combos")
+    return ComboPosition.parse_response_list(combos)
+
+
 __all__ = [
     "ActivitySortBy",
     "ActivityTypeFilter",
     "ClosedPositionSortBy",
+    "ComboPositionStatus",
     "MarketPositionSortBy",
     "MarketPositionStatus",
     "PositionSortBy",
@@ -437,6 +482,7 @@ __all__ = [
     "list_activity_spec",
     "list_builder_leaderboard_spec",
     "list_closed_positions_spec",
+    "list_combo_positions_spec",
     "list_market_positions_spec",
     "list_positions_spec",
     "list_trader_leaderboard_spec",

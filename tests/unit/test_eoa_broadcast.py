@@ -135,10 +135,10 @@ def test_eoa_transfer_erc20_dispatches_to_rpc() -> None:
     asyncio.run(run())
 
 
-def test_eoa_setup_trading_approvals_submits_and_waits_for_eleven_sequentially() -> None:
-    send_hashes = ["0x" + f"{i:02x}" * 32 for i in range(1, 12)]
+def test_eoa_setup_trading_approvals_submits_and_waits_for_required_calls_sequentially() -> None:
+    send_hashes = ["0x" + f"{i:02x}" * 32 for i in range(1, 17)]
     send_iter = iter(send_hashes)
-    receipts: list[dict[str, object] | None] = [{"status": "0x1"} for _ in range(11)]
+    receipts: list[dict[str, object] | None] = [{"status": "0x1"} for _ in range(16)]
     receipt_iter = iter(receipts)
     calls: list[dict[str, object]] = []
 
@@ -194,9 +194,9 @@ def test_eoa_setup_trading_approvals_submits_and_waits_for_eleven_sequentially()
     assert isinstance(handle, DeprecatedTransactionHandle)
     assert handle.transaction_hash is None
     send_methods = [c for c in calls if c["method"] == "eth_sendRawTransaction"]
-    assert len(send_methods) == 11
+    assert len(send_methods) == 16
     receipt_methods = [c for c in calls if c["method"] == "eth_getTransactionReceipt"]
-    assert len(receipt_methods) >= 11
+    assert len(receipt_methods) >= 16
 
 
 def test_rpc_client_closes_with_client() -> None:

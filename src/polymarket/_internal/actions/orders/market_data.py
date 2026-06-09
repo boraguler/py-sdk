@@ -7,7 +7,7 @@ from polymarket._internal.context import AsyncClientContext, SyncClientContext
 from polymarket._internal.validation import require_nonempty, validate_builder_code
 from polymarket.errors import RequestRejectedError, UnexpectedResponseError, UserInputError
 from polymarket.models.clob.builder import BuilderFeeRates
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import CtfConditionId, TokenId, validate_ctf_condition_id
 
 _ALLOWED_TICK_SIZES: frozenset[Decimal] = frozenset(
     {Decimal("0.1"), Decimal("0.01"), Decimal("0.001"), Decimal("0.0001")}
@@ -44,30 +44,40 @@ def fetch_neg_risk_sync(ctx: SyncClientContext, *, token_id: str) -> bool:
     return _parse_neg_risk(data)
 
 
-async def resolve_condition_by_token(ctx: AsyncClientContext, *, token_id: TokenId) -> ConditionId:
+async def resolve_condition_by_token(
+    ctx: AsyncClientContext, *, token_id: TokenId
+) -> CtfConditionId:
     validated = require_nonempty("token_id", token_id)
     data = await ctx.clob.get_json(f"/markets-by-token/{validated}")
     return _parse_condition_by_token(data)
 
 
-def resolve_condition_by_token_sync(ctx: SyncClientContext, *, token_id: TokenId) -> ConditionId:
+def resolve_condition_by_token_sync(ctx: SyncClientContext, *, token_id: TokenId) -> CtfConditionId:
     validated = require_nonempty("token_id", token_id)
     data = ctx.clob.get_json(f"/markets-by-token/{validated}")
     return _parse_condition_by_token(data)
 
 
 async def fetch_platform_fee_info(
-    ctx: AsyncClientContext, *, condition_id: ConditionId
+    ctx: AsyncClientContext, *, condition_id: CtfConditionId
 ) -> PlatformFeeInfo:
     validated = require_nonempty("condition_id", condition_id)
+    try:
+        validated = validate_ctf_condition_id(validated)
+    except ValueError as error:
+        raise UserInputError(str(error)) from error
     data = await ctx.clob.get_json(f"/clob-markets/{validated}")
     return _parse_platform_fee_info(data)
 
 
 def fetch_platform_fee_info_sync(
-    ctx: SyncClientContext, *, condition_id: ConditionId
+    ctx: SyncClientContext, *, condition_id: CtfConditionId
 ) -> PlatformFeeInfo:
     validated = require_nonempty("condition_id", condition_id)
+    try:
+        validated = validate_ctf_condition_id(validated)
+    except ValueError as error:
+        raise UserInputError(str(error)) from error
     data = ctx.clob.get_json(f"/clob-markets/{validated}")
     return _parse_platform_fee_info(data)
 
@@ -139,13 +149,18 @@ def _parse_neg_risk(data: object) -> bool:
     return raw
 
 
-def _parse_condition_by_token(data: object) -> ConditionId:
+def _parse_condition_by_token(data: object) -> CtfConditionId:
     if not isinstance(data, dict):
         raise UnexpectedResponseError("markets-by-token response did not match expected shape")
     raw = cast(dict[str, object], data).get("condition_id")
     if not isinstance(raw, str) or not raw:
         raise UnexpectedResponseError("markets-by-token response missing or invalid 'condition_id'")
-    return ConditionId(raw)
+    try:
+        return validate_ctf_condition_id(raw)
+    except ValueError as error:
+        raise UnexpectedResponseError(
+            "markets-by-token response missing or invalid 'condition_id'"
+        ) from error
 
 
 def _parse_platform_fee_info(data: object) -> PlatformFeeInfo:

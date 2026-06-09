@@ -22,10 +22,12 @@ from polymarket._internal.actions.rewards import (
     parse_user_rewards_earnings_page,
 )
 from polymarket.errors import UnexpectedResponseError, UserInputError
-from polymarket.models.types import ConditionId
+from polymarket.models.types import CtfConditionId
+
+_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
 
 _CURRENT_REWARD_PAYLOAD: dict[str, Any] = {
-    "condition_id": "0xCONDITION",
+    "condition_id": _CONDITION_ID,
     "rewards_max_spread": 3.0,
     "rewards_min_size": "100",
     "rewards_config": [
@@ -45,7 +47,7 @@ _CURRENT_REWARD_PAYLOAD: dict[str, Any] = {
 }
 
 _MARKET_REWARD_PAYLOAD: dict[str, Any] = {
-    "condition_id": "0xCONDITION",
+    "condition_id": _CONDITION_ID,
     "question": "Will it rain?",
     "market_slug": "rain",
     "event_slug": "weather",
@@ -69,7 +71,7 @@ _MARKET_REWARD_PAYLOAD: dict[str, Any] = {
 _USER_EARNING_PAYLOAD: dict[str, Any] = {
     "asset_address": "0xUSDC",
     "asset_rate": 0.0001,
-    "condition_id": "0xCONDITION",
+    "condition_id": _CONDITION_ID,
     "date": 1700000000000,
     "earnings": "5.5",
     "maker_address": "0xMAKER",
@@ -84,7 +86,7 @@ _TOTAL_USER_EARNING_PAYLOAD: dict[str, Any] = {
 }
 
 _USER_REWARDS_EARNING_PAYLOAD: dict[str, Any] = {
-    "condition_id": "0xCONDITION",
+    "condition_id": _CONDITION_ID,
     "earning_percentage": 0.25,
     "earnings": [
         {"asset_address": "0xUSDC", "asset_rate": 0.0001, "earnings": "5.5"},
@@ -137,7 +139,7 @@ def test_parse_current_rewards_page_decodes_end_cursor_as_none() -> None:
     assert page.has_more is False
     assert page.total_count == 1
     assert len(page.items) == 1
-    assert page.items[0].condition_id == "0xCONDITION"
+    assert page.items[0].condition_id == _CONDITION_ID
     assert page.items[0].sponsors_count == 2
 
 
@@ -166,15 +168,20 @@ def test_parse_current_rewards_page_raises_on_empty_string_next_cursor() -> None
 
 def test_build_list_market_rewards_request_includes_path_and_query() -> None:
     path, params = build_list_market_rewards_request(
-        condition_id=ConditionId("0xCONDITION"), sponsored=False, cursor="next"
+        condition_id=CtfConditionId(_CONDITION_ID), sponsored=False, cursor="next"
     )
-    assert path == "/rewards/markets/0xCONDITION"
+    assert path == f"/rewards/markets/{_CONDITION_ID}"
     assert params == {"sponsored": False, "next_cursor": "next"}
 
 
 def test_build_list_market_rewards_request_rejects_empty_condition_id() -> None:
     with pytest.raises(UserInputError):
-        build_list_market_rewards_request(condition_id=ConditionId(""))
+        build_list_market_rewards_request(condition_id=CtfConditionId(""))
+
+
+def test_build_list_market_rewards_request_rejects_malformed_condition_id() -> None:
+    with pytest.raises(UserInputError, match="31-byte or 32-byte hex string"):
+        build_list_market_rewards_request(condition_id=CtfConditionId("0x1234"))
 
 
 def test_parse_market_rewards_page_parses_tokens_and_config() -> None:
@@ -263,7 +270,7 @@ def test_parse_user_earnings_page_extracts_models() -> None:
         {"data": [_USER_EARNING_PAYLOAD], "next_cursor": END_CURSOR, "count": 1, "limit": 100}
     )
     assert len(page.items) == 1
-    assert page.items[0].condition_id == "0xCONDITION"
+    assert page.items[0].condition_id == _CONDITION_ID
 
 
 def test_build_total_user_earnings_for_day_request_path_and_params() -> None:

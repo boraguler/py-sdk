@@ -20,7 +20,7 @@ def _selector(sig: str) -> str:
     return "0x" + keccak(sig.encode("ascii"))[:4].hex()
 
 
-def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> None:
+def test_setup_trading_approvals_bundles_required_calls_for_deposit_wallet() -> None:
     captured: list[httpx.Request] = []
 
     async def run() -> None:
@@ -57,12 +57,12 @@ def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> No
     body = request_json(submit_calls[0])
     assert body["type"] == "WALLET"
     inner = body["depositWalletParams"]["calls"]
-    assert len(inner) == 11
+    assert len(inner) == 16
 
     erc20_sel = _selector("approve(address,uint256)")
     erc1155_sel = _selector("setApprovalForAll(address,bool)")
     # ERC20 approvals: standard_exchange, neg_risk_exchange, neg_risk_adapter,
-    # collateral_adapter, neg_risk_collateral_adapter
+    # collateral_adapter, neg_risk_collateral_adapter, protocol_v2_router, exchange_v3
     for index, spender in enumerate(
         [
             PRODUCTION.standard_exchange,
@@ -70,13 +70,15 @@ def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> No
             PRODUCTION.neg_risk_adapter,
             PRODUCTION.collateral_adapter,
             PRODUCTION.neg_risk_collateral_adapter,
+            PRODUCTION.protocol_v2_router,
+            PRODUCTION.exchange_v3,
         ]
     ):
         assert inner[index]["target"].lower() == PRODUCTION.collateral_token.lower()
         assert inner[index]["data"].startswith(erc20_sel)
         assert spender[2:].lower() in inner[index]["data"].lower()
-    # ERC1155 approvals: standard_exchange, neg_risk_exchange, neg_risk_adapter,
-    # collateral_adapter, neg_risk_collateral_adapter, auto_redeem_operator
+    # ERC1155 conditional-token approvals: standard_exchange, neg_risk_exchange,
+    # neg_risk_adapter, collateral_adapter, neg_risk_collateral_adapter, auto_redeem_operator
     for offset, operator in enumerate(
         [
             PRODUCTION.standard_exchange,
@@ -87,8 +89,21 @@ def test_setup_trading_approvals_bundles_eleven_calls_for_deposit_wallet() -> No
             PRODUCTION.auto_redeem_operator,
         ]
     ):
-        index = 5 + offset
+        index = 7 + offset
         assert inner[index]["target"].lower() == PRODUCTION.conditional_tokens.lower()
+        assert inner[index]["data"].startswith(erc1155_sel)
+        assert operator[2:].lower() in inner[index]["data"].lower()
+
+    # ERC1155 position-manager approvals: protocol_v2_router, exchange_v3, auto_redeem_operator
+    for offset, operator in enumerate(
+        [
+            PRODUCTION.protocol_v2_router,
+            PRODUCTION.exchange_v3,
+            PRODUCTION.auto_redeem_operator,
+        ]
+    ):
+        index = 13 + offset
+        assert inner[index]["target"].lower() == PRODUCTION.position_manager.lower()
         assert inner[index]["data"].startswith(erc1155_sel)
         assert operator[2:].lower() in inner[index]["data"].lower()
     assert body["metadata"] == "Trading setup approvals"

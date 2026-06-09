@@ -9,6 +9,7 @@ from eth_utils.crypto import keccak
 from eth_utils.hexadecimal import decode_hex
 
 from polymarket.errors import UnexpectedResponseError, UserInputError
+from polymarket.models.types import to_combo_condition_id
 from polymarket.types import EvmAddress, HexString
 
 MAX_UINT256 = (1 << 256) - 1
@@ -21,6 +22,8 @@ def _selector(signature: str) -> bytes:
 _ERC20_APPROVE_SELECTOR = _selector("approve(address,uint256)")
 _ERC20_ALLOWANCE_SELECTOR = _selector("allowance(address,address)")
 _ERC20_TRANSFER_SELECTOR = _selector("transfer(address,uint256)")
+_ERC1155_BALANCE_OF_SELECTOR = _selector("balanceOf(address,uint256)")
+_ERC1155_BALANCE_OF_BATCH_SELECTOR = _selector("balanceOfBatch(address[],uint256[])")
 _ERC1155_SET_APPROVAL_FOR_ALL_SELECTOR = _selector("setApprovalForAll(address,bool)")
 _ERC1155_IS_APPROVED_FOR_ALL_SELECTOR = _selector("isApprovedForAll(address,address)")
 _CTF_SPLIT_POSITION_SELECTOR = _selector("splitPosition(address,bytes32,bytes32,uint256[],uint256)")
@@ -28,6 +31,10 @@ _CTF_MERGE_POSITIONS_SELECTOR = _selector(
     "mergePositions(address,bytes32,bytes32,uint256[],uint256)"
 )
 _CTF_REDEEM_POSITIONS_SELECTOR = _selector("redeemPositions(address,bytes32,bytes32,uint256[])")
+_ROUTER_SPLIT_SELECTOR = _selector("split(bytes31,uint256)")
+_ROUTER_MERGE_SELECTOR = _selector("merge(bytes31,uint256)")
+_ROUTER_REDEEM_SELECTOR = _selector("redeem(bytes31,uint256,uint256)")
+_COMBINATORIAL_PREPARE_CONDITION_SELECTOR = _selector("prepareCondition(uint256[])")
 _SAFE_MULTISEND_SELECTOR = _selector("multiSend(bytes)")
 _PROXY_FACTORY_SELECTOR = _selector("proxy((uint8,address,uint256,bytes)[])")
 _INNER_OPERATION_CALL = 0
@@ -91,6 +98,38 @@ def erc1155_set_approval_for_all_call(
         to=token_address,
         data=cast(HexString, "0x" + payload.hex()),
     )
+
+
+def erc1155_balance_of_call(
+    *, token_address: EvmAddress, owner: EvmAddress, token_id: str
+) -> TransactionCall:
+    payload = _ERC1155_BALANCE_OF_SELECTOR + abi_encode(
+        ["address", "uint256"], [str(owner), _position_id_uint256(token_id)]
+    )
+    return TransactionCall(to=token_address, data=cast(HexString, "0x" + payload.hex()))
+
+
+def decode_erc1155_balance_of_result(data: str) -> int:
+    return cast(int, _decode_return_data(data, "uint256"))
+
+
+def erc1155_balance_of_batch_call(
+    *, token_address: EvmAddress, owners: list[EvmAddress], token_ids: list[str]
+) -> TransactionCall:
+    if len(owners) != len(token_ids):
+        raise UserInputError("owners and token_ids must have the same length")
+    payload = _ERC1155_BALANCE_OF_BATCH_SELECTOR + abi_encode(
+        ["address[]", "uint256[]"],
+        [[str(owner) for owner in owners], [_position_id_uint256(item) for item in token_ids]],
+    )
+    return TransactionCall(to=token_address, data=cast(HexString, "0x" + payload.hex()))
+
+
+def decode_erc1155_balance_of_batch_result(data: str) -> tuple[int, ...]:
+    values = _decode_return_data(data, "uint256[]")
+    if not isinstance(values, tuple):
+        raise UnexpectedResponseError("ERC1155 balanceOfBatch did not return uint256[]")
+    return cast(tuple[int, ...], values)
 
 
 def erc1155_is_approved_for_all_call(
@@ -166,6 +205,47 @@ def ctf_redeem_positions_call(
     return TransactionCall(to=ctf, data=cast(HexString, "0x" + payload.hex()))
 
 
+def split_v2_call(*, router: EvmAddress, condition_id: str, amount: int) -> TransactionCall:
+    _expect_uint256(amount, "Split amount")
+    payload = _ROUTER_SPLIT_SELECTOR + abi_encode(
+        ["bytes31", "uint256"], [_protocol_v2_condition_id_bytes(condition_id), amount]
+    )
+    return TransactionCall(to=router, data=cast(HexString, "0x" + payload.hex()))
+
+
+def merge_v2_call(*, router: EvmAddress, condition_id: str, amount: int) -> TransactionCall:
+    _expect_uint256(amount, "Merge amount")
+    payload = _ROUTER_MERGE_SELECTOR + abi_encode(
+        ["bytes31", "uint256"], [_protocol_v2_condition_id_bytes(condition_id), amount]
+    )
+    return TransactionCall(to=router, data=cast(HexString, "0x" + payload.hex()))
+
+
+def redeem_v2_call(
+    *, router: EvmAddress, condition_id: str, outcome_index: int, amount: int
+) -> TransactionCall:
+    if outcome_index not in (0, 1):
+        raise UserInputError("Protocol v2 outcome index must be 0 or 1")
+    _expect_uint256(amount, "Redeem amount")
+    payload = _ROUTER_REDEEM_SELECTOR + abi_encode(
+        ["bytes31", "uint256", "uint256"],
+        [_protocol_v2_condition_id_bytes(condition_id), outcome_index, amount],
+    )
+    return TransactionCall(to=router, data=cast(HexString, "0x" + payload.hex()))
+
+
+def combinatorial_prepare_condition_call(
+    *, combinatorial_module: EvmAddress, legs: list[int]
+) -> TransactionCall:
+    for leg in legs:
+        _expect_uint256(leg, "Leg position ID")
+    payload = _COMBINATORIAL_PREPARE_CONDITION_SELECTOR + abi_encode(["uint256[]"], [legs])
+    return TransactionCall(
+        to=combinatorial_module,
+        data=cast(HexString, "0x" + payload.hex()),
+    )
+
+
 def _expect_uint256(amount: int, label: str) -> None:
     if not isinstance(amount, int) or isinstance(amount, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise UserInputError(f"{label} must be an int")
@@ -184,6 +264,22 @@ def _condition_id_bytes(condition_id: str) -> bytes:
     if len(raw) != 32:
         raise UserInputError(f"condition_id must be a 32-byte hex string, got {len(raw)} bytes")
     return raw
+
+
+def _protocol_v2_condition_id_bytes(condition_id: str) -> bytes:
+    try:
+        return bytes.fromhex(to_combo_condition_id(condition_id)[2:])
+    except TypeError as error:
+        raise UserInputError(str(error)) from error
+
+
+def _position_id_uint256(position_id: str) -> int:
+    try:
+        value = int(position_id)
+    except ValueError as error:
+        raise UserInputError("Position ID must be a uint256 value") from error
+    _expect_uint256(value, "Position ID")
+    return value
 
 
 def _decode_return_data(data: str, abi_type: str) -> object:
@@ -232,16 +328,24 @@ def encode_safe_multisend_call(calls: list[TransactionCall]) -> HexString:
 __all__ = [
     "MAX_UINT256",
     "TransactionCall",
+    "combinatorial_prepare_condition_call",
     "ctf_redeem_positions_call",
+    "decode_erc1155_balance_of_batch_result",
+    "decode_erc1155_balance_of_result",
     "decode_erc1155_is_approved_for_all_result",
     "decode_erc20_allowance_result",
     "encode_proxy_call",
     "encode_safe_multisend_call",
     "erc1155_is_approved_for_all_call",
+    "erc1155_balance_of_batch_call",
+    "erc1155_balance_of_call",
     "erc1155_set_approval_for_all_call",
     "erc20_allowance_call",
     "erc20_approval_call",
     "erc20_transfer_call",
     "merge_positions_call",
+    "merge_v2_call",
+    "redeem_v2_call",
     "split_position_call",
+    "split_v2_call",
 ]

@@ -9,7 +9,7 @@ from polymarket.models.base import BaseModel
 from polymarket.models.clob._validators import (
     _DecimalFromNumberOrString,  # pyright: ignore[reportPrivateUsage]
 )
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import CtfConditionId, TokenId, validate_ctf_condition_id
 
 
 def _from_epoch_ms(value: int) -> datetime:
@@ -70,7 +70,7 @@ class CurrentRewardConfig(BaseModel):
 
 
 class CurrentReward(BaseModel):
-    condition_id: ConditionId = Field(validation_alias="condition_id")
+    condition_id: CtfConditionId = Field(validation_alias="condition_id")
     rewards_max_spread: float | None = Field(default=None, validation_alias="rewards_max_spread")
     rewards_min_size: _DecimalFromNumberOrString | None = Field(
         default=None, validation_alias="rewards_min_size"
@@ -88,6 +88,11 @@ class CurrentReward(BaseModel):
     total_daily_rate: _DecimalFromNumberOrString | None = Field(
         default=None, validation_alias="total_daily_rate"
     )
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
+        return validate_ctf_condition_id(value)
 
 
 class MarketRewardConfig(BaseModel):
@@ -117,7 +122,7 @@ class MarketRewardToken(BaseModel):
 
 
 class MarketReward(BaseModel):
-    condition_id: ConditionId = Field(validation_alias="condition_id")
+    condition_id: CtfConditionId = Field(validation_alias="condition_id")
     question: str
     market_slug: str | None = Field(default=None, validation_alias="market_slug")
     event_slug: str | None = Field(default=None, validation_alias="event_slug")
@@ -134,11 +139,16 @@ class MarketReward(BaseModel):
         default=(), validation_alias="rewards_config"
     )
 
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
+        return validate_ctf_condition_id(value)
+
 
 class UserEarning(BaseModel):
     asset_address: str = Field(validation_alias="asset_address")
     asset_rate: _DecimalFromNumberOrString = Field(validation_alias="asset_rate")
-    condition_id: ConditionId = Field(validation_alias="condition_id")
+    condition_id: CtfConditionId = Field(validation_alias="condition_id")
     date: datetime
     earnings: _DecimalFromNumberOrString
     maker_address: str = Field(validation_alias="maker_address")
@@ -147,6 +157,11 @@ class UserEarning(BaseModel):
     @classmethod
     def _parse_date(cls, value: object) -> datetime:
         return _parse_epoch_ms(value)
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
+        return validate_ctf_condition_id(value)
 
 
 class TotalUserEarning(BaseModel):
@@ -182,7 +197,7 @@ class EarningBreakdown(BaseModel):
 
 
 class UserRewardsEarning(BaseModel):
-    condition_id: ConditionId = Field(validation_alias="condition_id")
+    condition_id: CtfConditionId = Field(validation_alias="condition_id")
     earning_percentage: float = Field(validation_alias="earning_percentage")
     earnings: tuple[EarningBreakdown, ...]
     event_slug: str = Field(validation_alias="event_slug")
@@ -196,8 +211,13 @@ class UserRewardsEarning(BaseModel):
     rewards_min_size: _DecimalFromNumberOrString = Field(validation_alias="rewards_min_size")
     tokens: tuple[MarketRewardToken, ...]
 
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
+        return validate_ctf_condition_id(value)
 
-RewardsPercentages: TypeAlias = dict[ConditionId, float]
+
+RewardsPercentages: TypeAlias = dict[CtfConditionId, float]
 
 
 __all__ = [

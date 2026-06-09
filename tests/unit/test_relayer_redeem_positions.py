@@ -1,5 +1,6 @@
 # pyright: reportPrivateUsage=false
 import asyncio
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlparse
 
@@ -13,8 +14,7 @@ from _relayer_helpers import (
 from eth_utils.crypto import keccak
 
 from polymarket.environments import PRODUCTION
-from polymarket.errors import UserInputError
-from polymarket.models.data.portfolio import Position
+from polymarket.errors import UnexpectedResponseError, UserInputError
 from polymarket.pagination import Page
 
 _CONDITION_ID = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
@@ -26,17 +26,6 @@ class _StubPaginator:
 
     async def first_page(self) -> Page[Any]:
         return Page(items=self._items, has_more=False)
-
-
-def _pos(*, outcome_index: int, size: str, negative_risk: bool) -> Position:
-    return Position.parse_response(
-        {
-            "conditionId": _CONDITION_ID,
-            "outcomeIndex": outcome_index,
-            "size": size,
-            "negativeRisk": negative_risk,
-        }
-    )
 
 
 def _setup_relayer(client: Any, captured: list[httpx.Request], tx_id: str) -> None:
@@ -63,12 +52,10 @@ def test_redeem_positions_uses_collateral_adapter_when_neg_risk_false() -> None:
     async def run() -> None:
         client = await make_deposit_client()
         _setup_relayer(client, captured, "tx-redeem-ctf")
-        client.list_positions = lambda **_: _StubPaginator(  # type: ignore[method-assign]
-            (
-                _pos(outcome_index=0, size="100.0", negative_risk=False),
-                _pos(outcome_index=1, size="0", negative_risk=False),
-            )
+        client.list_markets = lambda **_: _StubPaginator(  # type: ignore[method-assign]
+            (_market(neg_risk=False),)
         )
+        client.list_positions = _fail_list_positions  # type: ignore[method-assign]
         try:
             await client.redeem_positions(condition_id=_CONDITION_ID)
         finally:
@@ -89,12 +76,10 @@ def test_redeem_positions_uses_neg_risk_collateral_adapter_when_neg_risk_true() 
     async def run() -> None:
         client = await make_deposit_client()
         _setup_relayer(client, captured, "tx-redeem-nr")
-        client.list_positions = lambda **_: _StubPaginator(  # type: ignore[method-assign]
-            (
-                _pos(outcome_index=0, size="111.0", negative_risk=True),
-                _pos(outcome_index=1, size="0", negative_risk=True),
-            )
+        client.list_markets = lambda **_: _StubPaginator(  # type: ignore[method-assign]
+            (_market(neg_risk=True),)
         )
+        client.list_positions = _fail_list_positions  # type: ignore[method-assign]
         try:
             await client.redeem_positions(condition_id=_CONDITION_ID)
         finally:
@@ -135,21 +120,60 @@ def test_redeem_positions_rejects_neither_argument() -> None:
 
 def test_redeem_positions_accepts_market_id() -> None:
     captured: list[httpx.Request] = []
+    market_calls: list[dict[str, object]] = []
+
+    def list_markets_stub(**kwargs: object) -> _StubPaginator:
+        market_calls.append(kwargs)
+        return _StubPaginator((_market(neg_risk=False),))
 
     async def run() -> None:
         client = await make_deposit_client()
         _setup_relayer(client, captured, "tx-redeem-mkt")
-        client.list_positions = lambda **_: _StubPaginator(  # type: ignore[method-assign]
-            (
-                _pos(outcome_index=0, size="10.0", negative_risk=False),
-                _pos(outcome_index=1, size="0", negative_risk=False),
-            )
-        )
+        client.list_markets = list_markets_stub  # type: ignore[method-assign]
+        client.list_positions = _fail_list_positions  # type: ignore[method-assign]
         try:
-            await client.redeem_positions(market_id="market-123")
+            await client.redeem_positions(market_id="123")
         finally:
             await client.close()
 
     asyncio.run(run())
+    assert market_calls == [{"ids": [123], "page_size": 1}]
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     assert len(submit_calls) == 1
+
+
+def test_redeem_positions_raises_when_market_token_ids_missing() -> None:
+    async def run() -> None:
+        client = await make_deposit_client()
+        client.list_markets = lambda **_: _StubPaginator(  # type: ignore[method-assign]
+            (_market(neg_risk=False, no_token_id=None),)
+        )
+        try:
+            with pytest.raises(UnexpectedResponseError, match="Missing market token IDs"):
+                await client.redeem_positions(condition_id=_CONDITION_ID)
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+
+def _market(
+    *,
+    neg_risk: bool | None,
+    condition_id: str | None = _CONDITION_ID,
+    yes_token_id: str | None = "101",
+    no_token_id: str | None = "202",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id="123",
+        condition_id=condition_id,
+        state=SimpleNamespace(neg_risk=neg_risk),
+        outcomes=SimpleNamespace(
+            yes=SimpleNamespace(token_id=yes_token_id),
+            no=SimpleNamespace(token_id=no_token_id),
+        ),
+    )
+
+
+def _fail_list_positions(**_: object) -> None:
+    raise AssertionError("list_positions should not be called")

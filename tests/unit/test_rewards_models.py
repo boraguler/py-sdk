@@ -18,11 +18,13 @@ from polymarket.models.clob.rewards import (
     UserRewardsEarning,
 )
 
+_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
+
 
 def test_current_reward_parses_with_all_optional_fields() -> None:
     reward = CurrentReward.parse_response(
         {
-            "condition_id": "0xCONDITION",
+            "condition_id": _CONDITION_ID,
             "rewards_max_spread": 3.0,
             "rewards_min_size": "100",
             "sponsors_count": 2,
@@ -31,7 +33,7 @@ def test_current_reward_parses_with_all_optional_fields() -> None:
             "total_daily_rate": "60",
         }
     )
-    assert reward.condition_id == "0xCONDITION"
+    assert reward.condition_id == _CONDITION_ID
     assert reward.rewards_max_spread == 3.0
     assert reward.rewards_min_size == Decimal("100")
     assert reward.sponsors_count == 2
@@ -39,8 +41,8 @@ def test_current_reward_parses_with_all_optional_fields() -> None:
 
 
 def test_current_reward_handles_minimal_payload() -> None:
-    reward = CurrentReward.parse_response({"condition_id": "0xCONDITION"})
-    assert reward.condition_id == "0xCONDITION"
+    reward = CurrentReward.parse_response({"condition_id": _CONDITION_ID})
+    assert reward.condition_id == _CONDITION_ID
     assert reward.rewards_max_spread is None
     assert reward.sponsors_count is None
 
@@ -74,7 +76,7 @@ def test_market_reward_config_allows_omitting_end_date_and_total() -> None:
 def test_market_reward_parses_full_payload() -> None:
     market = MarketReward.parse_response(
         {
-            "condition_id": "0xCONDITION",
+            "condition_id": _CONDITION_ID,
             "question": "Q?",
             "tokens": [{"token_id": "8501497", "outcome": "Yes", "price": "0.5"}],
         }
@@ -89,7 +91,7 @@ def test_user_earning_parses_decimal_rate_from_number() -> None:
         {
             "asset_address": "0xUSDC",
             "asset_rate": 0.0001,
-            "condition_id": "0xCONDITION",
+            "condition_id": _CONDITION_ID,
             "date": 1700000000000,
             "earnings": "5.5",
             "maker_address": "0xMAKER",
@@ -135,7 +137,7 @@ def test_earning_breakdown_parses_decimal_fields() -> None:
 def test_user_rewards_earning_aggregates_nested_structures() -> None:
     earning = UserRewardsEarning.parse_response(
         {
-            "condition_id": "0xCONDITION",
+            "condition_id": _CONDITION_ID,
             "earning_percentage": 0.5,
             "earnings": [
                 {"asset_address": "0xUSDC", "asset_rate": "0.001", "earnings": "5"},
@@ -172,7 +174,7 @@ def test_user_earning_rejects_out_of_range_epoch() -> None:
             {
                 "asset_address": "0xUSDC",
                 "asset_rate": "0.01",
-                "condition_id": "0xCONDITION",
+                "condition_id": _CONDITION_ID,
                 "date": 10**18,
                 "earnings": "1",
                 "maker_address": "0xMAKER",

@@ -1,0 +1,245 @@
+# pyright: reportPrivateUsage=false
+import asyncio
+import json
+from collections.abc import Callable
+from types import SimpleNamespace
+from typing import cast
+from urllib.parse import urlparse
+
+import httpx
+import pytest
+from _relayer_helpers import (
+    install_relayer_routes,
+    install_rpc_handler,
+    make_deposit_client,
+    request_json,
+)
+from eth_abi.abi import encode as abi_encode
+from eth_utils.crypto import keccak
+
+from polymarket import AsyncSecureClient
+from polymarket.environments import PRODUCTION
+from polymarket.errors import UnexpectedResponseError, UserInputError
+
+_COMBO_CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
+_CONDITION_ID = "0x" + "11" * 32
+
+
+def test_split_position_with_combo_legs_bundles_prepare_and_split() -> None:
+    captured: list[httpx.Request] = []
+
+    async def run() -> None:
+        client = await make_deposit_client()
+        _setup_relayer(client, captured, "tx-combo-split")
+        try:
+            await client.split_position(legs=[_leg_position(2, 1), _leg_position(1, 0)], amount=5)
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+    body = _submit_body(captured)
+    calls = _deposit_wallet_calls(body)
+    assert calls[0]["target"].lower() == PRODUCTION.combinatorial_module.lower()
+    assert calls[1]["target"].lower() == PRODUCTION.protocol_v2_router.lower()
+    assert calls[0]["data"].startswith("0x" + keccak(b"prepareCondition(uint256[])")[:4].hex())
+    assert calls[1]["data"].startswith("0x" + keccak(b"split(bytes31,uint256)")[:4].hex())
+    assert body["metadata"] == f"Split 5 combo positions for condition {_COMBO_CONDITION_ID}"
+
+
+def test_merge_positions_with_combo_legs_uses_onchain_balances() -> None:
+    captured: list[httpx.Request] = []
+
+    async def run() -> None:
+        client = await make_deposit_client()
+        _setup_relayer(client, captured, "tx-combo-merge")
+        install_rpc_handler(client, _eth_call_result("uint256[]", [100, 60]))
+        try:
+            await client.merge_positions(
+                legs=[_leg_position(1, 0), _leg_position(2, 1)], amount="max"
+            )
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+    body = _submit_body(captured)
+    calls = _deposit_wallet_calls(body)
+    assert len(calls) == 2
+    assert calls[0]["target"].lower() == PRODUCTION.combinatorial_module.lower()
+    assert calls[1]["target"].lower() == PRODUCTION.protocol_v2_router.lower()
+    assert calls[1]["data"].startswith("0x" + keccak(b"merge(bytes31,uint256)")[:4].hex())
+    assert body["metadata"] == f"Merge 60 combo positions for condition {_COMBO_CONDITION_ID}"
+
+
+def test_redeem_positions_with_combo_position_id_uses_onchain_balance() -> None:
+    captured: list[httpx.Request] = []
+    position_id = _combo_position(_COMBO_CONDITION_ID, 1)
+
+    async def run() -> None:
+        client = await make_deposit_client()
+        _setup_relayer(client, captured, "tx-combo-redeem")
+        install_rpc_handler(client, _eth_call_result("uint256", 42))
+        try:
+            await client.redeem_positions(position_id=position_id)
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+    body = _submit_body(captured)
+    calls = _deposit_wallet_calls(body)
+    assert len(calls) == 1
+    assert calls[0]["target"].lower() == PRODUCTION.protocol_v2_router.lower()
+    assert calls[0]["data"].startswith("0x" + keccak(b"redeem(bytes31,uint256,uint256)")[:4].hex())
+    assert body["metadata"] == f"Redeem combo position {position_id}"
+
+
+def test_redeem_positions_market_id_resolves_condition_before_fetching_positions() -> None:
+    captured: list[httpx.Request] = []
+    market_calls: list[dict[str, object]] = []
+
+    async def run() -> None:
+        client = await make_deposit_client()
+        _setup_relayer(client, captured, "tx-market-redeem")
+        client.list_markets = _async_list_markets_stub(  # type: ignore[method-assign]
+            market_calls, (_stub_market(_CONDITION_ID),)
+        )
+        client.list_positions = _fail_list_positions  # type: ignore[method-assign]
+        try:
+            await client.redeem_positions(market_id="123")
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+    assert market_calls == [{"ids": [123], "page_size": 1}]
+    body = _submit_body(captured)
+    calls = _deposit_wallet_calls(body)
+    assert calls[0]["target"].lower() == PRODUCTION.neg_risk_collateral_adapter.lower()
+
+
+def test_redeem_positions_market_id_rejects_non_integer() -> None:
+    async def run() -> None:
+        client = await make_deposit_client()
+        try:
+            await client.redeem_positions(market_id="not-an-int")
+        finally:
+            await client.close()
+
+    with pytest.raises(UserInputError, match="Market ID must be an integer"):
+        asyncio.run(run())
+
+
+def test_redeem_positions_market_id_raises_when_condition_missing() -> None:
+    async def run() -> None:
+        client = await make_deposit_client()
+        client.list_markets = _async_list_markets_stub(  # type: ignore[method-assign]
+            [],
+            (_stub_market(None),),
+        )
+        try:
+            await client.redeem_positions(market_id="123")
+        finally:
+            await client.close()
+
+    with pytest.raises(UnexpectedResponseError, match="Missing condition ID for market 123"):
+        asyncio.run(run())
+
+
+def _setup_relayer(client: AsyncSecureClient, captured: list[httpx.Request], tx_id: str) -> None:
+    install_relayer_routes(
+        client,
+        captured,
+        {
+            "/v1/account/transactions/params": {
+                "address": client._ctx.signer.address,
+                "nonce": "0",
+            },
+            "/submit": {
+                "state": "STATE_NEW",
+                "transactionHash": None,
+                "transactionID": tx_id,
+            },
+        },
+    )
+
+
+def _eth_call_result(abi_type: str, value: object) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": body["id"],
+                "result": "0x" + abi_encode([abi_type], [value]).hex(),
+            },
+            request=request,
+        )
+
+    return handler
+
+
+def _submit_body(captured: list[httpx.Request]) -> dict[str, object]:
+    submit = [request for request in captured if urlparse(str(request.url)).path == "/submit"][0]
+    body = request_json(submit)
+    assert isinstance(body, dict)
+    return cast(dict[str, object], body)
+
+
+def _deposit_wallet_calls(body: dict[str, object]) -> list[dict[str, str]]:
+    raw_params = body["depositWalletParams"]
+    assert isinstance(raw_params, dict)
+    params = cast(dict[str, object], raw_params)
+    calls = params["calls"]
+    assert isinstance(calls, list)
+    return cast(list[dict[str, str]], calls)
+
+
+def _stub_market(condition_id: str | None):  # type: ignore[no-untyped-def]
+    return SimpleNamespace(
+        id="123",
+        condition_id=condition_id,
+        state=SimpleNamespace(neg_risk=True),
+        outcomes=SimpleNamespace(
+            yes=SimpleNamespace(token_id="101"),
+            no=SimpleNamespace(token_id="202"),
+        ),
+    )
+
+
+def _fail_list_positions(**_: object) -> None:
+    raise AssertionError("list_positions should not be called")
+
+
+class _AsyncStubPaginator:
+    def __init__(self, items: tuple[object, ...]) -> None:
+        self._items = items
+
+    async def first_page(self):  # type: ignore[no-untyped-def]
+        from polymarket.pagination import Page
+
+        return Page(
+            items=self._items,
+            has_more=False,
+            next_cursor=None,
+            total_count=len(self._items),
+        )
+
+
+def _async_list_markets_stub(calls: list[dict[str, object]], items: tuple[object, ...]):  # type: ignore[no-untyped-def]
+    def list_markets(**kwargs: object):  # type: ignore[no-untyped-def]
+        calls.append(kwargs)
+        return _AsyncStubPaginator(items)
+
+    return list_markets
+
+
+def _leg_position(marker: int, outcome: int) -> str:
+    raw = bytearray(32)
+    raw[0] = 1
+    raw[30] = marker
+    raw[31] = outcome
+    return str(int("0x" + raw.hex(), 16))
+
+
+def _combo_position(condition_id: str, outcome: int) -> str:
+    return str(int(f"{condition_id}{outcome:02x}", 16))

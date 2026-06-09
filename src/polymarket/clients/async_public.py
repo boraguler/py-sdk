@@ -16,6 +16,7 @@ from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
     ClosedPositionSortBy,
+    ComboPositionStatus,
     MarketPositionSortBy,
     MarketPositionStatus,
     PositionSortBy,
@@ -74,6 +75,7 @@ from polymarket.models.data import (
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
     ClosedPosition,
+    ComboPosition,
     LeaderboardCategory,
     LeaderboardEntry,
     LeaderboardOrderBy,
@@ -95,7 +97,7 @@ from polymarket.models.rtds_events import (
     RtdsEvent,
 )
 from polymarket.models.sports_events import SportsEvent
-from polymarket.models.types import ConditionId
+from polymarket.models.types import CtfConditionId
 from polymarket.pagination import AsyncPaginator, Page
 from polymarket.streams._specs import (
     CommentsSpec,
@@ -565,6 +567,28 @@ class AsyncPublicClient:
         )
         return async_paginate_offset(self._ctx, spec, page_size=page_size)
 
+    def list_combo_positions(
+        self,
+        *,
+        user: str,
+        status: ComboPositionStatus | None = None,
+        condition_id: str | None = None,
+        position_id: str | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[ComboPosition]:
+        """List combo positions for a user.
+
+        Returns:
+            An async paginator over matching combo positions.
+        """
+        spec = _data_actions.list_combo_positions_spec(
+            user=user,
+            status=status,
+            condition_id=condition_id,
+            position_id=position_id,
+        )
+        return async_paginate_offset(self._ctx, spec, page_size=page_size)
+
     def list_market_positions(
         self,
         *,
@@ -810,6 +834,7 @@ class AsyncPublicClient:
         locale: str | None = None,
         market_maker_addresses: str | Sequence[str] | None = None,
         order: str | None = None,
+        position_ids: str | Sequence[str] | None = None,
         question_ids: str | Sequence[str] | None = None,
         related_tags: bool | None = None,
         rfq_enabled: bool | None = None,
@@ -853,6 +878,7 @@ class AsyncPublicClient:
             locale=locale,
             market_maker_addresses=market_maker_addresses,
             order=order,
+            position_ids=position_ids,
             question_ids=question_ids,
             related_tags=related_tags,
             rfq_enabled=rfq_enabled,
@@ -1181,7 +1207,7 @@ class AsyncPublicClient:
 
         async def fetch(cursor: str | None) -> Page[MarketReward]:
             path, params = _rewards_actions.build_list_market_rewards_request(
-                condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor
+                condition_id=CtfConditionId(condition_id), sponsored=sponsored, cursor=cursor
             )
             return _rewards_actions.parse_market_rewards_page(
                 await self._ctx.clob.get_json(path, params=params)

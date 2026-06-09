@@ -20,6 +20,7 @@ from polymarket.models.clob.rewards import (
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
+_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
 
 
 def _routed_handler(
@@ -51,7 +52,7 @@ _CURRENT_REWARDS_PAGE: dict[str, Any] = {
     "next_cursor": "LTE=",
     "data": [
         {
-            "condition_id": "0xCONDITION",
+            "condition_id": _CONDITION_ID,
             "rewards_max_spread": 3.0,
             "tokens": [],
         }
@@ -64,7 +65,7 @@ _MARKET_REWARDS_PAGE: dict[str, Any] = {
     "next_cursor": "LTE=",
     "data": [
         {
-            "condition_id": "0xCONDITION",
+            "condition_id": _CONDITION_ID,
             "question": "Q?",
             "tokens": [{"token_id": "8501497", "outcome": "Yes", "price": "0.5"}],
         }
@@ -132,14 +133,14 @@ class TestListMarketRewards:
                 client,
                 _routed_handler(
                     captured,
-                    {("GET", "/rewards/markets/0xCONDITION"): _MARKET_REWARDS_PAGE},
+                    {("GET", f"/rewards/markets/{_CONDITION_ID}"): _MARKET_REWARDS_PAGE},
                 ),
             )
-            page = client.list_market_rewards(condition_id="0xCONDITION").first_page()
+            page = client.list_market_rewards(condition_id=_CONDITION_ID).first_page()
 
         assert len(page.items) == 1
         assert isinstance(page.items[0], MarketReward)
-        assert urlparse(str(captured[0].url)).path == "/rewards/markets/0xCONDITION"
+        assert urlparse(str(captured[0].url)).path == f"/rewards/markets/{_CONDITION_ID}"
 
     def test_secure_uses_unsigned_clob_not_secure_clob(self) -> None:
         captured: list[httpx.Request] = []
@@ -153,10 +154,10 @@ class TestListMarketRewards:
                 client,
                 _routed_handler(
                     captured,
-                    {("GET", "/rewards/markets/0xCONDITION"): _MARKET_REWARDS_PAGE},
+                    {("GET", f"/rewards/markets/{_CONDITION_ID}"): _MARKET_REWARDS_PAGE},
                 ),
             )
-            page = client.list_market_rewards(condition_id="0xCONDITION").first_page()
+            page = client.list_market_rewards(condition_id=_CONDITION_ID).first_page()
 
         assert len(page.items) == 1
         assert captured[0].headers.get("POLY_SIGNATURE") is None

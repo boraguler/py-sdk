@@ -1,6 +1,7 @@
 from polymarket._internal.actions.relayer.calls import (
     MAX_UINT256,
     TransactionCall,
+    combinatorial_prepare_condition_call,
     ctf_redeem_positions_call,
     encode_proxy_call,
     encode_safe_multisend_call,
@@ -8,12 +9,16 @@ from polymarket._internal.actions.relayer.calls import (
     erc20_transfer_call,
     erc1155_set_approval_for_all_call,
     merge_positions_call,
+    merge_v2_call,
+    redeem_v2_call,
     split_position_call,
+    split_v2_call,
 )
 
 __all__ = [
     "MAX_UINT256",
     "TransactionCall",
+    "combinatorial_prepare_condition_call",
     "ctf_redeem_positions_call",
     "encode_proxy_call",
     "encode_safe_multisend_call",
@@ -21,5 +26,8 @@ __all__ = [
     "erc20_approval_call",
     "erc20_transfer_call",
     "merge_positions_call",
+    "merge_v2_call",
+    "redeem_v2_call",
     "split_position_call",
+    "split_v2_call",
 ]

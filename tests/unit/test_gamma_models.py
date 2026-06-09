@@ -24,6 +24,8 @@ from polymarket.models.gamma import (
     UmaResolutionStatus,
 )
 
+_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
+
 
 def _minimal_market_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
@@ -31,6 +33,7 @@ def _minimal_market_payload(**overrides: object) -> dict[str, object]:
         "outcomes": ["Yes", "No"],
         "outcomePrices": ["0.6", "0.4"],
         "clobTokenIds": ["TOKEN-YES", "TOKEN-NO"],
+        "positionIds": ["POSITION-YES", "POSITION-NO"],
         "marketMakerAddress": "0xMM",
     }
     payload.update(overrides)
@@ -47,6 +50,7 @@ def test_market_parses_minimal_payload() -> None:
     assert market.outcomes.no.label == "No"
     assert market.outcomes.no.token_id == "TOKEN-NO"
     assert market.outcomes.no.price == Decimal("0.4")
+    assert market.position_ids == ("POSITION-YES", "POSITION-NO")
 
 
 def test_market_normalizes_groups_from_flat_payload() -> None:
@@ -57,7 +61,7 @@ def test_market_normalizes_groups_from_flat_payload() -> None:
         category="weather",
         image="https://example.test/i.png",
         icon="https://example.test/icon.png",
-        conditionId="0xCOND",
+        conditionId=_CONDITION_ID,
         active=True,
         closed=False,
         archived=False,
@@ -103,7 +107,7 @@ def test_market_normalizes_groups_from_flat_payload() -> None:
     market = Market.parse_response(payload)
 
     assert market.slug == "my-market"
-    assert market.condition_id == "0xCOND"
+    assert market.condition_id == _CONDITION_ID
     assert market.state.active is True
     assert market.state.start_date == datetime(2026, 5, 1, tzinfo=UTC)
     assert market.state.end_date == datetime(2026, 6, 1, tzinfo=UTC)
@@ -155,6 +159,11 @@ def test_market_treats_empty_condition_id_as_none() -> None:
     assert market.condition_id is None
 
 
+def test_market_rejects_malformed_condition_id() -> None:
+    with pytest.raises(UnexpectedResponseError, match="Market response"):
+        Market.parse_response(_minimal_market_payload(conditionId="0x1234"))
+
+
 def test_market_treats_empty_resolved_by_as_none() -> None:
     market = Market.parse_response(_minimal_market_payload(resolvedBy=""))
 
@@ -189,6 +198,11 @@ def test_market_rejects_non_string_clob_token_ids() -> None:
 def test_market_rejects_integer_clob_token_ids() -> None:
     with pytest.raises(UnexpectedResponseError):
         Market.parse_response(_minimal_market_payload(clobTokenIds=[123, 456]))
+
+
+def test_market_rejects_non_string_position_ids() -> None:
+    with pytest.raises(UnexpectedResponseError):
+        Market.parse_response(_minimal_market_payload(positionIds=[None, "POSITION-NO"]))
 
 
 def test_market_rejects_malformed_outcome_price() -> None:

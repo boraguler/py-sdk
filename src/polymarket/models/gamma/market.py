@@ -22,13 +22,16 @@ from polymarket.models.gamma.common import (
 )
 from polymarket.models.types import (
     ClobRewardId,
-    ConditionId,
+    CtfConditionId,
     EventId,
     MarketId,
+    PositionId,
     QuestionId,
     ResolutionRequestId,
     TagId,
     TokenId,
+    validate_ctf_condition_id,
+    validate_optional_ctf_condition_id,
 )
 from polymarket.types import EvmAddress
 
@@ -278,7 +281,7 @@ class ClobReward(BaseModel):
     """Reward configuration attached to a market condition."""
 
     id: ClobRewardId
-    condition_id: ConditionId = Field(validation_alias="conditionId")
+    condition_id: CtfConditionId = Field(validation_alias="conditionId")
     asset_address: str = Field(validation_alias="assetAddress")
     rewards_amount: Decimal = Field(validation_alias="rewardsAmount")
     rewards_daily_rate: Decimal = Field(validation_alias="rewardsDailyRate")
@@ -292,6 +295,11 @@ class ClobReward(BaseModel):
     @classmethod
     def _parse_decimal(cls, value: object) -> Decimal:
         return parse_decimal(value)
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
+        return validate_ctf_condition_id(value)
 
 
 class MarketRewards(BaseModel):
@@ -369,7 +377,7 @@ class Market(BaseModel):
 
     id: MarketId
     slug: str | None = None
-    condition_id: ConditionId | None = Field(
+    condition_id: CtfConditionId | None = Field(
         default=None,
         validation_alias=AliasChoices("conditionId", "condition"),
     )
@@ -388,6 +396,10 @@ class Market(BaseModel):
     sports: MarketSportsMetadata
     events: tuple[MarketEvent, ...]
     tags: tuple[MarketTag, ...]
+    position_ids: tuple[PositionId, ...] = Field(
+        default=(),
+        validation_alias="positionIds",
+    )
 
     def _repr_html_(self) -> str:
         from polymarket._jupyter import card, safe_html_repr, truncate_mid
@@ -433,6 +445,9 @@ class Market(BaseModel):
             parse_decimal(item) for item in parse_sequence(data.get("outcomePrices"))
         )
         token_ids = parse_string_sequence(data.get("clobTokenIds"))
+        position_ids = tuple(
+            PositionId(item) for item in parse_string_sequence(data.get("positionIds"))
+        )
 
         if len(outcomes) != 2:
             msg = f"Expected binary market outcomes, received {len(outcomes)}"
@@ -537,7 +552,13 @@ class Market(BaseModel):
                 }
                 for tag in parse_dicts(data.get("tags"))
             ],
+            "position_ids": position_ids,
         }
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId | None:
+        return validate_optional_ctf_condition_id(value)
 
 
 __all__ = [

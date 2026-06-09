@@ -16,12 +16,13 @@ from polymarket._internal.actions.orders.market_data import (
     resolve_condition_by_token,
 )
 from polymarket.clients._transport import AsyncTransport
-from polymarket.errors import UnexpectedResponseError
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.errors import UnexpectedResponseError, UserInputError
+from polymarket.models.types import CtfConditionId, TokenId
 
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
+_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
 
 
 def _capture(captured: list[httpx.Request], status: int, payload: Any) -> httpx.MockTransport:
@@ -109,13 +110,26 @@ def test_resolve_condition_by_token_returns_condition_id() -> None:
     async def run() -> str:
         client = await _make_client()
         try:
-            _install_public_clob(client, _capture(captured, 200, {"condition_id": "0xCONDITION"}))
+            _install_public_clob(client, _capture(captured, 200, {"condition_id": _CONDITION_ID}))
             return await resolve_condition_by_token(client._ctx, token_id=TokenId("8501497"))
         finally:
             await client.close()
 
-    assert asyncio.run(run()) == "0xCONDITION"
+    assert asyncio.run(run()) == _CONDITION_ID
     assert urlparse(str(captured[0].url)).path == "/markets-by-token/8501497"
+
+
+def test_resolve_condition_by_token_rejects_malformed_condition_id() -> None:
+    async def run() -> str:
+        client = await _make_client()
+        try:
+            _install_public_clob(client, _capture([], 200, {"condition_id": "0x1234"}))
+            return await resolve_condition_by_token(client._ctx, token_id=TokenId("8501497"))
+        finally:
+            await client.close()
+
+    with pytest.raises(UnexpectedResponseError, match="condition_id"):
+        asyncio.run(run())
 
 
 def test_fetch_platform_fee_info_defaults_to_zero_when_field_missing() -> None:
@@ -124,7 +138,7 @@ def test_fetch_platform_fee_info_defaults_to_zero_when_field_missing() -> None:
         try:
             _install_public_clob(client, _capture([], 200, {"t": []}))
             info = await fetch_platform_fee_info(
-                client._ctx, condition_id=ConditionId("0xCONDITION")
+                client._ctx, condition_id=CtfConditionId(_CONDITION_ID)
             )
             return info.rate, info.exponent
         finally:
@@ -135,13 +149,29 @@ def test_fetch_platform_fee_info_defaults_to_zero_when_field_missing() -> None:
     assert exponent == Decimal(0)
 
 
+def test_fetch_platform_fee_info_rejects_malformed_condition_id_before_request() -> None:
+    captured: list[httpx.Request] = []
+
+    async def run() -> None:
+        client = await _make_client()
+        try:
+            _install_public_clob(client, _capture(captured, 200, {"t": []}))
+            await fetch_platform_fee_info(client._ctx, condition_id=CtfConditionId("0x1234"))
+        finally:
+            await client.close()
+
+    with pytest.raises(UserInputError, match="31-byte or 32-byte hex string"):
+        asyncio.run(run())
+    assert captured == []
+
+
 def test_fetch_platform_fee_info_parses_rate_and_exponent() -> None:
     async def run() -> tuple[Decimal, Decimal]:
         client = await _make_client()
         try:
             _install_public_clob(client, _capture([], 200, {"fd": {"r": 0.0005, "e": 1}, "t": []}))
             info = await fetch_platform_fee_info(
-                client._ctx, condition_id=ConditionId("0xCONDITION")
+                client._ctx, condition_id=CtfConditionId(_CONDITION_ID)
             )
             return info.rate, info.exponent
         finally:

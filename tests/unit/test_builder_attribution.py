@@ -26,6 +26,7 @@ _FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="
 
 _VALID_BUILDER = "0x" + "ab" * 32
 _OTHER_BUILDER = "0x" + "cd" * 32
+_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
 _DUMMY_ADDRESS = EvmAddress("0x000000000000000000000000000000000000dEaD")
 
 
@@ -363,7 +364,7 @@ def _market_buy_public_routes() -> dict[str, Any]:
     return {
         "/tick-size": {"minimum_tick_size": 0.01},
         "/neg-risk": {"neg_risk": False},
-        "/markets-by-token": {"condition_id": "0xcond"},
+        "/markets-by-token": {"condition_id": _CONDITION_ID},
         "/clob-markets": {"fd": {"r": "0", "e": "0"}},
         "/book": {
             "asset_id": "8501497",

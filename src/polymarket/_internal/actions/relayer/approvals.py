@@ -151,6 +151,16 @@ def _required_trading_approvals(
                 spender=cast(EvmAddress, environment.neg_risk_collateral_adapter),
                 amount=MAX_UINT256,
             ),
+            _Erc20TradingApproval(
+                token_address=collateral,
+                spender=cast(EvmAddress, environment.protocol_v2_router),
+                amount=MAX_UINT256,
+            ),
+            _Erc20TradingApproval(
+                token_address=collateral,
+                spender=cast(EvmAddress, environment.exchange_v3),
+                amount=MAX_UINT256,
+            ),
         ],
         [
             _Erc1155TradingApproval(
@@ -175,6 +185,18 @@ def _required_trading_approvals(
             ),
             _Erc1155TradingApproval(
                 token_address=conditional,
+                operator=cast(EvmAddress, environment.auto_redeem_operator),
+            ),
+            _Erc1155TradingApproval(
+                token_address=cast(EvmAddress, environment.position_manager),
+                operator=cast(EvmAddress, environment.protocol_v2_router),
+            ),
+            _Erc1155TradingApproval(
+                token_address=cast(EvmAddress, environment.position_manager),
+                operator=cast(EvmAddress, environment.exchange_v3),
+            ),
+            _Erc1155TradingApproval(
+                token_address=cast(EvmAddress, environment.position_manager),
                 operator=cast(EvmAddress, environment.auto_redeem_operator),
             ),
         ],

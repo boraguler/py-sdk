@@ -1,10 +1,21 @@
+import asyncio
 import contextlib
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal, Self, TypeAlias, assert_never, cast, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Protocol,
+    Self,
+    TypeAlias,
+    assert_never,
+    cast,
+    overload,
+)
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
@@ -21,6 +32,7 @@ from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
     ClosedPositionSortBy,
+    ComboPositionStatus,
     MarketPositionSortBy,
     MarketPositionStatus,
     PositionSortBy,
@@ -67,12 +79,20 @@ from polymarket._internal.actions.relayer.auth import make_relayer_header_resolv
 from polymarket._internal.actions.relayer.calls import (
     MAX_UINT256,
     TransactionCall,
+    combinatorial_prepare_condition_call,
     ctf_redeem_positions_call,
+    decode_erc1155_balance_of_batch_result,
+    decode_erc1155_balance_of_result,
     erc20_approval_call,
     erc20_transfer_call,
+    erc1155_balance_of_batch_call,
+    erc1155_balance_of_call,
     erc1155_set_approval_for_all_call,
     merge_positions_call,
+    merge_v2_call,
+    redeem_v2_call,
     split_position_call,
+    split_v2_call,
 )
 from polymarket._internal.actions.relayer.deployed import fetch_deployed
 from polymarket._internal.actions.relayer.gasless import (
@@ -80,10 +100,13 @@ from polymarket._internal.actions.relayer.gasless import (
     submit_deposit_wallet_create,
 )
 from polymarket._internal.actions.relayer.positions import (
-    expect_binary_positions,
-    expect_negative_risk_flag,
-    resolve_binary_positions_condition_id,
-    resolve_merge_amount,
+    MarketPositionContext,
+    canonicalize_combo_legs,
+    decode_combo_outcome_position_id,
+    derive_combo_position_context,
+    normalize_market_position_context,
+    parse_market_id,
+    resolve_merge_amount_from_balances,
 )
 from polymarket._internal.context import AsyncSecureClientContext
 from polymarket._internal.dispatch import (
@@ -96,6 +119,7 @@ from polymarket._internal.eoa.broadcast import broadcast_eoa_call
 from polymarket._internal.eoa.rpc import JsonRpcClient
 from polymarket._internal.hmac import build_hmac_signature
 from polymarket._internal.l1_auth import sign_api_key_auth
+from polymarket._internal.rfq import RfqSessionContext
 from polymarket._internal.streams.handle import AsyncSubscriptionHandle, SubscriptionHandle
 from polymarket._internal.wallet import (
     WalletType,
@@ -110,7 +134,7 @@ from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import (
     RequestRejectedError,
     SigningError,
-    UnexpectedResponseError,
+    TransportError,
     UserInputError,
 )
 from polymarket.models import (
@@ -161,6 +185,7 @@ from polymarket.models.data import (
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
     ClosedPosition,
+    ComboPosition,
     LeaderboardCategory,
     LeaderboardEntry,
     LeaderboardOrderBy,
@@ -182,7 +207,7 @@ from polymarket.models.rtds_events import (
     RtdsEvent,
 )
 from polymarket.models.sports_events import SportsEvent
-from polymarket.models.types import ConditionId
+from polymarket.models.types import CtfConditionId
 from polymarket.pagination import AsyncPaginator, Page
 from polymarket.streams._specs import (
     CommentsSpec,
@@ -202,15 +227,29 @@ from polymarket.transactions import (
 from polymarket.types import EvmAddress, HexString
 
 if TYPE_CHECKING:
+    from polymarket._internal.rfq import RfqQuoterSession
     from polymarket._internal.streams.clob.market import ClobMarketStreamManager
     from polymarket._internal.streams.clob.user import ClobUserStreamManager
     from polymarket._internal.streams.rtds.manager import RtdsStreamManager
     from polymarket._internal.streams.sports.manager import SportsStreamManager
+    from polymarket.rfq import RfqSession
 
 
 _CREATE_TOKEN = object()
 
 _L2HeaderResolver: TypeAlias = Callable[[str, str, str | None], Awaitable[Mapping[str, str]]]
+
+
+class AsyncCloseable(Protocol):
+    async def close(self) -> None: ...
+
+
+class _RfqSessionCloser:
+    def __init__(self, close: Callable[[], Awaitable[None]]) -> None:
+        self._close = close
+
+    async def close(self) -> None:
+        await self._close()
 
 
 class AsyncSecureClient:
@@ -235,6 +274,9 @@ class AsyncSecureClient:
         self._sports_manager: SportsStreamManager | None = None
         self._rtds_manager: RtdsStreamManager | None = None
         self._user_manager: ClobUserStreamManager | None = None
+        self._rfq_session: RfqQuoterSession | None = None
+        self._rfq_session_connecting: RfqQuoterSession | None = None
+        self._rfq_session_opening: asyncio.Task[RfqQuoterSession] | None = None
         self._streams_logger = logger
 
     @property
@@ -562,6 +604,64 @@ class AsyncSecureClient:
     async def _resolve_api_key_credentials(self) -> ApiKeyCreds:
         return self._ctx.credentials
 
+    def open_rfq_session(self) -> "RfqSession":
+        """Open an RFQ event session.
+
+        The returned session is an async iterator of RFQ events and an async
+        context manager. Iterate over it to receive quote requests,
+        confirmation requests, and execution updates.
+        """
+        return RfqSessionContext(self._open_rfq_session)
+
+    async def _open_rfq_session(self) -> "RfqQuoterSession":
+        if self._rfq_session is not None:
+            if not self._rfq_session.closed:
+                return self._rfq_session
+            self._rfq_session = None
+
+        if self._rfq_session_opening is not None:
+            return await self._rfq_session_opening
+
+        task = asyncio.create_task(self._create_rfq_session())
+        self._rfq_session_opening = task
+        try:
+            session = await task
+            if session.closed and self._rfq_session_opening is not task:
+                raise TransportError("RFQ quoter websocket closed.")
+            self._rfq_session = session
+            return session
+        finally:
+            if self._rfq_session_opening is task:
+                self._rfq_session_opening = None
+
+    async def _create_rfq_session(self) -> "RfqQuoterSession":
+        from polymarket._internal.rfq import RfqQuoterSession
+
+        session: RfqQuoterSession | None = None
+
+        def clear_session() -> None:
+            if self._rfq_session is session:
+                self._rfq_session = None
+
+        session = RfqQuoterSession(
+            chain_id=self._ctx.environment.chain_id,
+            credentials=self._ctx.credentials,
+            exchange=EvmAddress(self._ctx.environment.exchange_v3),
+            headers=self._ctx.environment.rfq_quoter_ws_headers,
+            logger=self._streams_logger,
+            on_close=clear_session,
+            signer=self._ctx.signer,
+            url=self._ctx.environment.rfq_quoter_ws_url,
+            wallet=self._ctx.wallet,
+            wallet_type=self._ctx.wallet_type,
+        )
+        self._rfq_session_connecting = session
+        try:
+            return await session.open()
+        finally:
+            if self._rfq_session_connecting is session:
+                self._rfq_session_connecting = None
+
     async def __aenter__(self) -> Self:
         return self
 
@@ -576,38 +676,52 @@ class AsyncSecureClient:
     async def close(self) -> None:
         """Close the underlying network transports and any open streams."""
         ctx = self._ctx_inner
+        await _close_all(
+            self._market_manager,
+            self._sports_manager,
+            self._rtds_manager,
+            self._user_manager,
+            _RfqSessionCloser(self._close_rfq_session),
+            ctx.gamma,
+            ctx.data,
+            ctx.clob,
+            ctx.secure_clob,
+            ctx.relayer,
+            ctx.rpc,
+        )
+
+    async def _close_rfq_session(self) -> None:
+        opening = self._rfq_session_opening
+        connecting = self._rfq_session_connecting
+        session = self._rfq_session
+        self._rfq_session_opening = None
+        self._rfq_session_connecting = None
+        self._rfq_session = None
+        first_error: BaseException | None = None
         try:
-            if self._market_manager is not None:
-                await self._market_manager.close()
-        finally:
+            await _close_all(connecting, session)
+        except BaseException as error:
+            first_error = error
+        if opening is not None:
             try:
-                if self._sports_manager is not None:
-                    await self._sports_manager.close()
-            finally:
+                opened = await opening
+            except BaseException:
+                pass
+            else:
                 try:
-                    if self._rtds_manager is not None:
-                        await self._rtds_manager.close()
-                finally:
-                    try:
-                        if self._user_manager is not None:
-                            await self._user_manager.close()
-                    finally:
-                        try:
-                            await ctx.gamma.close()
-                        finally:
-                            try:
-                                await ctx.data.close()
-                            finally:
-                                try:
-                                    await ctx.clob.close()
-                                finally:
-                                    try:
-                                        await ctx.secure_clob.close()
-                                    finally:
-                                        try:
-                                            await ctx.relayer.close()
-                                        finally:
-                                            await ctx.rpc.close()
+                    await opened.close()
+                except BaseException as error:
+                    if first_error is None:
+                        first_error = error
+            try:
+                await _close_all(self._rfq_session_connecting, self._rfq_session)
+            except BaseException as error:
+                if first_error is None:
+                    first_error = error
+            self._rfq_session_connecting = None
+            self._rfq_session = None
+        if first_error is not None:
+            raise first_error
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user
@@ -893,6 +1007,28 @@ class AsyncSecureClient:
         )
         return async_paginate_offset(self._ctx, spec, page_size=page_size)
 
+    def list_combo_positions(
+        self,
+        *,
+        user: str | None = None,
+        status: ComboPositionStatus | None = None,
+        condition_id: str | None = None,
+        position_id: str | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[ComboPosition]:
+        """List combo positions for a user or the authenticated wallet.
+
+        Returns:
+            An async paginator over matching combo positions.
+        """
+        spec = _data_actions.list_combo_positions_spec(
+            user=self._user_or_wallet(user),
+            status=status,
+            condition_id=condition_id,
+            position_id=position_id,
+        )
+        return async_paginate_offset(self._ctx, spec, page_size=page_size)
+
     def list_market_positions(
         self,
         *,
@@ -1133,6 +1269,7 @@ class AsyncSecureClient:
         locale: str | None = None,
         market_maker_addresses: str | Sequence[str] | None = None,
         order: str | None = None,
+        position_ids: str | Sequence[str] | None = None,
         question_ids: str | Sequence[str] | None = None,
         related_tags: bool | None = None,
         rfq_enabled: bool | None = None,
@@ -1170,6 +1307,7 @@ class AsyncSecureClient:
             locale=locale,
             market_maker_addresses=market_maker_addresses,
             order=order,
+            position_ids=position_ids,
             question_ids=question_ids,
             related_tags=related_tags,
             rfq_enabled=rfq_enabled,
@@ -1921,6 +2059,18 @@ class AsyncSecureClient:
             return await self._broadcast_eoa_call(call)
         return await prepare_gasless_transaction(self._ctx, calls=[call], metadata=metadata)
 
+    async def _dispatch_calls(
+        self, calls: list[TransactionCall], *, metadata: str
+    ) -> TransactionHandle:
+        if not calls:
+            raise UserInputError("At least one transaction call is required")
+        if self._ctx.wallet_type == "EOA":
+            for call in calls[:-1]:
+                handle = await self._broadcast_eoa_call(call)
+                await handle.wait()
+            return await self._broadcast_eoa_call(calls[-1])
+        return await prepare_gasless_transaction(self._ctx, calls=calls, metadata=metadata)
+
     async def _ensure_wallet_ready(self) -> Self:
         ctx = self._ctx
         if ctx.wallet_type == "EOA":
@@ -1956,11 +2106,15 @@ class AsyncSecureClient:
     async def split_position(
         self,
         *,
-        condition_id: str,
+        condition_id: str | None = None,
+        legs: Sequence[str] | None = None,
         amount: int,
         metadata: str | None = None,
     ) -> TransactionHandle:
-        """Split collateral into outcome positions for a condition.
+        """Split collateral into market or combo positions.
+
+        Provide exactly one of ``condition_id`` for market positions or ``legs``
+        for combo positions.
 
         Args:
             amount: Base-units collateral amount to split.
@@ -1968,29 +2122,58 @@ class AsyncSecureClient:
         Returns:
             A transaction handle. Await ``wait()`` to wait for a terminal outcome.
         """
+        if (condition_id is None) == (legs is None):
+            raise UserInputError("Provide exactly one of condition_id or legs")
         env = self._ctx.environment
-        neg_risk = await self._resolve_market_neg_risk(condition_id)
+        if legs is not None:
+            if amount <= 0:
+                raise UserInputError("Split amount must be positive for combo positions")
+            canonical_legs = canonicalize_combo_legs(legs)
+            combo = derive_combo_position_context(canonical_legs)
+            calls = [
+                combinatorial_prepare_condition_call(
+                    combinatorial_module=cast(EvmAddress, env.combinatorial_module),
+                    legs=list(canonical_legs),
+                ),
+                split_v2_call(
+                    router=cast(EvmAddress, env.protocol_v2_router),
+                    condition_id=combo.condition_id,
+                    amount=amount,
+                ),
+            ]
+            resolved_metadata = (
+                metadata
+                if metadata is not None
+                else f"Split {amount} combo positions for condition {combo.condition_id}"
+            )
+            return await self._dispatch_calls(calls, metadata=resolved_metadata)
+        assert condition_id is not None
+        context = await self._resolve_market_position_context(condition_id=condition_id)
         call = split_position_call(
-            target=self._lifecycle_target_address(neg_risk),
+            target=context.adapter_address,
             collateral=cast(EvmAddress, env.collateral_token),
-            condition_id=condition_id,
+            condition_id=context.condition_id,
             amount=amount,
         )
         resolved_metadata = (
             metadata
             if metadata is not None
-            else f"Split {amount} positions for condition {condition_id}"
+            else f"Split {amount} positions for condition {context.condition_id}"
         )
         return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
     async def merge_positions(
         self,
         *,
-        condition_id: str,
+        condition_id: str | None = None,
+        legs: Sequence[str] | None = None,
         amount: int | Literal["max"],
         metadata: str | None = None,
     ) -> TransactionHandle:
-        """Merge outcome positions back into collateral.
+        """Merge market or combo positions back into collateral.
+
+        Provide exactly one of ``condition_id`` for market positions or ``legs``
+        for combo positions.
 
         Args:
             amount: Base-units position amount to merge, or ``"max"`` to merge
@@ -1999,20 +2182,61 @@ class AsyncSecureClient:
         Returns:
             A transaction handle. Await ``wait()`` to wait for a terminal outcome.
         """
+        if (condition_id is None) == (legs is None):
+            raise UserInputError("Provide exactly one of condition_id or legs")
         env = self._ctx.environment
-        binary = await self._fetch_binary_positions(condition_id)
-        neg_risk = expect_negative_risk_flag(binary)
-        resolved_amount = resolve_merge_amount(binary, amount)
+        if legs is not None:
+            canonical_legs = canonicalize_combo_legs(legs)
+            combo = derive_combo_position_context(canonical_legs)
+            balance_call = erc1155_balance_of_batch_call(
+                token_address=cast(EvmAddress, env.position_manager),
+                owners=[self._ctx.wallet, self._ctx.wallet],
+                token_ids=list(combo.position_ids),
+            )
+            balances = decode_erc1155_balance_of_batch_result(
+                await self._ctx.rpc.eth_call(to=str(balance_call.to), data=balance_call.data)
+            )
+            resolved_amount = resolve_merge_amount_from_balances(
+                combo.condition_id, balances, amount
+            )
+            calls = [
+                combinatorial_prepare_condition_call(
+                    combinatorial_module=cast(EvmAddress, env.combinatorial_module),
+                    legs=list(canonical_legs),
+                ),
+                merge_v2_call(
+                    router=cast(EvmAddress, env.protocol_v2_router),
+                    condition_id=combo.condition_id,
+                    amount=resolved_amount,
+                ),
+            ]
+            resolved_metadata = (
+                metadata
+                if metadata is not None
+                else f"Merge {resolved_amount} combo positions for condition {combo.condition_id}"
+            )
+            return await self._dispatch_calls(calls, metadata=resolved_metadata)
+        assert condition_id is not None
+        context = await self._resolve_market_position_context(condition_id=condition_id)
+        balance_call = erc1155_balance_of_batch_call(
+            token_address=context.position_erc1155_address,
+            owners=[self._ctx.wallet, self._ctx.wallet],
+            token_ids=[str(token_id) for token_id in context.token_ids],
+        )
+        balances = decode_erc1155_balance_of_batch_result(
+            await self._ctx.rpc.eth_call(to=str(balance_call.to), data=balance_call.data)
+        )
+        resolved_amount = resolve_merge_amount_from_balances(context.condition_id, balances, amount)
         call = merge_positions_call(
-            target=self._lifecycle_target_address(neg_risk),
+            target=context.adapter_address,
             collateral=cast(EvmAddress, env.collateral_token),
-            condition_id=condition_id,
+            condition_id=context.condition_id,
             amount=resolved_amount,
         )
         resolved_metadata = (
             metadata
             if metadata is not None
-            else f"Merge {resolved_amount} positions for condition {condition_id}"
+            else f"Merge {resolved_amount} positions for condition {context.condition_id}"
         )
         return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
@@ -2021,11 +2245,13 @@ class AsyncSecureClient:
         *,
         condition_id: str | None = None,
         market_id: str | None = None,
+        position_id: str | None = None,
         metadata: str | None = None,
     ) -> TransactionHandle:
-        """Redeem resolved positions for a condition or market.
+        """Redeem resolved market or combo positions.
 
-        Provide exactly one of ``condition_id`` or ``market_id``.
+        Provide exactly one of ``condition_id``, ``market_id``, or combo
+        ``position_id``.
 
         Returns:
             A transaction handle. Await ``wait()`` to wait for a terminal outcome.
@@ -2033,52 +2259,76 @@ class AsyncSecureClient:
         Raises:
             UserInputError: If both identifiers or neither identifier is provided.
         """
-        if (condition_id is None) == (market_id is None):
-            raise UserInputError("Provide exactly one of condition_id or market_id")
+        if sum(value is not None for value in (condition_id, market_id, position_id)) != 1:
+            raise UserInputError("Provide exactly one of condition_id, market_id, or position_id")
         env = self._ctx.environment
-        lookup_id = condition_id if condition_id is not None else market_id
-        assert lookup_id is not None
-        binary = await self._fetch_binary_positions(lookup_id)
-        neg_risk = expect_negative_risk_flag(binary)
-        resolved_condition_id = resolve_binary_positions_condition_id(binary)
+        if position_id is not None:
+            decoded = decode_combo_outcome_position_id(position_id)
+            balance_call = erc1155_balance_of_call(
+                token_address=cast(EvmAddress, env.position_manager),
+                owner=self._ctx.wallet,
+                token_id=position_id,
+            )
+            balance = decode_erc1155_balance_of_result(
+                await self._ctx.rpc.eth_call(to=str(balance_call.to), data=balance_call.data)
+            )
+            if balance == 0:
+                raise UserInputError("Combo position has no balance to redeem")
+            call = redeem_v2_call(
+                router=cast(EvmAddress, env.protocol_v2_router),
+                condition_id=decoded.condition_id,
+                outcome_index=decoded.outcome_index,
+                amount=balance,
+            )
+            resolved_metadata = (
+                metadata if metadata is not None else f"Redeem combo position {position_id}"
+            )
+            return await self._dispatch_single_call(call, metadata=resolved_metadata)
+        context = await self._resolve_market_position_context(
+            condition_id=condition_id,
+            market_id=market_id,
+        )
         call = ctf_redeem_positions_call(
-            ctf=self._lifecycle_target_address(neg_risk),
+            ctf=context.adapter_address,
             collateral=cast(EvmAddress, env.collateral_token),
-            condition_id=resolved_condition_id,
+            condition_id=context.condition_id,
         )
         resolved_metadata = (
             metadata
             if metadata is not None
-            else f"Redeem positions for condition {resolved_condition_id}"
+            else f"Redeem positions for condition {context.condition_id}"
         )
         return await self._dispatch_single_call(call, metadata=resolved_metadata)
 
-    def _lifecycle_target_address(self, neg_risk: bool) -> EvmAddress:
+    async def _resolve_market_position_context(
+        self,
+        *,
+        condition_id: str | None = None,
+        market_id: str | None = None,
+    ) -> MarketPositionContext:
+        if (condition_id is None) == (market_id is None):
+            raise UserInputError("Provide exactly one of condition_id or market_id")
         env = self._ctx.environment
-        return cast(
-            EvmAddress,
-            env.neg_risk_collateral_adapter if neg_risk else env.collateral_adapter,
-        )
-
-    async def _resolve_market_neg_risk(self, condition_id: str) -> bool:
-        page = await self.list_markets(condition_ids=[condition_id], page_size=2).first_page()
+        if condition_id is not None:
+            context = f"condition {condition_id}"
+            page = await self.list_markets(condition_ids=[condition_id], page_size=1).first_page()
+        else:
+            assert market_id is not None
+            context = f"market {market_id}"
+            page = await self.list_markets(
+                ids=[parse_market_id(market_id)], page_size=1
+            ).first_page()
         markets = page.items
         if len(markets) != 1:
-            raise UserInputError(
-                f"Expected exactly one market for condition {condition_id}, got {len(markets)}"
-            )
-        market = markets[0]
-        if market.state.neg_risk is None:
-            raise UnexpectedResponseError(f"Missing negRisk flag for condition {condition_id}")
-        return market.state.neg_risk
-
-    async def _fetch_binary_positions(self, market_id_or_condition_id: str):  # type: ignore[no-untyped-def]
-        page = await self.list_positions(
-            user=str(self._ctx.wallet),
-            market=[market_id_or_condition_id],
-            size_threshold=0,
-        ).first_page()
-        return expect_binary_positions(page.items)
+            raise UserInputError(f"Expected exactly one market for {context}, got {len(markets)}")
+        return normalize_market_position_context(
+            markets[0],
+            context=context,
+            collateral_adapter=cast(EvmAddress, env.collateral_adapter),
+            neg_risk_collateral_adapter=cast(EvmAddress, env.neg_risk_collateral_adapter),
+            conditional_tokens=cast(EvmAddress, env.conditional_tokens),
+            neg_risk_adapter=cast(EvmAddress, env.neg_risk_adapter),
+        )
 
     async def post_order(self, signed_order: SignedOrder) -> OrderResponse:
         """Post a signed order for the authenticated account."""
@@ -2174,7 +2424,7 @@ class AsyncSecureClient:
 
         async def fetch(cursor: str | None) -> Page[MarketReward]:
             path, params = _rewards_actions.build_list_market_rewards_request(
-                condition_id=ConditionId(condition_id), sponsored=sponsored, cursor=cursor
+                condition_id=CtfConditionId(condition_id), sponsored=sponsored, cursor=cursor
             )
             return _rewards_actions.parse_market_rewards_page(
                 await self._ctx.clob.get_json(path, params=params)
@@ -2272,6 +2522,22 @@ def _validate_nonce(nonce: object) -> None:
         raise UserInputError("nonce must be a non-negative integer.")
     if nonce < 0:
         raise UserInputError("nonce must be a non-negative integer.")
+
+
+async def _close_all(*resources: AsyncCloseable | None) -> None:
+    first_error: BaseException | None = None
+
+    for resource in resources:
+        if resource is None:
+            continue
+        try:
+            await resource.close()
+        except BaseException as error:
+            if first_error is None:
+                first_error = error
+
+    if first_error is not None:
+        raise first_error
 
 
 async def _bootstrap_credentials(

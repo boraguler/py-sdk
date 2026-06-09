@@ -32,6 +32,11 @@ from polymarket.models.data.leaderboard import (
 from polymarket.models.data.market_positions import MarketPosition, MetaMarketPosition
 from polymarket.models.data.portfolio import (
     ClosedPosition,
+    ComboPosition,
+    ComboPositionLeg,
+    ComboPositionMarket,
+    ComboPositionMarketEvent,
+    ComboPositionStatus,
     PortfolioValue,
     Position,
     TradedMarketCount,
@@ -43,6 +48,11 @@ __all__ = [
     "BuilderVolumeEntry",
     "BuilderVolumeTimePeriod",
     "ClosedPosition",
+    "ComboPosition",
+    "ComboPositionLeg",
+    "ComboPositionMarket",
+    "ComboPositionMarketEvent",
+    "ComboPositionStatus",
     "ConversionActivity",
     "Holder",
     "LeaderboardCategory",

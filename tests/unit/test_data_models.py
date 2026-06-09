@@ -1,8 +1,13 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
+import pytest
+
+from polymarket.errors import UnexpectedResponseError
 from polymarket.models.data import (
     BuilderVolumeEntry,
+    ComboPosition,
     Holder,
     LiveVolume,
     MetaHolder,
@@ -11,13 +16,64 @@ from polymarket.models.data import (
     TradedMarketCount,
 )
 
+_COMBO_CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
+_CTF_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
+
+
+def _combo_position_payload(*, condition_id: str = _COMBO_CONDITION_ID) -> dict[str, Any]:
+    return {
+        "combo_condition_id": condition_id,
+        "combo_position_id": "123",
+        "module_id": 3,
+        "user_address": "0x0000000000000000000000000000000000000001",
+        "shares_balance": "42.5",
+        "entry_avg_price_usdc": "0.12",
+        "entry_cost_usdc": "5.1",
+        "status": "OPEN",
+        "first_entry_at": "2026-06-01T12:00:00Z",
+        "resolved_at": None,
+        "legs_total": 2,
+        "legs_resolved": 1,
+        "legs_pending": 1,
+        "legs": [
+            {
+                "leg_index": 0,
+                "leg_position_id": "456",
+                "leg_condition_id": _CTF_CONDITION_ID,
+                "leg_outcome_index": 1,
+                "leg_outcome_label": "Yes",
+                "leg_status": "PARTIAL",
+                "leg_resolved_at": None,
+                "leg_current_price": "0.77",
+                "market": {
+                    "market_id": "789",
+                    "slug": "market-slug",
+                    "title": "Market title",
+                    "outcome": "Yes",
+                    "image_url": "https://example.test/image.png",
+                    "icon_url": "https://example.test/icon.png",
+                    "category": "Politics",
+                    "subcategory": None,
+                    "tags": ["a", "b"],
+                    "end_date": "2026-07-01T00:00:00Z",
+                    "event": {
+                        "event_id": "event-1",
+                        "event_slug": "event-slug",
+                        "event_title": "Event title",
+                        "event_image": "https://example.test/event.png",
+                    },
+                },
+            }
+        ],
+    }
+
 
 def test_live_volume_parses_total_and_markets() -> None:
     payload = {
         "total": "12345.67",
         "markets": [
-            {"market": "0xabc", "value": "100.5"},
-            {"market": "0xdef", "value": 200},
+            {"market": _CTF_CONDITION_ID, "value": "100.5"},
+            {"market": _CTF_CONDITION_ID, "value": 200},
         ],
     }
 
@@ -26,7 +82,7 @@ def test_live_volume_parses_total_and_markets() -> None:
     assert volume.total == Decimal("12345.67")
     assert volume.markets is not None
     assert len(volume.markets) == 2
-    assert volume.markets[0].market == "0xabc"
+    assert volume.markets[0].market == _CTF_CONDITION_ID
     assert volume.markets[0].value == Decimal("100.5")
     assert volume.markets[1].value == Decimal("200")
 
@@ -39,9 +95,9 @@ def test_live_volume_handles_missing_fields() -> None:
 
 
 def test_open_interest_parses_payload() -> None:
-    interest = OpenInterest.parse_response({"market": "0xabc", "value": "1500"})
+    interest = OpenInterest.parse_response({"market": _CTF_CONDITION_ID, "value": "1500"})
 
-    assert interest.market == "0xabc"
+    assert interest.market == _CTF_CONDITION_ID
     assert interest.value == Decimal("1500")
 
 
@@ -124,3 +180,38 @@ def test_builder_volume_entry_handles_missing_fields() -> None:
     assert entry.bucket_at is None
     assert entry.builder is None
     assert entry.volume is None
+
+
+def test_combo_position_parses_payload() -> None:
+    payload = _combo_position_payload()
+
+    combo = ComboPosition.parse_response(payload)
+
+    assert combo.condition_id == payload["combo_condition_id"]
+    assert combo.position_id == "123"
+    assert combo.shares == Decimal("42.5")
+    assert combo.status == "OPEN"
+    assert combo.legs[0].leg_position_id == "456"
+    assert combo.legs[0].leg_current_price == Decimal("0.77")
+    assert combo.legs[0].market is not None
+    assert combo.legs[0].market.market_id == "789"
+    assert combo.legs[0].market.event is not None
+    assert combo.legs[0].market.event.event_slug == "event-slug"
+
+
+def test_combo_position_normalizes_binary_wire_condition_id() -> None:
+    combo = ComboPosition.parse_response(
+        _combo_position_payload(condition_id=f"{_COMBO_CONDITION_ID}01")
+    )
+
+    assert combo.condition_id == _COMBO_CONDITION_ID
+
+
+def test_combo_position_rejects_invalid_condition_id() -> None:
+    with pytest.raises(UnexpectedResponseError, match="ComboPosition response"):
+        ComboPosition.parse_response(_combo_position_payload(condition_id=_CTF_CONDITION_ID))
+
+
+def test_open_interest_rejects_malformed_condition_id() -> None:
+    with pytest.raises(UnexpectedResponseError, match="OpenInterest response"):
+        OpenInterest.parse_response({"market": "0x1234", "value": "1500"})

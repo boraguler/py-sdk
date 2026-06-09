@@ -12,6 +12,7 @@ from polymarket.clients._transport import SyncTransport
 PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 SIGNER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 FAKE_CREDS = ApiKeyCreds(key="test-key", passphrase="test-passphrase", secret="dGVzdA==")
+_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
 
 
 def _capture(captured: list[httpx.Request], status: int, payload: Any) -> httpx.MockTransport:
@@ -78,7 +79,7 @@ def test_list_user_earnings_for_day_passes_signature_type_and_date() -> None:
             {
                 "asset_address": "0xASSET",
                 "asset_rate": "0.001",
-                "condition_id": "0xCONDITION",
+                "condition_id": _CONDITION_ID,
                 "date": 1700000000000,
                 "earnings": "1.5",
                 "maker_address": "0xMAKER",
@@ -131,10 +132,10 @@ def test_get_reward_percentages_routes_to_percentages_endpoint() -> None:
     captured: list[httpx.Request] = []
 
     with _make_client() as client:
-        _install_secure_clob(client, _capture(captured, 200, {"0xCONDITION": 0.5}))
+        _install_secure_clob(client, _capture(captured, 200, {_CONDITION_ID: 0.5}))
         result = client.get_reward_percentages()
 
-    assert "0xCONDITION" in result
+    assert _CONDITION_ID in result
     request = captured[0]
     assert urlparse(str(request.url)).path == "/rewards/user/percentages"
     qs = parse_qs(urlparse(str(request.url)).query)

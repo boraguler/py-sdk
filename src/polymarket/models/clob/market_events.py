@@ -1,6 +1,6 @@
 from typing import Annotated, Any, Literal, cast
 
-from pydantic import BeforeValidator, Field, TypeAdapter
+from pydantic import BeforeValidator, Field, TypeAdapter, field_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.clob._validators import (
@@ -8,7 +8,7 @@ from polymarket.models.clob._validators import (
     _DecimalFromNumberOrString,  # pyright: ignore[reportPrivateUsage]
 )
 from polymarket.models.clob.order_book import OrderBookLevel
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import CtfConditionId, TokenId, validate_optional_ctf_condition_id
 
 
 def _uppercase_order_side(value: object) -> object:
@@ -97,7 +97,7 @@ class NewMarketPayload(BaseModel):
     event_message: MarketEventMessage | None = None
     timestamp: EpochMsTimestamp = None
     tags: tuple[str, ...] | None = None
-    condition_id: ConditionId | None = None
+    condition_id: CtfConditionId | None = None
     active: bool | None = None
     clob_token_ids: tuple[str, ...] | None = None
     sports_market_type: str | None = None
@@ -108,6 +108,11 @@ class NewMarketPayload(BaseModel):
     taker_base_fee: _DecimalFromNumberOrString | None = None
     fees_enabled: bool | None = None
     fee_schedule: object | None = None
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId | None:
+        return validate_optional_ctf_condition_id(value)
 
 
 class MarketResolvedPayload(BaseModel):
