@@ -101,6 +101,13 @@ def test_open_interest_parses_payload() -> None:
     assert interest.value == Decimal("1500")
 
 
+def test_open_interest_accepts_global_market() -> None:
+    interest = OpenInterest.parse_response({"market": "GLOBAL", "value": "1500"})
+
+    assert interest.market == "GLOBAL"
+    assert interest.value == Decimal("1500")
+
+
 def test_holder_renames_proxy_wallet_and_asset() -> None:
     holder = Holder.parse_response(
         {

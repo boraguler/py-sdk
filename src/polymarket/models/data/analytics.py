@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import Field, field_validator
 
@@ -8,6 +9,8 @@ from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import parse_optional_decimal
 from polymarket.models.types import CtfConditionId, TokenId, validate_optional_ctf_condition_id
 from polymarket.types import EvmAddress
+
+OpenInterestMarket = CtfConditionId | Literal["GLOBAL"]
 
 
 class MarketVolume(BaseModel):
@@ -36,12 +39,14 @@ class LiveVolume(BaseModel):
 
 
 class OpenInterest(BaseModel):
-    market: CtfConditionId | None = None
+    market: OpenInterestMarket | None = None
     value: Decimal | None = None
 
     @field_validator("market", mode="before")
     @classmethod
-    def _validate_market(cls, value: object) -> CtfConditionId | None:
+    def _validate_market(cls, value: object) -> OpenInterestMarket | None:
+        if value == "GLOBAL":
+            return "GLOBAL"
         return validate_optional_ctf_condition_id(value)
 
     @field_validator("value", mode="before")
