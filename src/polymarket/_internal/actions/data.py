@@ -26,6 +26,7 @@ from polymarket.models.data import (
     TraderLeaderboardEntry,
 )
 from polymarket.models.data.activity import Activity, parse_activities
+from polymarket.models.types import to_combo_condition_id
 
 _BUILDER_VOLUME_TIME_PERIODS: tuple[str, ...] = get_args(BuilderVolumeTimePeriod)
 _LEADERBOARD_TIME_PERIODS: tuple[str, ...] = get_args(LeaderboardTimePeriod)
@@ -257,6 +258,11 @@ def list_combo_positions_spec(
     if not user:
         raise UserInputError("user is required.")
     _check_enum("status", status, _COMBO_POSITION_STATUS)
+    if condition_id is not None:
+        try:
+            condition_id = to_combo_condition_id(condition_id)
+        except TypeError as error:
+            raise UserInputError(str(error)) from error
 
     return OffsetPaginatedSpec(
         service="data",

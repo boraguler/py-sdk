@@ -9,7 +9,12 @@ from pydantic import Field, field_validator
 from polymarket.errors import UnexpectedResponseError
 from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import parse_epoch_seconds_optional, parse_optional_decimal
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import (
+    ConditionId,
+    TokenId,
+    validate_ctf_condition_id,
+    validate_optional_ctf_condition_id,
+)
 from polymarket.types import EvmAddress, TransactionHash
 
 
@@ -37,6 +42,11 @@ class Trade(BaseModel):
     transaction_hash: TransactionHash | None = Field(
         default=None, validation_alias="transactionHash"
     )
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId | None:
+        return validate_optional_ctf_condition_id(value)
 
     @field_validator("size", "price", mode="before")
     @classmethod
@@ -95,6 +105,11 @@ class TradeActivity(_KnownActivityBase):
     icon: str
     event_slug: str = Field(validation_alias="eventSlug")
 
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId:
+        return validate_ctf_condition_id(value)
+
     @field_validator("shares", "amount", "price", mode="before")
     @classmethod
     def _parse_decimal(cls, value: object) -> Decimal | None:
@@ -108,6 +123,11 @@ class _MarketEventActivity(_KnownActivityBase):
     slug: str
     icon: str
     event_slug: str = Field(validation_alias="eventSlug")
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId:
+        return validate_ctf_condition_id(value)
 
     @field_validator("amount", mode="before")
     @classmethod

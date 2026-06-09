@@ -6,7 +6,7 @@ from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import parse_optional_decimal
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import ConditionId, TokenId, validate_optional_ctf_condition_id
 from polymarket.types import EvmAddress
 
 
@@ -27,6 +27,11 @@ class MarketPosition(BaseModel):
     total_pnl: Decimal | None = Field(default=None, validation_alias="totalPnl")
     outcome: str | None = None
     outcome_index: int | None = Field(default=None, validation_alias="outcomeIndex")
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId | None:
+        return validate_optional_ctf_condition_id(value)
 
     @field_validator(
         "avg_price",

@@ -30,6 +30,8 @@ from polymarket.models.types import (
     ResolutionRequestId,
     TagId,
     TokenId,
+    validate_ctf_condition_id,
+    validate_optional_ctf_condition_id,
 )
 from polymarket.types import EvmAddress
 
@@ -294,6 +296,11 @@ class ClobReward(BaseModel):
     def _parse_decimal(cls, value: object) -> Decimal:
         return parse_decimal(value)
 
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
+        return validate_ctf_condition_id(value)
+
 
 class MarketRewards(BaseModel):
     """Reward settings for a market."""
@@ -518,6 +525,11 @@ class Market(BaseModel):
             ],
             "position_ids": position_ids,
         }
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId | None:
+        return validate_optional_ctf_condition_id(value)
 
 
 __all__ = [

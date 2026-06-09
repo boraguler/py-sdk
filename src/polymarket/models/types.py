@@ -55,6 +55,36 @@ def to_combo_condition_id(value: str) -> ComboConditionId:
     raise TypeError(f"Expected a protocol v2 combo condition ID, received: {value}")
 
 
+def validate_ctf_condition_id(value: object) -> CtfConditionId:
+    if not isinstance(value, str):
+        raise ValueError(f"Expected a 31-byte or 32-byte hex string, received: {value}")
+    try:
+        return to_ctf_condition_id(value)
+    except TypeError as error:
+        raise ValueError(str(error)) from error
+
+
+def validate_optional_ctf_condition_id(value: object) -> CtfConditionId | None:
+    if value is None:
+        return None
+    return validate_ctf_condition_id(value)
+
+
+def validate_combo_condition_id(value: object) -> ComboConditionId:
+    if not isinstance(value, str):
+        raise ValueError(f"Expected a protocol v2 combo condition ID, received: {value}")
+    try:
+        return to_combo_condition_id(value)
+    except TypeError as error:
+        raise ValueError(str(error)) from error
+
+
+def validate_optional_combo_condition_id(value: object) -> ComboConditionId | None:
+    if value is None:
+        return None
+    return validate_combo_condition_id(value)
+
+
 def _is_hex_string(value: object) -> bool:
     if not isinstance(value, str) or not value.startswith("0x"):
         return False
@@ -94,4 +124,8 @@ __all__ = [
     "TokenId",
     "to_combo_condition_id",
     "to_ctf_condition_id",
+    "validate_combo_condition_id",
+    "validate_ctf_condition_id",
+    "validate_optional_combo_condition_id",
+    "validate_optional_ctf_condition_id",
 ]

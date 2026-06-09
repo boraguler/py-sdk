@@ -3,6 +3,9 @@ import pytest
 from polymarket._internal.actions import data as data_actions
 from polymarket.errors import UserInputError
 
+_COMBO_CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
+_CTF_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
+
 
 def test_list_positions_spec_builds_request() -> None:
     spec = data_actions.list_positions_spec(user="0xWALLET", market=["0xabc", "0xdef"])
@@ -47,14 +50,14 @@ def test_list_combo_positions_spec_builds_request() -> None:
     spec = data_actions.list_combo_positions_spec(
         user="0xWALLET",
         status="OPEN",
-        condition_id="0x03abc",
+        condition_id=f"{_COMBO_CONDITION_ID}01",
         position_id="123",
     )
     assert spec.path == "/v1/positions/combos"
     assert spec.base_params == {
         "user": "0xWALLET",
         "status": "OPEN",
-        "combo_condition_id": "0x03abc",
+        "combo_condition_id": _COMBO_CONDITION_ID,
         "combo_position_id": "123",
     }
 
@@ -62,6 +65,11 @@ def test_list_combo_positions_spec_builds_request() -> None:
 def test_list_combo_positions_spec_validates_status() -> None:
     with pytest.raises(UserInputError, match="status"):
         data_actions.list_combo_positions_spec(user="0xWALLET", status="CLOSED")  # type: ignore[arg-type]
+
+
+def test_list_combo_positions_spec_rejects_non_combo_condition_id() -> None:
+    with pytest.raises(UserInputError, match="combo condition ID"):
+        data_actions.list_combo_positions_spec(user="0xWALLET", condition_id=_CTF_CONDITION_ID)
 
 
 def test_list_market_positions_spec_requires_market() -> None:

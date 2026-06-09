@@ -9,7 +9,7 @@ from polymarket.models.base import BaseModel
 from polymarket.models.clob._validators import (
     _DecimalFromNumberOrString,  # pyright: ignore[reportPrivateUsage]
 )
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import ConditionId, TokenId, validate_ctf_condition_id
 
 
 def _from_epoch_ms(value: int) -> datetime:
@@ -89,6 +89,11 @@ class CurrentReward(BaseModel):
         default=None, validation_alias="total_daily_rate"
     )
 
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId:
+        return validate_ctf_condition_id(value)
+
 
 class MarketRewardConfig(BaseModel):
     asset_address: str = Field(validation_alias="asset_address")
@@ -134,6 +139,11 @@ class MarketReward(BaseModel):
         default=(), validation_alias="rewards_config"
     )
 
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId:
+        return validate_ctf_condition_id(value)
+
 
 class UserEarning(BaseModel):
     asset_address: str = Field(validation_alias="asset_address")
@@ -147,6 +157,11 @@ class UserEarning(BaseModel):
     @classmethod
     def _parse_date(cls, value: object) -> datetime:
         return _parse_epoch_ms(value)
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId:
+        return validate_ctf_condition_id(value)
 
 
 class TotalUserEarning(BaseModel):
@@ -195,6 +210,11 @@ class UserRewardsEarning(BaseModel):
     rewards_max_spread: float = Field(validation_alias="rewards_max_spread")
     rewards_min_size: _DecimalFromNumberOrString = Field(validation_alias="rewards_min_size")
     tokens: tuple[MarketRewardToken, ...]
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId:
+        return validate_ctf_condition_id(value)
 
 
 RewardsPercentages: TypeAlias = dict[ConditionId, float]

@@ -18,6 +18,9 @@ from polymarket.models.types import (
     CtfConditionId,
     PositionId,
     TokenId,
+    validate_combo_condition_id,
+    validate_ctf_condition_id,
+    validate_optional_ctf_condition_id,
 )
 from polymarket.types import EvmAddress
 
@@ -73,6 +76,11 @@ class Position(BaseModel):
     end_date: date | None = Field(default=None, validation_alias="endDate")
     negative_risk: bool | None = Field(default=None, validation_alias="negativeRisk")
 
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId:
+        return validate_ctf_condition_id(value)
+
     @field_validator(
         "size",
         "avg_price",
@@ -114,6 +122,11 @@ class ClosedPosition(BaseModel):
     opposite_outcome: str | None = Field(default=None, validation_alias="oppositeOutcome")
     opposite_token_id: TokenId | None = Field(default=None, validation_alias="oppositeAsset")
     end_date: date | None = Field(default=None, validation_alias="endDate")
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ConditionId | None:
+        return validate_optional_ctf_condition_id(value)
 
     @field_validator(
         "avg_price",
@@ -169,6 +182,11 @@ class ComboPositionLeg(BaseModel):
     leg_current_price: Decimal | None = None
     market: ComboPositionMarket | None = None
 
+    @field_validator("leg_condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> CtfConditionId:
+        return validate_ctf_condition_id(value)
+
     @field_validator("leg_current_price", mode="before")
     @classmethod
     def _parse_decimal(cls, value: object) -> Decimal | None:
@@ -190,6 +208,11 @@ class ComboPosition(BaseModel):
     legs_resolved: int
     legs_pending: int
     legs: tuple[ComboPositionLeg, ...]
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ComboConditionId:
+        return validate_combo_condition_id(value)
 
     @field_validator("shares", "entry_avg_price_usdc", "entry_cost_usdc", mode="before")
     @classmethod

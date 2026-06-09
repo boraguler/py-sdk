@@ -21,7 +21,7 @@ from polymarket.models.clob.rewards import (
     UserEarning,
     UserRewardsEarning,
 )
-from polymarket.models.types import ConditionId
+from polymarket.models.types import ConditionId, validate_ctf_condition_id
 from polymarket.pagination import Page
 
 _MAX_PAGE_SIZE = 500
@@ -86,6 +86,10 @@ def build_list_market_rewards_request(
     cursor: str | None = None,
 ) -> tuple[str, dict[str, QueryParamValue]]:
     validated = require_nonempty("condition_id", condition_id)
+    try:
+        validated = validate_ctf_condition_id(validated)
+    except ValueError as error:
+        raise UserInputError(str(error)) from error
     params: dict[str, QueryParamValue] = {}
     if sponsored is not None:
         if type(sponsored) is not bool:

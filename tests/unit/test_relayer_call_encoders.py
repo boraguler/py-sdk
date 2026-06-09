@@ -1,9 +1,12 @@
+from collections.abc import Callable
+
 import pytest
 from eth_abi.abi import encode as abi_encode
 from eth_utils.crypto import keccak
 
 from polymarket._internal.actions.relayer.calls import (
     MAX_UINT256,
+    TransactionCall,
     combinatorial_prepare_condition_call,
     ctf_redeem_positions_call,
     decode_erc1155_balance_of_batch_result,
@@ -224,6 +227,24 @@ def test_redeem_v2_call_golden_calldata() -> None:
         ).hex()
     )
     assert call.data == expected
+
+
+@pytest.mark.parametrize("builder", [split_v2_call, merge_v2_call])
+def test_protocol_v2_condition_calls_reject_non_combo_condition_id(
+    builder: Callable[..., TransactionCall],
+) -> None:
+    with pytest.raises(UserInputError, match="combo condition ID"):
+        builder(router=_STANDARD_EXCHANGE, condition_id=_CONDITION_ID, amount=1)
+
+
+def test_redeem_v2_call_rejects_non_binary_wire_condition_id() -> None:
+    with pytest.raises(UserInputError, match="combo condition ID"):
+        redeem_v2_call(
+            router=_STANDARD_EXCHANGE,
+            condition_id=f"{_COMBO_CONDITION_ID}02",
+            outcome_index=1,
+            amount=1,
+        )
 
 
 def test_combinatorial_prepare_condition_call_golden_calldata() -> None:

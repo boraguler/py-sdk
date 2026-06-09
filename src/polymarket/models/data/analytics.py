@@ -6,13 +6,18 @@ from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import parse_optional_decimal
-from polymarket.models.types import ConditionId, TokenId
+from polymarket.models.types import ConditionId, TokenId, validate_optional_ctf_condition_id
 from polymarket.types import EvmAddress
 
 
 class MarketVolume(BaseModel):
     market: ConditionId | None = None
     value: Decimal | None = None
+
+    @field_validator("market", mode="before")
+    @classmethod
+    def _validate_market(cls, value: object) -> ConditionId | None:
+        return validate_optional_ctf_condition_id(value)
 
     @field_validator("value", mode="before")
     @classmethod
@@ -33,6 +38,11 @@ class LiveVolume(BaseModel):
 class OpenInterest(BaseModel):
     market: ConditionId | None = None
     value: Decimal | None = None
+
+    @field_validator("market", mode="before")
+    @classmethod
+    def _validate_market(cls, value: object) -> ConditionId | None:
+        return validate_optional_ctf_condition_id(value)
 
     @field_validator("value", mode="before")
     @classmethod

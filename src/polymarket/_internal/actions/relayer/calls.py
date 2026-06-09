@@ -9,6 +9,7 @@ from eth_utils.crypto import keccak
 from eth_utils.hexadecimal import decode_hex
 
 from polymarket.errors import UnexpectedResponseError, UserInputError
+from polymarket.models.types import to_combo_condition_id
 from polymarket.types import EvmAddress, HexString
 
 MAX_UINT256 = (1 << 256) - 1
@@ -266,20 +267,10 @@ def _condition_id_bytes(condition_id: str) -> bytes:
 
 
 def _protocol_v2_condition_id_bytes(condition_id: str) -> bytes:
-    normalized = condition_id.lower()
-    if normalized.startswith("0x"):
-        normalized = normalized[2:]
     try:
-        raw = bytes.fromhex(normalized)
-    except ValueError as error:
-        raise UserInputError(f"condition_id is not valid hex: {error}") from error
-    if len(raw) == 31:
-        return raw
-    if len(raw) == 32 and raw[-1] in (0, 1):
-        return raw[:-1]
-    raise UserInputError(
-        "Protocol v2 condition ID must be bytes31, or bytes32 with a binary outcome byte"
-    )
+        return bytes.fromhex(to_combo_condition_id(condition_id)[2:])
+    except TypeError as error:
+        raise UserInputError(str(error)) from error
 
 
 def _position_id_uint256(position_id: str) -> int:

@@ -17,6 +17,8 @@ from polymarket import (
 from polymarket.errors import UnexpectedResponseError
 from polymarket.models.data.activity import parse_activities, parse_activity
 
+_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
+
 
 def _trade_payload(**overrides: object) -> dict[str, object]:
     base: dict[str, object] = {
@@ -24,7 +26,7 @@ def _trade_payload(**overrides: object) -> dict[str, object]:
         "proxyWallet": "0xWALLET",
         "timestamp": 1_700_000_000,
         "transactionHash": "0xHASH",
-        "conditionId": "0xCOND",
+        "conditionId": _CONDITION_ID,
         "asset": "TOKEN",
         "side": "BUY",
         "size": "10",
@@ -46,7 +48,7 @@ def _market_event_payload(activity_type: str, **overrides: object) -> dict[str, 
         "proxyWallet": "0xWALLET",
         "timestamp": 1_700_000_000,
         "transactionHash": "0xHASH",
-        "conditionId": "0xCOND",
+        "conditionId": _CONDITION_ID,
         "size": "5",
         "title": "T",
         "slug": "t",
@@ -73,7 +75,7 @@ def test_parse_trade_activity() -> None:
     activity = parse_activity(_trade_payload())
     assert isinstance(activity, TradeActivity)
     assert activity.wallet == "0xWALLET"
-    assert activity.condition_id == "0xCOND"
+    assert activity.condition_id == _CONDITION_ID
     assert activity.token_id == "TOKEN"
     assert activity.side == "BUY"
     assert activity.shares == Decimal("10")
