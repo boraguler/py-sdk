@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.1.0-b5](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b4...polymarket-client-v0.1.0-b5) (2026-06-09)
+
+
+### Features
+
+* **client:** support combo position lifecycle ([947efd2](https://github.com/Polymarket/py-sdk/commit/947efd2a418bd543c554b160ea25ee99a0774d2d))
+* **gamma:** expose market position ids ([cb6a97d](https://github.com/Polymarket/py-sdk/commit/cb6a97d256d6e9b90e0989ef545e54d50b52480c))
+* **jupyter:** notebook-friendly models ([8ee5fd3](https://github.com/Polymarket/py-sdk/commit/8ee5fd3cddbe85014c349c6801143260ac3c4141))
+* **jupyter:** notebook-friendly models ([02e8574](https://github.com/Polymarket/py-sdk/commit/02e8574d470d4a8ef1fe71e664901aab3601540c))
+* **rfq:** add async RFQ session ([7beaafd](https://github.com/Polymarket/py-sdk/commit/7beaafd4e454611dfad613dd9fd29a215202b3a3))
+* **rfq:** distinguish combo condition ids ([9ee5b63](https://github.com/Polymarket/py-sdk/commit/9ee5b6305719d9ca5632a5f3eaa947b5c73cd1b0))
+
+
+### Bug Fixes
+
+* **client:** align market lifecycle context ([d28c211](https://github.com/Polymarket/py-sdk/commit/d28c2117bff70beebccf27582438114fde21d8a9))
+* **client:** resolve market ids before redemption ([fa4fe35](https://github.com/Polymarket/py-sdk/commit/fa4fe35741d62583efbabfc422892343c41287c3))
+* **clob:** align order book timestamp validation ([4be6456](https://github.com/Polymarket/py-sdk/commit/4be645646fdc41ae8661c00a9a67e0422f708b7d))
+* **data:** accept global open interest rows ([1cfda2d](https://github.com/Polymarket/py-sdk/commit/1cfda2ddb0eed8bdcec94eb2023b6514735512b1))
+* **data:** accept global open interest rows ([1855b7f](https://github.com/Polymarket/py-sdk/commit/1855b7f2134c4cbb041de4df78d31eb1b9fb0bf4))
+* **models:** prefer ctf condition id brand ([59dbe47](https://github.com/Polymarket/py-sdk/commit/59dbe474efbdfd9b1982f7989b24f90cf9bd085d))
+* **models:** validate condition ids at runtime ([7a0675d](https://github.com/Polymarket/py-sdk/commit/7a0675dded1a8d1656ee5b5d83f98f9adaf9ea93))
+* **rfq:** queue duplicate pending acknowledgements ([c90fdd7](https://github.com/Polymarket/py-sdk/commit/c90fdd7dc156cc9e870f0c68a82a4d0fc477b109))
+* **rfq:** use production quoter websocket ([e3f3d27](https://github.com/Polymarket/py-sdk/commit/e3f3d278164869d2916490bf69b4a9718733c40a))
+* **rfq:** validate unsupported error codes ([f3a400f](https://github.com/Polymarket/py-sdk/commit/f3a400f2e893eee9b60c6fca785b87ca3004a5b8))
+
+
+### Documentation
+
+* fix stale items() reference in list_builder_trades docstring ([ad2725c](https://github.com/Polymarket/py-sdk/commit/ad2725c2dbb006efcf360d4dc6f60d5a62b8601f))
+
 ## [0.1.0-b4](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b3...polymarket-client-v0.1.0-b4) (2026-06-08)
 
 
