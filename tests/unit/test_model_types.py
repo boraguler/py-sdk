@@ -26,8 +26,6 @@ def test_to_combo_condition_id_normalizes_supported_wire_forms() -> None:
 
 def test_to_combo_condition_id_rejects_non_combo_and_non_binary_wire_forms() -> None:
     with pytest.raises(TypeError, match="combo condition ID"):
-        to_combo_condition_id(
-            "0x022def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
-        )
+        to_combo_condition_id("0x022def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000")
     with pytest.raises(TypeError, match="combo condition ID"):
         to_combo_condition_id(f"{COMBO_CONDITION_ID}02")

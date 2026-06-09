@@ -214,9 +214,7 @@ def test_canonicalize_combo_legs_rejects_both_outcomes() -> None:
 
 
 def test_derive_combo_position_context_matches_ts_golden() -> None:
-    context = derive_combo_position_context(
-        (int(_leg_position(1, 0)), int(_leg_position(2, 1)))
-    )
+    context = derive_combo_position_context((int(_leg_position(1, 0)), int(_leg_position(2, 1))))
 
     assert context.condition_id == _COMBO_CONDITION_ID
     assert context.position_ids == (

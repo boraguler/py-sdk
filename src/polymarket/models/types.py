@@ -95,6 +95,7 @@ def _is_hex_string(value: object) -> bool:
         return False
     return True
 
+
 __all__ = [
     "BestLineId",
     "CategoryId",

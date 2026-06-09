@@ -253,8 +253,7 @@ def test_combinatorial_prepare_condition_call_golden_calldata() -> None:
         legs=[1, 2],
     )
     expected = (
-        "0x"
-        + (_sel("prepareCondition(uint256[])") + abi_encode(["uint256[]"], [[1, 2]])).hex()
+        "0x" + (_sel("prepareCondition(uint256[])") + abi_encode(["uint256[]"], [[1, 2]])).hex()
     )
     assert call.to == _STANDARD_EXCHANGE
     assert call.data == expected

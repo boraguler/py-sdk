@@ -6,6 +6,7 @@ from typing import cast
 from urllib.parse import urlparse
 
 import httpx
+import pytest
 from _relayer_helpers import (
     install_relayer_routes,
     install_rpc_handler,
@@ -17,8 +18,10 @@ from eth_utils.crypto import keccak
 
 from polymarket import AsyncSecureClient
 from polymarket.environments import PRODUCTION
+from polymarket.errors import UnexpectedResponseError, UserInputError
 
 _COMBO_CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
+_CONDITION_ID = "0x" + "11" * 32
 
 
 def test_split_position_with_combo_legs_bundles_prepare_and_split() -> None:
@@ -88,6 +91,62 @@ def test_redeem_positions_with_combo_position_id_uses_onchain_balance() -> None:
     assert body["metadata"] == f"Redeem combo position {position_id}"
 
 
+def test_redeem_positions_market_id_resolves_condition_before_fetching_positions() -> None:
+    captured: list[httpx.Request] = []
+    market_calls: list[dict[str, object]] = []
+    position_calls: list[dict[str, object]] = []
+
+    async def run() -> None:
+        client = await make_deposit_client()
+        _setup_relayer(client, captured, "tx-market-redeem")
+        client.list_markets = _async_list_markets_stub(  # type: ignore[method-assign]
+            market_calls, (_stub_market(_CONDITION_ID),)
+        )
+        client.list_positions = _async_list_positions_stub(  # type: ignore[method-assign]
+            position_calls, condition_id=_CONDITION_ID, neg_risk=True
+        )
+        try:
+            await client.redeem_positions(market_id="123")
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+    assert market_calls == [{"ids": [123], "page_size": 1}]
+    assert position_calls[0]["market"] == [_CONDITION_ID]
+    body = _submit_body(captured)
+    calls = _deposit_wallet_calls(body)
+    assert calls[0]["target"].lower() == PRODUCTION.neg_risk_collateral_adapter.lower()
+
+
+def test_redeem_positions_market_id_rejects_non_integer() -> None:
+    async def run() -> None:
+        client = await make_deposit_client()
+        try:
+            await client.redeem_positions(market_id="not-an-int")
+        finally:
+            await client.close()
+
+    with pytest.raises(UserInputError, match="Market ID must be an integer"):
+        asyncio.run(run())
+
+
+def test_redeem_positions_market_id_raises_when_condition_missing() -> None:
+    async def run() -> None:
+        client = await make_deposit_client()
+        client.list_markets = _async_list_markets_stub(  # type: ignore[method-assign]
+            [],
+            (_stub_market(None),),
+        )
+        try:
+            await client.redeem_positions(market_id="123")
+        finally:
+            await client.close()
+
+    with pytest.raises(UnexpectedResponseError, match="Missing condition ID for market 123"):
+        asyncio.run(run())
+
+
 def _setup_relayer(client: AsyncSecureClient, captured: list[httpx.Request], tx_id: str) -> None:
     install_relayer_routes(
         client,
@@ -136,6 +195,68 @@ def _deposit_wallet_calls(body: dict[str, object]) -> list[dict[str, str]]:
     calls = params["calls"]
     assert isinstance(calls, list)
     return cast(list[dict[str, str]], calls)
+
+
+def _stub_market(condition_id: str | None):  # type: ignore[no-untyped-def]
+    class _Market:
+        def __init__(self) -> None:
+            self.condition_id = condition_id
+
+    return _Market()
+
+
+class _AsyncStubPaginator:
+    def __init__(self, items: tuple[object, ...]) -> None:
+        self._items = items
+
+    async def first_page(self):  # type: ignore[no-untyped-def]
+        from polymarket.pagination import Page
+
+        return Page(
+            items=self._items,
+            has_more=False,
+            next_cursor=None,
+            total_count=len(self._items),
+        )
+
+
+def _async_list_markets_stub(calls: list[dict[str, object]], items: tuple[object, ...]):  # type: ignore[no-untyped-def]
+    def list_markets(**kwargs: object):  # type: ignore[no-untyped-def]
+        calls.append(kwargs)
+        return _AsyncStubPaginator(items)
+
+    return list_markets
+
+
+def _async_list_positions_stub(
+    calls: list[dict[str, object]], *, condition_id: str, neg_risk: bool
+):  # type: ignore[no-untyped-def]
+    from polymarket.models.data.portfolio import Position
+
+    positions = (
+        Position.parse_response(
+            {
+                "conditionId": condition_id,
+                "outcomeIndex": 0,
+                "size": "111.0",
+                "negativeRisk": neg_risk,
+            }
+        ),
+        Position.parse_response(
+            {
+                "conditionId": condition_id,
+                "outcomeIndex": 1,
+                "size": "0",
+                "negativeRisk": neg_risk,
+            }
+        ),
+    )
+
+    def list_positions(**kwargs: object):  # type: ignore[no-untyped-def]
+        calls.append(kwargs)
+        return _AsyncStubPaginator(positions)
+
+    return list_positions
 
 
 def _leg_position(marker: int, outcome: int) -> str:

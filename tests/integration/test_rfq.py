@@ -215,9 +215,7 @@ async def test_rfq_session_normalizes_combo_condition_id_wire_form(
             frame = json.loads(raw)
             if frame["type"] == "auth":
                 await ws.send(json.dumps({"type": "auth", "success": True}))
-                await ws.send(
-                    json.dumps(_quote_request_message(condition_id=f"{CONDITION_ID}01"))
-                )
+                await ws.send(json.dumps(_quote_request_message(condition_id=f"{CONDITION_ID}01")))
 
     async with (
         _ws_server(handler) as ws_url,

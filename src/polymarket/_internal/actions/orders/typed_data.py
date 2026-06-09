@@ -110,9 +110,7 @@ def build_order_signature(
     return HexString(signature + trailer)
 
 
-def _build_standard_typed_data(
-    order: UnsignedOrder, *, protocol_version: str
-) -> dict[str, Any]:
+def _build_standard_typed_data(order: UnsignedOrder, *, protocol_version: str) -> dict[str, Any]:
     return {
         "types": {
             "EIP712Domain": _EIP712_DOMAIN_FIELDS,

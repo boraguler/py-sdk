@@ -3,7 +3,7 @@
 import logging
 import time
 from collections.abc import Mapping, Sequence
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from types import TracebackType
 from typing import TYPE_CHECKING, Literal, Self, cast, overload
 
@@ -206,6 +206,16 @@ def _validate_nonce(nonce: object) -> None:
         raise UserInputError("nonce must be a non-negative integer.")
     if nonce < 0:
         raise UserInputError("nonce must be a non-negative integer.")
+
+
+def _parse_market_id_for_redeem(market_id: str) -> int:
+    try:
+        parsed = Decimal(market_id.strip())
+    except (InvalidOperation, ValueError) as error:
+        raise UserInputError(f"Market ID must be an integer, received {market_id}") from error
+    if not parsed.is_finite() or parsed != parsed.to_integral_value():
+        raise UserInputError(f"Market ID must be an integer, received {market_id}")
+    return int(parsed)
 
 
 class SecureClient:
@@ -2170,9 +2180,10 @@ class SecureClient:
                 metadata if metadata is not None else f"Redeem combo position {position_id}"
             )
             return self._dispatch_single_call(call, metadata=resolved_metadata)
-        lookup_id = condition_id if condition_id is not None else market_id
-        assert lookup_id is not None
-        binary = self._fetch_binary_positions(lookup_id)
+        if market_id is not None:
+            condition_id = self._resolve_redeem_market_condition_id(market_id)
+        assert condition_id is not None
+        binary = self._fetch_binary_positions(condition_id)
         neg_risk = expect_negative_risk_flag(binary)
         resolved_condition_id = resolve_binary_positions_condition_id(binary)
         call = ctf_redeem_positions_call(
@@ -2266,6 +2277,19 @@ class SecureClient:
         if market.state.neg_risk is None:
             raise UnexpectedResponseError(f"Missing negRisk flag for condition {condition_id}")
         return market.state.neg_risk
+
+    def _resolve_redeem_market_condition_id(self, market_id: str) -> CtfConditionId:
+        parsed_market_id = _parse_market_id_for_redeem(market_id)
+        page = self.list_markets(ids=[parsed_market_id], page_size=1).first_page()
+        markets = page.items
+        if len(markets) != 1:
+            raise UserInputError(
+                f"Expected exactly one market for market {market_id}, got {len(markets)}"
+            )
+        condition_id = markets[0].condition_id
+        if condition_id is None:
+            raise UnexpectedResponseError(f"Missing condition ID for market {market_id}")
+        return condition_id
 
     def _fetch_binary_positions(self, market_id_or_condition_id: str):  # type: ignore[no-untyped-def]
         page = self.list_positions(
