@@ -38,8 +38,8 @@ async def _wait_for_order_visible(
     *,
     token_id: str,
     order_id: str,
-    attempts: int = 8,
-    delay_s: float = 0.25,
+    attempts: int = 16,
+    delay_s: float = 0.5,
 ) -> bool:
     for _ in range(attempts):
         page = await client.list_open_orders(token_id=token_id).first_page()
