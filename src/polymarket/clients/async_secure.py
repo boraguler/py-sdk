@@ -134,6 +134,7 @@ from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import (
     RequestRejectedError,
     SigningError,
+    TransportError,
     UserInputError,
 )
 from polymarket.models import (
@@ -624,8 +625,11 @@ class AsyncSecureClient:
         task = asyncio.create_task(self._create_rfq_session())
         self._rfq_session_opening = task
         try:
-            self._rfq_session = await task
-            return self._rfq_session
+            session = await task
+            if session.closed and self._rfq_session_opening is not task:
+                raise TransportError("RFQ quoter websocket closed.")
+            self._rfq_session = session
+            return session
         finally:
             if self._rfq_session_opening is task:
                 self._rfq_session_opening = None
@@ -688,16 +692,34 @@ class AsyncSecureClient:
 
     async def _close_rfq_session(self) -> None:
         opening = self._rfq_session_opening
+        connecting = self._rfq_session_connecting
+        session = self._rfq_session
+        self._rfq_session_opening = None
+        self._rfq_session_connecting = None
+        self._rfq_session = None
         first_error: BaseException | None = None
         try:
-            await _close_all(self._rfq_session_connecting, self._rfq_session)
+            await _close_all(connecting, session)
         except BaseException as error:
             first_error = error
         if opening is not None:
-            with contextlib.suppress(BaseException):
-                await opening
-            if self._rfq_session_opening is opening:
-                self._rfq_session_opening = None
+            try:
+                opened = await opening
+            except BaseException:
+                pass
+            else:
+                try:
+                    await opened.close()
+                except BaseException as error:
+                    if first_error is None:
+                        first_error = error
+            try:
+                await _close_all(self._rfq_session_connecting, self._rfq_session)
+            except BaseException as error:
+                if first_error is None:
+                    first_error = error
+            self._rfq_session_connecting = None
+            self._rfq_session = None
         if first_error is not None:
             raise first_error
 

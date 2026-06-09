@@ -5,7 +5,9 @@ import contextlib
 import logging
 import secrets
 import time
+from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Generator, Mapping
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from types import TracebackType
 from typing import Any, Self, cast
@@ -65,6 +67,12 @@ _POLY_1271_SIGNATURE_TYPE = 3
 _ACK_TIMEOUT_S = 30.0
 _QUEUE_SIZE = 1024
 _PROTOCOL_VERSION_V3 = "3"
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingAck:
+    future: asyncio.Future[Any]
+    waiter: asyncio.Future[Any]
 
 
 class RfqSessionContext:
@@ -162,7 +170,7 @@ class RfqQuoterSession:
         self._wallet_type: WalletType = wallet_type
         self._connection = AsyncWebSocketConnection(logger=self._logger)
         self._queue: asyncio.Queue[RfqEvent | _EndSentinel] = asyncio.Queue(maxsize=_QUEUE_SIZE)
-        self._pending: dict[str, asyncio.Future[Any]] = {}
+        self._pending: dict[str, deque[_PendingAck]] = {}
         self._end_error: BaseException | None = None
         self._ended = False
         self._closed = False
@@ -221,10 +229,7 @@ class RfqQuoterSession:
         if self._closed:
             return
         self._closed = True
-        for future in tuple(self._pending.values()):
-            if not future.done():
-                future.set_exception(TransportError("RFQ quoter websocket closed."))
-        self._pending.clear()
+        self._reject_all_pending(TransportError("RFQ quoter websocket closed."))
         await self._connection.close()
         if self._on_session_close is not None:
             self._on_session_close()
@@ -498,22 +503,53 @@ class RfqQuoterSession:
     def _wait_for(self, key: str, message: str) -> asyncio.Future[Any]:
         loop = asyncio.get_running_loop()
         future: asyncio.Future[Any] = loop.create_future()
-        self._pending[key] = future
-        return asyncio.ensure_future(_with_timeout(future, message))
+        waiter = asyncio.ensure_future(_with_timeout(future, message))
+        self._pending.setdefault(key, deque()).append(_PendingAck(future=future, waiter=waiter))
+        waiter.add_done_callback(lambda done: self._remove_pending(key, done))
+        return waiter
 
     def _remove_pending(self, key: str, pending: asyncio.Future[Any]) -> None:
-        self._pending.pop(key, None)
+        entries = self._pending.get(key)
+        if entries is None:
+            pending.cancel()
+            return
+        remaining = deque(entry for entry in entries if entry.waiter is not pending)
+        if remaining:
+            self._pending[key] = remaining
+        else:
+            self._pending.pop(key, None)
         pending.cancel()
 
     def _resolve(self, key: str, value: object) -> None:
-        future = self._pending.pop(key, None)
-        if future is not None and not future.done():
-            future.set_result(value)
+        pending = self._pop_pending(key)
+        if pending is not None:
+            pending.future.set_result(value)
 
     def _reject(self, key: str, error: BaseException) -> None:
-        future = self._pending.pop(key, None)
-        if future is not None and not future.done():
-            future.set_exception(error)
+        pending = self._pop_pending(key)
+        if pending is not None:
+            pending.future.set_exception(error)
+
+    def _pop_pending(self, key: str) -> _PendingAck | None:
+        entries = self._pending.get(key)
+        if entries is None:
+            return None
+        while entries:
+            pending = entries.popleft()
+            if pending.future.done() or pending.waiter.done():
+                continue
+            if not entries:
+                self._pending.pop(key, None)
+            return pending
+        self._pending.pop(key, None)
+        return None
+
+    def _reject_all_pending(self, error: BaseException) -> None:
+        for entries in tuple(self._pending.values()):
+            for pending in tuple(entries):
+                if not pending.future.done():
+                    pending.future.set_exception(error)
+        self._pending.clear()
 
     def _push(self, event: RfqEvent) -> None:
         if self._closed:
@@ -536,10 +572,7 @@ class RfqQuoterSession:
         self._ended = True
         if error is not None:
             self._end_error = error
-            for future in tuple(self._pending.values()):
-                if not future.done():
-                    future.set_exception(error)
-            self._pending.clear()
+            self._reject_all_pending(error)
         try:
             self._queue.put_nowait(_END)
             return

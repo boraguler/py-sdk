@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from websockets.asyncio.server import ServerConnection, serve
@@ -399,6 +399,59 @@ async def test_rfq_session_quote_rejection_raises_typed_error(
 
 
 @pytest.mark.integration
+async def test_rfq_session_resolves_same_key_quote_acks_fifo(
+    require_env: Callable[[str], str],
+) -> None:
+    received_quotes = 0
+
+    async def handler(ws: ServerConnection) -> None:
+        nonlocal received_quotes
+        async for raw in ws:
+            assert isinstance(raw, str)
+            frame = json.loads(raw)
+            if frame["type"] == "auth":
+                await ws.send(json.dumps({"type": "auth", "success": True}))
+                await ws.send(json.dumps(_quote_request_message()))
+            elif frame["type"] == "RFQ_QUOTE":
+                received_quotes += 1
+                if received_quotes == 2:
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "type": "ACK_RFQ_QUOTE",
+                                "rfq_id": RFQ_ID,
+                                "quote_id": "quote-first",
+                            }
+                        )
+                    )
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "type": "ACK_RFQ_QUOTE",
+                                "rfq_id": RFQ_ID,
+                                "quote_id": "quote-second",
+                            }
+                        )
+                    )
+
+    async with (
+        _ws_server(handler) as ws_url,
+        _rfq_client(require_env, ws_url) as client,
+        client.open_rfq_session() as session,
+    ):
+        event = await session.__anext__()
+        assert isinstance(event, RfqQuoteRequestEvent)
+        first = asyncio.create_task(event.quote(price=Decimal("0.45")))
+        second = asyncio.create_task(event.quote(price=Decimal("0.46")))
+
+        first_ack, second_ack = await asyncio.wait_for(asyncio.gather(first, second), timeout=1)
+
+        assert first_ack.quote_id == "quote-first"
+        assert second_ack.quote_id == "quote-second"
+        assert cast(Any, session)._pending == {}
+
+
+@pytest.mark.integration
 async def test_rfq_session_uncorrelated_error_fails_session(
     require_env: Callable[[str], str],
 ) -> None:
@@ -607,6 +660,66 @@ async def test_rfq_session_close_client_closes_in_flight_open(
         with pytest.raises(TransportError, match="RFQ quoter websocket closed"):
             await asyncio.wait_for(opening, timeout=1)
         await asyncio.wait_for(connection_closed.wait(), timeout=1)
+        assert cast(Any, client)._rfq_session is None
+        assert cast(Any, client)._rfq_session_connecting is None
+        assert cast(Any, client)._rfq_session_opening is None
+
+
+@pytest.mark.integration
+async def test_rfq_session_close_client_closes_open_that_completes_during_close(
+    require_env: Callable[[str], str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from polymarket._internal.rfq import RfqQuoterSession
+
+    auth_received = asyncio.Event()
+    auth_sent = asyncio.Event()
+    close_started = asyncio.Event()
+    allow_close = asyncio.Event()
+    connection_closed = asyncio.Event()
+    original_close = RfqQuoterSession.close
+
+    async def delayed_close(self: RfqQuoterSession) -> None:
+        if not close_started.is_set():
+            close_started.set()
+            await allow_close.wait()
+        await original_close(self)
+
+    monkeypatch.setattr(RfqQuoterSession, "close", delayed_close)
+
+    async def handler(ws: ServerConnection) -> None:
+        try:
+            async for raw in ws:
+                assert isinstance(raw, str)
+                frame = json.loads(raw)
+                if frame["type"] == "auth":
+                    auth_received.set()
+                    await close_started.wait()
+                    await ws.send(json.dumps({"type": "auth", "success": True}))
+                    auth_sent.set()
+        finally:
+            connection_closed.set()
+
+    async with _ws_server(handler) as ws_url, _rfq_client(require_env, ws_url) as client:
+        opening = asyncio.create_task(client.open_rfq_session().__aenter__())
+        await auth_received.wait()
+
+        closing = asyncio.create_task(client.close())
+        await close_started.wait()
+        await auth_sent.wait()
+        allow_close.set()
+        await asyncio.wait_for(closing, timeout=1)
+
+        try:
+            opened = await asyncio.wait_for(opening, timeout=1)
+        except TransportError:
+            pass
+        else:
+            assert cast(Any, opened).closed
+        await asyncio.wait_for(connection_closed.wait(), timeout=1)
+        assert cast(Any, client)._rfq_session is None
+        assert cast(Any, client)._rfq_session_connecting is None
+        assert cast(Any, client)._rfq_session_opening is None
 
 
 @pytest.mark.integration
