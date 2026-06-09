@@ -19,13 +19,15 @@ from polymarket.models.data.portfolio import Position
 from polymarket.models.gamma import Event, Market
 from polymarket.pagination import AsyncPaginator, Page, Paginator
 
+_CONDITION_ID = "0x" + "11" * 32
+
 
 def _make_market(**overrides: object) -> Market:
     payload: dict[str, object] = {
         "id": "MARKET-1",
         "question": "Will X happen?",
         "slug": "will-x-happen",
-        "conditionId": "0xabcdef0123456789",
+        "conditionId": _CONDITION_ID,
         "outcomes": ["Yes", "No"],
         "outcomePrices": ["0.6", "0.4"],
         "clobTokenIds": ["TOKEN-YES", "TOKEN-NO"],
@@ -68,7 +70,7 @@ def _make_book(**overrides: object) -> OrderBook:
 
 def _make_position(**overrides: object) -> Position:
     payload: dict[str, object] = {
-        "conditionId": "0xabcdef0123456789",
+        "conditionId": _CONDITION_ID,
         "proxyWallet": "0x" + "ab" * 20,
         "asset": "TOKEN-YES",
         "size": "100",
@@ -289,7 +291,7 @@ def test_trade_activity_repr_html_uses_variant_class_name() -> None:
             "proxyWallet": "0x" + "ab" * 20,
             "timestamp": 1700000000,
             "transactionHash": "0xTX1234567890",
-            "conditionId": "0xCOND",
+            "conditionId": _CONDITION_ID,
             "asset": "TOKEN-1",
             "side": "BUY",
             "size": "5",
