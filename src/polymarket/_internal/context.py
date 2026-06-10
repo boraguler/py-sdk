@@ -18,6 +18,7 @@ class SyncClientContext:
     environment: Environment
     gamma: SyncTransport
     data: SyncTransport
+    rfq: SyncTransport
     clob: SyncTransport
 
 
@@ -38,6 +39,7 @@ class AsyncClientContext:
     environment: Environment
     gamma: AsyncTransport
     data: AsyncTransport
+    rfq: AsyncTransport
     clob: AsyncTransport
 
 

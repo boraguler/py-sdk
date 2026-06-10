@@ -32,6 +32,8 @@ def _sync_transport_for(ctx: SyncClientContext, service: Service) -> SyncTranspo
             return ctx.gamma
         case "data":
             return ctx.data
+        case "rfq":
+            return ctx.rfq
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -42,6 +44,8 @@ def _async_transport_for(ctx: AsyncClientContext, service: Service) -> AsyncTran
             return ctx.gamma
         case "data":
             return ctx.data
+        case "rfq":
+            return ctx.rfq
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -157,6 +161,8 @@ def sync_paginate_keyset(
 ) -> Paginator[T]:
     if page_size < 1:
         raise UserInputError("page_size must be a positive integer.")
+    if spec.max_page_size is not None and page_size > spec.max_page_size:
+        raise UserInputError(f"page_size must be at most {spec.max_page_size}.")
     transport = _sync_transport_for(ctx, spec.service)
 
     def fetch(cursor: str | None) -> Page[T]:
@@ -175,7 +181,7 @@ def sync_paginate_keyset(
             "limit": page_size,
         }
         if server_cursor is not None:
-            params["after_cursor"] = server_cursor
+            params[spec.cursor_param] = server_cursor
         payload = transport.get_json(spec.path, params=params)
         keyset_page = spec.parse_page(payload)
         return compute_keyset_page(
@@ -198,6 +204,8 @@ def async_paginate_keyset(
 ) -> AsyncPaginator[T]:
     if page_size < 1:
         raise UserInputError("page_size must be a positive integer.")
+    if spec.max_page_size is not None and page_size > spec.max_page_size:
+        raise UserInputError(f"page_size must be at most {spec.max_page_size}.")
     transport = _async_transport_for(ctx, spec.service)
 
     async def fetch(cursor: str | None) -> Page[T]:
@@ -216,7 +224,7 @@ def async_paginate_keyset(
             "limit": page_size,
         }
         if server_cursor is not None:
-            params["after_cursor"] = server_cursor
+            params[spec.cursor_param] = server_cursor
         payload = await transport.get_json(spec.path, params=params)
         keyset_page = spec.parse_page(payload)
         return compute_keyset_page(

@@ -18,6 +18,7 @@ from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
 from polymarket._internal.actions import rewards as _rewards_actions
+from polymarket._internal.actions import rfq as _rfq_actions
 from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
@@ -129,6 +130,7 @@ from polymarket.models import (
     BalanceAllowance,
     BuilderFeeRates,
     ClobTrade,
+    ComboMarket,
     Comment,
     Event,
     LastTradePrice,
@@ -357,6 +359,7 @@ class SecureClient:
 
         gamma = SyncTransport(base_url=environment.gamma_url, logger=logger)
         data = SyncTransport(base_url=environment.data_url, logger=logger)
+        rfq = SyncTransport(base_url=environment.rfq_url, logger=logger)
         clob = SyncTransport(base_url=environment.clob_url, logger=logger)
         relayer_resolver = (
             make_relayer_header_resolver_sync(api_key) if api_key is not None else None
@@ -377,6 +380,7 @@ class SecureClient:
         except BaseException:
             gamma.close()
             data.close()
+            rfq.close()
             clob.close()
             relayer.close()
             raise
@@ -385,6 +389,7 @@ class SecureClient:
             environment=environment,
             gamma=gamma,
             data=data,
+            rfq=rfq,
             clob=clob,
             signer=signer,
             credentials=credentials,
@@ -446,12 +451,15 @@ class SecureClient:
                     ctx.clob.close()
                 finally:
                     try:
-                        ctx.secure_clob.close()
+                        ctx.rfq.close()
                     finally:
                         try:
-                            ctx.relayer.close()
+                            ctx.secure_clob.close()
                         finally:
-                            ctx.rpc.close()
+                            try:
+                                ctx.relayer.close()
+                            finally:
+                                ctx.rpc.close()
 
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user
@@ -1052,6 +1060,20 @@ class SecureClient:
             volume_num_max=volume_num_max,
             volume_num_min=volume_num_min,
         )
+        return sync_paginate_keyset(self._ctx, spec, page_size=page_size)
+
+    def list_combo_markets(
+        self,
+        *,
+        exclude: str | Sequence[str] | None = None,
+        page_size: int = 20,
+    ) -> Paginator[ComboMarket]:
+        """List markets available for Combos.
+
+        Returns:
+            A paginator over matching Combo markets.
+        """
+        spec = _rfq_actions.list_combo_markets_spec(exclude=exclude)
         return sync_paginate_keyset(self._ctx, spec, page_size=page_size)
 
     def list_series(
