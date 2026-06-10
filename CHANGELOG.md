@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-b7](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b6...polymarket-client-v0.1.0-b7) (2026-06-10)
+
+
+### Bug Fixes
+
+* **client:** point Combos RFQ endpoints at polymarket.com domains ([41d511b](https://github.com/Polymarket/py-sdk/commit/41d511be85973f9bff686978de1ddb1a51055985))
+
 ## [0.1.0-b6](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b5...polymarket-client-v0.1.0-b6) (2026-06-10)
 
 
