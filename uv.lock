@@ -829,7 +829,7 @@ wheels = [
 
 [[package]]
 name = "polymarket-client"
-version = "0.1.0b6"
+version = "0.1.0b7"
 source = { editable = "." }
 dependencies = [
     { name = "eth-abi" },
