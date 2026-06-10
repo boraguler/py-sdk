@@ -94,6 +94,7 @@ from polymarket.models.gamma import (
     TagReference,
     Team,
 )
+from polymarket.models.rfq import ComboMarket, ComboMarketOutcome, ComboMarketOutcomes
 from polymarket.models.types import (
     ComboConditionId,
     CommentId,
@@ -168,6 +169,9 @@ __all__ = [
     "Comment",
     "CommentId",
     "ComboConditionId",
+    "ComboMarket",
+    "ComboMarketOutcome",
+    "ComboMarketOutcomes",
     "ConditionId",
     "CtfConditionId",
     "ConversionActivity",

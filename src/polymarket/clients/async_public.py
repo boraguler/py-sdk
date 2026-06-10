@@ -12,6 +12,7 @@ from polymarket._internal.actions import clob as _clob_actions
 from polymarket._internal.actions import data as _data_actions
 from polymarket._internal.actions import gamma as _gamma_actions
 from polymarket._internal.actions import rewards as _rewards_actions
+from polymarket._internal.actions import rfq as _rfq_actions
 from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
@@ -47,6 +48,7 @@ from polymarket.clients._transport import AsyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import RequestRejectedError
 from polymarket.models import (
+    ComboMarket,
     Comment,
     Event,
     LastTradePrice,
@@ -131,6 +133,7 @@ class AsyncPublicClient:
             environment=environment,
             gamma=AsyncTransport(base_url=environment.gamma_url, logger=logger),
             data=AsyncTransport(base_url=environment.data_url, logger=logger),
+            rfq=AsyncTransport(base_url=environment.rfq_url, logger=logger),
             clob=AsyncTransport(base_url=environment.clob_url, logger=logger),
         )
         self._market_manager: ClobMarketStreamManager | None = None
@@ -289,7 +292,10 @@ class AsyncPublicClient:
                         try:
                             await self._ctx.data.close()
                         finally:
-                            await self._ctx.clob.close()
+                            try:
+                                await self._ctx.rfq.close()
+                            finally:
+                                await self._ctx.clob.close()
 
     async def get_market(
         self,
@@ -893,6 +899,20 @@ class AsyncPublicClient:
             volume_num_max=volume_num_max,
             volume_num_min=volume_num_min,
         )
+        return async_paginate_keyset(self._ctx, spec, page_size=page_size)
+
+    def list_combo_markets(
+        self,
+        *,
+        exclude: str | Sequence[str] | None = None,
+        page_size: int = 20,
+    ) -> AsyncPaginator[ComboMarket]:
+        """List markets available for Combos.
+
+        Returns:
+            An async paginator over matching Combo markets.
+        """
+        spec = _rfq_actions.list_combo_markets_spec(exclude=exclude)
         return async_paginate_keyset(self._ctx, spec, page_size=page_size)
 
     def list_series(
