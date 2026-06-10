@@ -43,7 +43,7 @@ class Environment:
     protocol_v2_router: str = "0x12121212006e4CD160D18e3f00711DA5c3372600"
     combinatorial_module: str = "0x30000034706c7d8e12009dab006be20000c031a8"
     position_manager: str = "0x006F54F7f9A22e0000CC2AB60031000000ae9fEF"
-    rfq_quoter_ws_url: str = "wss://combos-rfq-gateway-quoter.polymarket.sh/ws/rfq"
+    rfq_quoter_ws_url: str = "wss://combos-rfq-gateway-quoter.polymarket.com/ws/rfq"
     rfq_quoter_ws_headers: dict[str, str] | None = None
     relayer_max_polls: int = 100
     relayer_poll_frequency_ms: int = 2000
@@ -77,7 +77,7 @@ PRODUCTION = Environment(
     relayer_url="https://relayer-v2.polymarket.com",
     gamma_url="https://gamma-api.polymarket.com",
     data_url="https://data-api.polymarket.com",
-    rfq_url="https://combos-rfq-api.polymarket.sh",
+    rfq_url="https://combos-rfq-api.polymarket.com",
     rtds_ws_url="wss://ws-live-data.polymarket.com",
     sports_ws_url="wss://sports-api.polymarket.com/ws",
     rpc_url="https://polygon.drpc.org",
