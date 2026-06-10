@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.0-b6](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b5...polymarket-client-v0.1.0-b6) (2026-06-10)
+
+
+### Features
+
+* **client:** add combo market catalog ([10bdf99](https://github.com/Polymarket/py-sdk/commit/10bdf9954c2d57ddc27fa73da8a6bf5bb19eb196))
+* **client:** add combo market catalog ([3839713](https://github.com/Polymarket/py-sdk/commit/38397138fc30c237d086d2fe277a357b4c2e9f20))
+
+
+### Bug Fixes
+
+* **rfq:** parse submission window rejections ([f101d69](https://github.com/Polymarket/py-sdk/commit/f101d69d903685b86f1dfa97707bc202c4bdaa8b))
+* **rfq:** parse submission window rejections ([ba1b8e9](https://github.com/Polymarket/py-sdk/commit/ba1b8e94ea24b20c4405806bfdf1c1edfa062e49))
+
 ## [0.1.0-b5](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b4...polymarket-client-v0.1.0-b5) (2026-06-09)
 
 
