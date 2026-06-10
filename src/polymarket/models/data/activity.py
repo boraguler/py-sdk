@@ -121,7 +121,7 @@ class TradeActivity(_KnownActivityBase):
     outcome_index: int = Field(validation_alias="outcomeIndex")
     title: str
     slug: str
-    icon: str
+    icon: str | None = None
     event_slug: str = Field(validation_alias="eventSlug")
 
     @field_validator("condition_id", mode="before")
@@ -140,7 +140,7 @@ class _MarketEventActivity(_KnownActivityBase):
     amount: Decimal
     title: str
     slug: str
-    icon: str
+    icon: str | None = None
     event_slug: str = Field(validation_alias="eventSlug")
 
     @field_validator("condition_id", mode="before")
@@ -284,7 +284,7 @@ def _normalize_activity_payload(data: dict[str, Any]) -> dict[str, Any]:
     if normalized.get("outcomeIndex") == 999:
         normalized.pop("outcomeIndex", None)
 
-    for sentinel_key in ("conditionId", "asset", "side", "outcome"):
+    for sentinel_key in ("conditionId", "asset", "side", "outcome", "icon"):
         if normalized.get(sentinel_key) == "":
             normalized.pop(sentinel_key, None)
 
