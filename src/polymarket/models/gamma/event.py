@@ -257,6 +257,7 @@ class Event(BaseModel):
     """A Polymarket event."""
 
     id: EventId
+    parent_event_id: EventId | None = Field(default=None, validation_alias="parentEventId")
     ticker: str | None = None
     slug: str | None = None
     title: str | None = None
@@ -309,7 +310,7 @@ class Event(BaseModel):
 
         return render(self)
 
-    @field_validator("id", mode="before")
+    @field_validator("id", "parent_event_id", mode="before")
     @classmethod
     def _coerce_id(cls, value: object) -> object:
         return coerce_string_id(value)
@@ -331,6 +332,7 @@ class Event(BaseModel):
 
         return {
             "id": data.get("id"),
+            "parent_event_id": data.get("parentEventId"),
             "ticker": data.get("ticker"),
             "slug": data.get("slug"),
             "title": data.get("title"),
