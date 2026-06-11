@@ -14,6 +14,7 @@ from polymarket import PRODUCTION, ApiKeyCreds, AsyncSecureClient
 from polymarket.errors import TransportError, UnexpectedResponseError
 from polymarket.rfq import (
     RfqConfirmationRequestEvent,
+    RfqErrorCode,
     RfqExecutionStatus,
     RfqQuoteRejectedError,
     RfqQuoteRequestEvent,
@@ -363,8 +364,17 @@ async def test_rfq_session_auth_failure_raises_transport_error(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    "code",
+    [
+        RfqErrorCode.ALLOWANCE_VALIDATION_FAILED,
+        RfqErrorCode.BALANCE_VALIDATION_FAILED,
+        RfqErrorCode.PRE_EXECUTION_BALANCE_RESERVATION_FAILED,
+    ],
+)
 async def test_rfq_session_quote_rejection_raises_typed_error(
     require_env: Callable[[str], str],
+    code: RfqErrorCode,
 ) -> None:
     async def handler(ws: ServerConnection) -> None:
         async for raw in ws:
@@ -380,7 +390,7 @@ async def test_rfq_session_quote_rejection_raises_typed_error(
                             "type": "RFQ_ERROR",
                             "request_type": "RFQ_QUOTE",
                             "rfq_id": RFQ_ID,
-                            "code": "INVALID_QUOTE",
+                            "code": code,
                             "error": "quote rejected",
                         }
                     )
@@ -393,8 +403,9 @@ async def test_rfq_session_quote_rejection_raises_typed_error(
     ):
         async for event in session:
             assert isinstance(event, RfqQuoteRequestEvent)
-            with pytest.raises(RfqQuoteRejectedError, match="quote rejected"):
+            with pytest.raises(RfqQuoteRejectedError, match="quote rejected") as exc_info:
                 await event.quote(price=Decimal("0.45"))
+            assert exc_info.value.code == code
             break
 
 
