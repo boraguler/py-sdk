@@ -414,6 +414,17 @@ def test_event_accepts_integer_id_per_ts_schema() -> None:
     assert event.id == "902661"
 
 
+def test_event_parent_event_id_coerces_integer_to_event_id() -> None:
+    event = Event.parse_response(_minimal_event_payload(parentEventId=570146))
+
+    assert event.parent_event_id == "570146"
+
+
+def test_event_parent_event_id_defaults_to_none() -> None:
+    assert Event.parse_response(_minimal_event_payload()).parent_event_id is None
+    assert Event.parse_response(_minimal_event_payload(parentEventId=None)).parent_event_id is None
+
+
 def test_event_nested_series_accepts_integer_id() -> None:
     event = Event.parse_response(
         _minimal_event_payload(series=[{"id": 7, "slug": "s1", "title": "Series 1"}])
