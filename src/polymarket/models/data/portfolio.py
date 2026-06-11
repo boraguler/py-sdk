@@ -8,6 +8,7 @@ from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.gamma.common import (
+    empty_string_to_none,
     parse_epoch_seconds_optional,
     parse_optional_date,
     parse_optional_decimal,
@@ -100,6 +101,11 @@ class Position(BaseModel):
     def _parse_end_date(cls, value: object) -> date | None:
         return parse_optional_date(value)
 
+    @field_validator("icon", mode="before")
+    @classmethod
+    def _normalize_icon(cls, value: object) -> object | None:
+        return empty_string_to_none(value)
+
     def _repr_html_(self) -> str:
         from polymarket._jupyter import card, safe_html_repr, truncate_mid
 
@@ -169,6 +175,11 @@ class ClosedPosition(BaseModel):
     @classmethod
     def _parse_end_date(cls, value: object) -> date | None:
         return parse_optional_date(value)
+
+    @field_validator("icon", mode="before")
+    @classmethod
+    def _normalize_icon(cls, value: object) -> object | None:
+        return empty_string_to_none(value)
 
 
 class ComboPositionMarketEvent(BaseModel):

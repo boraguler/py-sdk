@@ -8,7 +8,11 @@ from pydantic import Field, field_validator
 
 from polymarket.errors import UnexpectedResponseError
 from polymarket.models.base import BaseModel
-from polymarket.models.gamma.common import parse_epoch_seconds_optional, parse_optional_decimal
+from polymarket.models.gamma.common import (
+    empty_string_to_none,
+    parse_epoch_seconds_optional,
+    parse_optional_decimal,
+)
 from polymarket.models.types import (
     CtfConditionId,
     TokenId,
@@ -57,6 +61,11 @@ class Trade(BaseModel):
     @classmethod
     def _parse_timestamp(cls, value: object) -> datetime | None:
         return parse_epoch_seconds_optional(value)
+
+    @field_validator("icon", mode="before")
+    @classmethod
+    def _normalize_icon(cls, value: object) -> object | None:
+        return empty_string_to_none(value)
 
 
 ActivityType = Literal[

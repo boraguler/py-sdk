@@ -15,7 +15,7 @@ from polymarket import (
     YieldActivity,
 )
 from polymarket.errors import UnexpectedResponseError
-from polymarket.models.data.activity import parse_activities, parse_activity
+from polymarket.models.data.activity import Trade, parse_activities, parse_activity
 
 _CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
 
@@ -135,6 +135,16 @@ def test_market_event_empty_icon_normalizes_to_none() -> None:
     activity = parse_activity(_market_event_payload("SPLIT", icon=""))
     assert isinstance(activity, SplitActivity)
     assert activity.icon is None
+
+
+def test_trade_model_empty_icon_normalizes_to_none() -> None:
+    trade = Trade.parse_response({"icon": ""})
+    assert trade.icon is None
+
+
+def test_trade_model_keeps_populated_icon() -> None:
+    trade = Trade.parse_response({"icon": "https://example.test/icon.png"})
+    assert trade.icon == "https://example.test/icon.png"
 
 
 def test_market_event_variants_parse() -> None:

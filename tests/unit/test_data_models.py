@@ -7,12 +7,14 @@ import pytest
 from polymarket.errors import UnexpectedResponseError
 from polymarket.models.data import (
     BuilderVolumeEntry,
+    ClosedPosition,
     ComboPosition,
     Holder,
     LiveVolume,
     MetaHolder,
     OpenInterest,
     PortfolioValue,
+    Position,
     TradedMarketCount,
 )
 
@@ -157,6 +159,26 @@ def test_traded_market_count_parses_payload() -> None:
 
     assert count.user == "0xWALLET"
     assert count.traded == 42
+
+
+def test_position_empty_icon_normalizes_to_none() -> None:
+    position = Position.parse_response({"conditionId": _CTF_CONDITION_ID, "icon": ""})
+
+    assert position.icon is None
+
+
+def test_position_keeps_populated_icon() -> None:
+    position = Position.parse_response(
+        {"conditionId": _CTF_CONDITION_ID, "icon": "https://example.test/icon.png"}
+    )
+
+    assert position.icon == "https://example.test/icon.png"
+
+
+def test_closed_position_empty_icon_normalizes_to_none() -> None:
+    position = ClosedPosition.parse_response({"conditionId": _CTF_CONDITION_ID, "icon": ""})
+
+    assert position.icon is None
 
 
 def test_builder_volume_entry_renames_dt_to_bucket_at() -> None:
