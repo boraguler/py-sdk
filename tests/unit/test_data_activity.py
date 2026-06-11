@@ -125,6 +125,18 @@ def test_empty_string_sentinels_drop_to_none_on_trade_raises() -> None:
         parse_activity(payload)
 
 
+def test_trade_empty_icon_normalizes_to_none() -> None:
+    activity = parse_activity(_trade_payload(icon=""))
+    assert isinstance(activity, TradeActivity)
+    assert activity.icon is None
+
+
+def test_market_event_empty_icon_normalizes_to_none() -> None:
+    activity = parse_activity(_market_event_payload("SPLIT", icon=""))
+    assert isinstance(activity, SplitActivity)
+    assert activity.icon is None
+
+
 def test_market_event_variants_parse() -> None:
     for activity_type, expected_class in [
         ("SPLIT", SplitActivity),
