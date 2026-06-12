@@ -115,7 +115,7 @@ def test_split_position_rejects_when_market_lookup_finds_nothing() -> None:
         client = await make_deposit_client()
         client.list_markets = lambda **_: _StubPaginator(())  # type: ignore[method-assign]
         try:
-            with pytest.raises(UserInputError, match="exactly one market"):
+            with pytest.raises(UserInputError, match="No market found"):
                 await client.split_position(condition_id=_CONDITION_ID, amount=1)
         finally:
             await client.close()
