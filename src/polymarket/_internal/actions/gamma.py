@@ -38,6 +38,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
+from polymarket.models.gamma.common import parse_string_sequence
 
 CommentParentEntityType = Literal["Event", "Series"]
 TagMatch = Literal["any", "all"]
@@ -48,7 +49,7 @@ _T = TypeVar("_T")
 
 def _make_keyset_parser(
     items_key: str,
-    parse_item: Callable[[object], _T],
+    parse_item: Callable[[object], _T | None],
 ) -> Callable[[object], KeysetPagePayload[_T]]:
     def parse(data: object) -> KeysetPagePayload[_T]:
         if not isinstance(data, dict):
@@ -63,7 +64,11 @@ def _make_keyset_parser(
         if not isinstance(raw, list):
             raise UnexpectedResponseError(f"Expected '{items_key}' to be an array.")
         items_list = cast(list[Any], raw)
-        items = tuple(parse_item(item) for item in items_list)
+        items: list[_T] = []
+        for item in items_list:
+            parsed = parse_item(item)
+            if parsed is not None:
+                items.append(parsed)
 
         if "next_cursor" not in data_dict:
             server_cursor: str | None = None
@@ -82,9 +87,25 @@ def _make_keyset_parser(
                     f"'next_cursor' must be a string when present, got {type(nc).__name__}."
                 )
 
-        return KeysetPagePayload(items=items, server_next_cursor=server_cursor)
+        return KeysetPagePayload(items=tuple(items), server_next_cursor=server_cursor)
 
     return parse
+
+
+def _parse_list_market(item: object) -> Market | None:
+    if not isinstance(item, dict):
+        return Market.parse_response(item)
+
+    item_dict = cast(dict[str, Any], item)
+    try:
+        outcomes = parse_string_sequence(item_dict.get("outcomes"))
+    except ValueError as error:
+        raise UnexpectedResponseError("Market response did not match expected shape") from error
+
+    if len(outcomes) != 2:
+        return None
+
+    return Market.parse_response(item_dict)
 
 
 def _add_optional(
@@ -523,7 +544,7 @@ def list_markets_spec(
     return KeysetPaginatedSpec(
         service="gamma",
         path="/markets/keyset",
-        parse_page=_make_keyset_parser("markets", Market.parse_response),
+        parse_page=_make_keyset_parser("markets", _parse_list_market),
         base_params=params or None,
     )
 

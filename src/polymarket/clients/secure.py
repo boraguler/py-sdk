@@ -473,7 +473,11 @@ class SecureClient:
         include_tag: bool | None = None,
         locale: str | None = None,
     ) -> Market:
-        """Get a market by id, slug, or Polymarket URL."""
+        """Get a market by id, slug, or Polymarket URL.
+
+        Markets that cannot be represented by the binary Market model raise
+        UnexpectedResponseError.
+        """
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_market_spec(
@@ -1024,6 +1028,9 @@ class SecureClient:
         page_size: int = 20,
     ) -> Paginator[Market]:
         """List markets.
+
+        Markets that cannot be represented by the binary Market model are
+        omitted from results.
 
         Returns:
             A paginator over matching markets.
@@ -2291,6 +2298,8 @@ class SecureClient:
             context = f"market {market_id}"
             page = self.list_markets(ids=[parse_market_id(market_id)], page_size=1).first_page()
         markets = page.items
+        if not markets:
+            raise UserInputError(f"No market found for {context}")
         if len(markets) != 1:
             raise UserInputError(f"Expected exactly one market for {context}, got {len(markets)}")
         return normalize_market_position_context(

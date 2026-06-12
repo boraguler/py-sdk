@@ -306,7 +306,11 @@ class AsyncPublicClient:
         include_tag: bool | None = None,
         locale: str | None = None,
     ) -> Market:
-        """Get a market by id, slug, or Polymarket URL."""
+        """Get a market by id, slug, or Polymarket URL.
+
+        Markets that cannot be represented by the binary Market model raise
+        UnexpectedResponseError.
+        """
         return await async_dispatch(
             self._ctx,
             _gamma_actions.get_market_spec(
@@ -857,6 +861,9 @@ class AsyncPublicClient:
         page_size: int = 20,
     ) -> AsyncPaginator[Market]:
         """List markets.
+
+        Markets that cannot be represented by the binary Market model are
+        omitted from results.
 
         Returns:
             An async paginator over matching markets.

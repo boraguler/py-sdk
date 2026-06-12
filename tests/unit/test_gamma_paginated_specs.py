@@ -6,7 +6,20 @@ from polymarket._internal.request import (
     OffsetPaginatedSpec,
     PageBasedSpec,
 )
-from polymarket.errors import UserInputError
+from polymarket.errors import UnexpectedResponseError, UserInputError
+
+
+def _minimal_market_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": "MARKET-1",
+        "outcomes": ["Yes", "No"],
+        "outcomePrices": ["0.6", "0.4"],
+        "clobTokenIds": ["TOKEN-YES", "TOKEN-NO"],
+        "positionIds": ["POSITION-YES", "POSITION-NO"],
+        "marketMakerAddress": "0xMM",
+    }
+    payload.update(overrides)
+    return payload
 
 
 def test_list_events_spec_defaults_to_open_events() -> None:
@@ -70,6 +83,39 @@ def test_list_markets_spec_collects_array_params() -> None:
         "id": (1, 2),
         "position_ids": ("P1", "P2"),
     }
+
+
+def test_list_markets_parser_skips_non_binary_markets_and_keeps_cursor() -> None:
+    spec = gamma_actions.list_markets_spec()
+
+    payload = spec.parse_page(
+        {
+            "markets": [
+                _minimal_market_payload(id="MARKET-1"),
+                _minimal_market_payload(
+                    id="MARKET-2",
+                    outcomes=["Jeff Bezos", "Elon Musk", "Other"],
+                ),
+            ],
+            "next_cursor": "cursor-1",
+        }
+    )
+
+    assert [market.id for market in payload.items] == ["MARKET-1"]
+    assert payload.server_next_cursor == "cursor-1"
+
+
+def test_list_markets_parser_rejects_malformed_outcomes() -> None:
+    spec = gamma_actions.list_markets_spec()
+
+    with pytest.raises(UnexpectedResponseError, match="Market response"):
+        spec.parse_page(
+            {
+                "markets": [
+                    _minimal_market_payload(outcomes=["Yes", 1]),
+                ]
+            }
+        )
 
 
 def test_list_series_spec_default_has_no_params() -> None:
