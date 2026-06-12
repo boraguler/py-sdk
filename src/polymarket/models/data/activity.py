@@ -14,8 +14,11 @@ from polymarket.models.gamma.common import (
     parse_optional_decimal,
 )
 from polymarket.models.types import (
+    ComboConditionId,
     CtfConditionId,
+    PositionId,
     TokenId,
+    validate_combo_condition_id,
     validate_ctf_condition_id,
     validate_optional_ctf_condition_id,
 )
@@ -120,6 +123,7 @@ class _KnownActivityBase(BaseModel):
 
 class TradeActivity(_KnownActivityBase):
     type: Literal["TRADE"]
+    is_combo: Literal[False] = Field(default=False, validation_alias="isCombo")
     condition_id: CtfConditionId = Field(validation_alias="conditionId")
     token_id: TokenId = Field(validation_alias="asset")
     side: Literal["BUY", "SELL"]
@@ -137,6 +141,29 @@ class TradeActivity(_KnownActivityBase):
     @classmethod
     def _validate_condition_id(cls, value: object) -> CtfConditionId:
         return validate_ctf_condition_id(value)
+
+    @field_validator("shares", "amount", "price", mode="before")
+    @classmethod
+    def _parse_decimal(cls, value: object) -> Decimal | None:
+        return parse_optional_decimal(value)
+
+
+class ComboTradeActivity(_KnownActivityBase):
+    type: Literal["TRADE"]
+    is_combo: Literal[True] = Field(validation_alias="isCombo")
+    condition_id: ComboConditionId = Field(validation_alias="conditionId")
+    position_id: PositionId = Field(validation_alias="asset")
+    side: Literal["BUY", "SELL"]
+    shares: Decimal = Field(validation_alias="size")
+    amount: Decimal
+    price: Decimal
+    title: str
+    icon: str | None = None
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ComboConditionId:
+        return validate_combo_condition_id(value)
 
     @field_validator("shares", "amount", "price", mode="before")
     @classmethod
@@ -244,6 +271,7 @@ class UnknownActivity(BaseModel):
 
 Activity = (
     TradeActivity
+    | ComboTradeActivity
     | SplitActivity
     | MergeActivity
     | RedeemActivity
@@ -274,6 +302,8 @@ def parse_activity(payload: object) -> Activity:
         raise UnexpectedResponseError("Activity payload must be an object.")
     data = _normalize_activity_payload(cast(dict[str, Any], payload))
     activity_type = data.get("type")
+    if activity_type == "TRADE" and data.get("isCombo") is True:
+        return ComboTradeActivity.parse_response(data)
     if isinstance(activity_type, str) and activity_type in _KNOWN_ACTIVITY_TYPES:
         cls = _KNOWN_ACTIVITY_TYPES[activity_type]
         return cast(Activity, cls.parse_response(data))
@@ -310,6 +340,7 @@ def _normalize_activity_payload(data: dict[str, Any]) -> dict[str, Any]:
 __all__ = [
     "Activity",
     "ActivityType",
+    "ComboTradeActivity",
     "ConversionActivity",
     "MakerRebateActivity",
     "MergeActivity",
