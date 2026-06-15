@@ -63,6 +63,16 @@ def test_list_markets_returns_paginator() -> None:
 
 
 @pytest.mark.integration
+def test_list_closed_markets_omits_legacy_multi_outcome_markets() -> None:
+    with PublicClient() as client:
+        first = client.list_markets(closed=True, page_size=100).first_page()
+
+        assert first.items
+        assert all(isinstance(market, Market) for market in first.items)
+        assert all(market.outcomes.yes.label and market.outcomes.no.label for market in first.items)
+
+
+@pytest.mark.integration
 def test_async_list_markets_returns_paginator() -> None:
     async def run() -> None:
         async with AsyncPublicClient() as client:

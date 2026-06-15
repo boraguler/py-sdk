@@ -151,7 +151,11 @@ class PublicClient:
         include_tag: bool | None = None,
         locale: str | None = None,
     ) -> Market:
-        """Get a market."""
+        """Get a market.
+
+        Markets that cannot be represented by the binary Market model raise
+        UnexpectedResponseError.
+        """
         return sync_dispatch(
             self._ctx,
             _gamma_actions.get_market_spec(
@@ -706,6 +710,9 @@ class PublicClient:
         page_size: int = 20,
     ) -> Paginator[Market]:
         """List markets.
+
+        Markets that cannot be represented by the binary Market model are
+        omitted from results.
 
         Returns:
             A paginator over matching markets.

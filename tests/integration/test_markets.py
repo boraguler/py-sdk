@@ -3,9 +3,11 @@ import asyncio
 import pytest
 
 from polymarket import AsyncPublicClient, Market, PublicClient, TagReference
+from polymarket.errors import UnexpectedResponseError
 
 MARKET_ID = "540816"
 MARKET_SLUG = "russia-ukraine-ceasefire-before-gta-vi-554"
+LEGACY_MULTI_OUTCOME_MARKET_SLUG = "who-will-the-world-s-richest-person-be-on-february-27-2021"
 
 
 @pytest.mark.integration
@@ -42,6 +44,12 @@ def test_get_market_by_url_returns_canonical_market() -> None:
         assert market.id == MARKET_ID
         assert market.outcomes.yes.label
         assert market.outcomes.no.label
+
+
+@pytest.mark.integration
+def test_get_market_rejects_legacy_multi_outcome_market_with_typed_error() -> None:
+    with PublicClient() as client, pytest.raises(UnexpectedResponseError):
+        client.get_market(slug=LEGACY_MULTI_OUTCOME_MARKET_SLUG)
 
 
 @pytest.mark.integration
