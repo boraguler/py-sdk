@@ -63,9 +63,12 @@ def test_initial_frame_shape() -> None:
     }
 
 
-def test_initial_frame_all_markets_sends_empty_markets() -> None:
+def test_initial_frame_all_markets_omits_market_filter() -> None:
     state = UserServerState(include_all_markets=True, markets=())
-    assert build_initial_frame(state, _CREDS)["markets"] == []
+    assert build_initial_frame(state, _CREDS) == {
+        "type": "user",
+        "auth": {"apiKey": "K", "secret": "S", "passphrase": "P"},
+    }
 
 
 def test_diff_no_change() -> None:

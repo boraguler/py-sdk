@@ -75,7 +75,7 @@ def test_initial_frame_contains_auth_and_markets() -> None:
     }
 
 
-def test_initial_frame_for_all_markets_uses_empty_markets() -> None:
+def test_initial_frame_for_all_markets_omits_market_filter() -> None:
     received: list[dict[str, Any]] = []
 
     async def handler(ws: ServerConnection) -> None:
@@ -95,7 +95,7 @@ def test_initial_frame_for_all_markets_uses_empty_markets() -> None:
                 await mgr.close()
 
     asyncio.run(run())
-    assert received[0]["markets"] == []
+    assert "markets" not in received[0]
 
 
 def test_credentials_resolved_fresh_per_connection() -> None:
@@ -204,7 +204,7 @@ def test_all_markets_demotion_resubscribes_remaining_narrow() -> None:
 
     asyncio.run(run())
     assert received[0]["type"] == "user"
-    assert received[0]["markets"] == []
+    assert "markets" not in received[0]
     assert {"operation": "subscribe", "markets": ["m1"]} in received
 
 
