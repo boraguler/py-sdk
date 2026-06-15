@@ -3,6 +3,7 @@ from decimal import Decimal
 import pytest
 
 from polymarket import (
+    ComboTradeActivity,
     ConversionActivity,
     MakerRebateActivity,
     MergeActivity,
@@ -18,6 +19,8 @@ from polymarket.errors import UnexpectedResponseError
 from polymarket.models.data.activity import Trade, parse_activities, parse_activity
 
 _CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
+_COMBO_CONDITION_ID = "0x0365b0e193b3bcd6f3f740f5b4e9ad85b40000000000000000000000000000"
+_COMBO_POSITION_ID = "1536610888192297888380575190299871560736525977576785935254302389727433588736"
 
 
 def _trade_payload(**overrides: object) -> dict[str, object]:
@@ -90,6 +93,27 @@ def test_parse_trade_activity_uses_usdc_size_when_present() -> None:
     )
     assert isinstance(activity, TradeActivity)
     assert activity.amount == Decimal("4.20")
+
+
+def test_parse_combo_trade_activity() -> None:
+    activity = parse_activity(
+        _trade_payload(
+            isCombo=True,
+            conditionId=_COMBO_CONDITION_ID,
+            asset=_COMBO_POSITION_ID,
+            outcome="",
+            outcomeIndex=999,
+            slug="",
+            eventSlug="",
+            title="Combo trade",
+        )
+    )
+    assert isinstance(activity, ComboTradeActivity)
+    assert activity.is_combo is True
+    assert activity.condition_id == _COMBO_CONDITION_ID
+    assert activity.position_id == _COMBO_POSITION_ID
+    assert activity.shares == Decimal("10")
+    assert activity.amount == Decimal("10")
 
 
 def test_trade_missing_required_field_raises_unexpected_response() -> None:

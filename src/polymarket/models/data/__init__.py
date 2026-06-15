@@ -1,6 +1,7 @@
 from polymarket.models.data.activity import (
     Activity,
     ActivityType,
+    ComboTradeActivity,
     ConversionActivity,
     MakerRebateActivity,
     MergeActivity,
@@ -53,6 +54,7 @@ __all__ = [
     "ComboPositionMarket",
     "ComboPositionMarketEvent",
     "ComboPositionStatus",
+    "ComboTradeActivity",
     "ConversionActivity",
     "Holder",
     "LeaderboardCategory",
