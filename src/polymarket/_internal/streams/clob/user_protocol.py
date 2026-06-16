@@ -35,15 +35,17 @@ def derive_state(subs: Iterable[UserSubscription]) -> UserServerState:
 
 
 def build_initial_frame(state: UserServerState, credentials: ApiKeyCreds) -> dict[str, Any]:
-    return {
+    frame: dict[str, Any] = {
         "type": "user",
         "auth": {
             "apiKey": credentials.key,
             "secret": credentials.secret,
             "passphrase": credentials.passphrase,
         },
-        "markets": list(state.markets),
     }
+    if not state.include_all_markets:
+        frame["markets"] = list(state.markets)
+    return frame
 
 
 def _build_subscribe_update(markets: Iterable[str]) -> dict[str, Any]:
