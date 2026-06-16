@@ -45,6 +45,8 @@ class PrepareMarketOrderParams:
     amount: Decimal | None = None
     shares: Decimal | None = None
     max_spend: Decimal | None = None
+    max_price: Decimal | None = None
+    min_price: Decimal | None = None
     builder_code: HexString | None = None
 
 
@@ -55,6 +57,8 @@ def validate_market_order_params(
     amount: Decimal | int | float | str | None = None,
     shares: Decimal | int | float | str | None = None,
     max_spend: Decimal | int | float | str | None = None,
+    max_price: Decimal | int | float | str | None = None,
+    min_price: Decimal | int | float | str | None = None,
     order_type: MarketOrderType = "FAK",
     builder_code: str | None = None,
 ) -> PrepareMarketOrderParams:
@@ -69,9 +73,14 @@ def validate_market_order_params(
             raise UserInputError("amount is required for BUY market orders.")
         if shares is not None:
             raise UserInputError("shares must not be set for BUY market orders.")
+        if min_price is not None:
+            raise UserInputError("min_price is only valid for SELL market orders.")
         validated_amount = coerce_positive_decimal("amount", amount)
         validated_max_spend = (
             coerce_positive_decimal("max_spend", max_spend) if max_spend is not None else None
+        )
+        validated_max_price = (
+            coerce_positive_decimal("max_price", max_price) if max_price is not None else None
         )
         return PrepareMarketOrderParams(
             token_id=validated_token,
@@ -79,6 +88,7 @@ def validate_market_order_params(
             order_type=order_type,
             amount=validated_amount,
             max_spend=validated_max_spend,
+            max_price=validated_max_price,
             builder_code=validated_builder,
         )
     if shares is None:
@@ -87,11 +97,17 @@ def validate_market_order_params(
         raise UserInputError("amount must not be set for SELL market orders.")
     if max_spend is not None:
         raise UserInputError("max_spend is only valid for BUY market orders.")
+    if max_price is not None:
+        raise UserInputError("max_price is only valid for BUY market orders.")
+    validated_min_price = (
+        coerce_positive_decimal("min_price", min_price) if min_price is not None else None
+    )
     return PrepareMarketOrderParams(
         token_id=validated_token,
         side=side,
         order_type=order_type,
         shares=coerce_positive_decimal("shares", shares),
+        min_price=validated_min_price,
         builder_code=validated_builder,
     )
 
@@ -102,18 +118,15 @@ async def prepare_market_order_draft(
     tick_size = await fetch_tick_size(ctx, token_id=params.token_id)
     notional = params.amount if params.side == "BUY" else params.shares
     assert notional is not None
-    price = await resolve_estimated_market_price(
-        ctx,
-        token_id=params.token_id,
-        side=params.side,
-        notional=notional,
-        order_type=params.order_type,
-        tick_size=tick_size,
-    )
+    price = await _resolve_market_order_price(ctx, params, notional=notional, tick_size=tick_size)
     neg_risk = await fetch_neg_risk(ctx, token_id=params.token_id)
     resolved_amount = await _resolve_buy_amount_for_fees(ctx, params, price=price)
     offered, requested = _compute_market_order_amounts(
-        amount=resolved_amount, price=price, side=params.side, tick_size=tick_size
+        amount=resolved_amount,
+        price=price,
+        protect_price=_has_protected_price(params),
+        side=params.side,
+        tick_size=tick_size,
     )
     return OrderDraft(
         chain_id=ctx.environment.chain_id,
@@ -136,18 +149,15 @@ def prepare_market_order_draft_sync(
     tick_size = fetch_tick_size_sync(ctx, token_id=params.token_id)
     notional = params.amount if params.side == "BUY" else params.shares
     assert notional is not None
-    price = resolve_estimated_market_price_sync(
-        ctx,
-        token_id=params.token_id,
-        side=params.side,
-        notional=notional,
-        order_type=params.order_type,
-        tick_size=tick_size,
-    )
+    price = _resolve_market_order_price_sync(ctx, params, notional=notional, tick_size=tick_size)
     neg_risk = fetch_neg_risk_sync(ctx, token_id=params.token_id)
     resolved_amount = _resolve_buy_amount_for_fees_sync(ctx, params, price=price)
     offered, requested = _compute_market_order_amounts(
-        amount=resolved_amount, price=price, side=params.side, tick_size=tick_size
+        amount=resolved_amount,
+        price=price,
+        protect_price=_has_protected_price(params),
+        side=params.side,
+        tick_size=tick_size,
     )
     return OrderDraft(
         chain_id=ctx.environment.chain_id,
@@ -164,8 +174,76 @@ def prepare_market_order_draft_sync(
     )
 
 
+async def _resolve_market_order_price(
+    ctx: AsyncSecureClientContext,
+    params: PrepareMarketOrderParams,
+    *,
+    notional: Decimal,
+    tick_size: Decimal,
+) -> Decimal:
+    if params.side == "BUY" and params.max_price is not None:
+        return _resolve_protected_market_price(params.max_price, tick_size, field="max_price")
+    if params.side == "SELL" and params.min_price is not None:
+        return _resolve_protected_market_price(params.min_price, tick_size, field="min_price")
+    return await resolve_estimated_market_price(
+        ctx,
+        token_id=params.token_id,
+        side=params.side,
+        notional=notional,
+        order_type=params.order_type,
+        tick_size=tick_size,
+    )
+
+
+def _resolve_market_order_price_sync(
+    ctx: SyncSecureClientContext,
+    params: PrepareMarketOrderParams,
+    *,
+    notional: Decimal,
+    tick_size: Decimal,
+) -> Decimal:
+    if params.side == "BUY" and params.max_price is not None:
+        return _resolve_protected_market_price(params.max_price, tick_size, field="max_price")
+    if params.side == "SELL" and params.min_price is not None:
+        return _resolve_protected_market_price(params.min_price, tick_size, field="min_price")
+    return resolve_estimated_market_price_sync(
+        ctx,
+        token_id=params.token_id,
+        side=params.side,
+        notional=notional,
+        order_type=params.order_type,
+        tick_size=tick_size,
+    )
+
+
+def _resolve_protected_market_price(price: Decimal, tick_size: Decimal, *, field: str) -> Decimal:
+    config = resolve_rounding_config(tick_size)
+    if price < tick_size or price > Decimal(1) - tick_size:
+        raise UserInputError(
+            f"{field} must be between {tick_size} and {Decimal(1) - tick_size} "
+            f"for tick size {tick_size}."
+        )
+    if decimal_places(price) > config.price:
+        raise UserInputError(
+            f"{field} must conform to tick size {tick_size} with at most "
+            f"{config.price} decimal places."
+        )
+    return price
+
+
+def _has_protected_price(params: PrepareMarketOrderParams) -> bool:
+    return (params.side == "BUY" and params.max_price is not None) or (
+        params.side == "SELL" and params.min_price is not None
+    )
+
+
 def _compute_market_order_amounts(
-    *, amount: Decimal, price: Decimal, side: OrderSide, tick_size: Decimal
+    *,
+    amount: Decimal,
+    price: Decimal,
+    side: OrderSide,
+    tick_size: Decimal,
+    protect_price: bool = False,
 ) -> tuple[int, int]:
     config = resolve_rounding_config(tick_size)
     raw_price = round_down(price, config.price)
@@ -174,7 +252,11 @@ def _compute_market_order_amounts(
     if decimal_places(raw_taker) > config.amount:
         raw_taker = round_up(raw_taker, config.amount + 4)
         if decimal_places(raw_taker) > config.amount:
-            raw_taker = round_down(raw_taker, config.amount)
+            raw_taker = (
+                round_up(raw_taker, config.amount)
+                if protect_price
+                else round_down(raw_taker, config.amount)
+            )
     return parse_amount(raw_maker), parse_amount(raw_taker)
 
 

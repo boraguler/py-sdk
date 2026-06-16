@@ -1789,6 +1789,7 @@ class AsyncSecureClient:
         side: Literal["BUY"],
         amount: Decimal | int | float | str,
         max_spend: Decimal | int | float | str | None = None,
+        max_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> SignedOrder: ...
@@ -1799,6 +1800,7 @@ class AsyncSecureClient:
         token_id: str,
         side: Literal["SELL"],
         shares: Decimal | int | float | str,
+        min_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> SignedOrder: ...
@@ -1810,14 +1812,16 @@ class AsyncSecureClient:
         amount: Decimal | int | float | str | None = None,
         shares: Decimal | int | float | str | None = None,
         max_spend: Decimal | int | float | str | None = None,
+        max_price: Decimal | int | float | str | None = None,
+        min_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> SignedOrder:
         """Create and sign a market order without posting it.
 
         BUY orders use ``amount`` as the spend amount and may include
-        ``max_spend``. SELL orders use ``shares`` as the number of shares to
-        sell.
+        ``max_spend`` and ``max_price``. SELL orders use ``shares`` as the
+        number of shares to sell and may include ``min_price``.
         """
         return await self._prepare_and_sign_market_order(
             token_id=token_id,
@@ -1825,6 +1829,8 @@ class AsyncSecureClient:
             amount=amount,
             shares=shares,
             max_spend=max_spend,
+            max_price=max_price,
+            min_price=min_price,
             order_type=order_type,
             builder_code=builder_code,
         )
@@ -1837,6 +1843,8 @@ class AsyncSecureClient:
         amount: Decimal | int | float | str | None = None,
         shares: Decimal | int | float | str | None = None,
         max_spend: Decimal | int | float | str | None = None,
+        max_price: Decimal | int | float | str | None = None,
+        min_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> SignedOrder:
@@ -1846,6 +1854,8 @@ class AsyncSecureClient:
             amount=amount,
             shares=shares,
             max_spend=max_spend,
+            max_price=max_price,
+            min_price=min_price,
             order_type=order_type,
             builder_code=builder_code,
         )
@@ -1888,6 +1898,7 @@ class AsyncSecureClient:
         side: Literal["BUY"],
         amount: Decimal | int | float | str,
         max_spend: Decimal | int | float | str | None = None,
+        max_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> OrderResponse: ...
@@ -1898,6 +1909,7 @@ class AsyncSecureClient:
         token_id: str,
         side: Literal["SELL"],
         shares: Decimal | int | float | str,
+        min_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> OrderResponse: ...
@@ -1909,14 +1921,16 @@ class AsyncSecureClient:
         amount: Decimal | int | float | str | None = None,
         shares: Decimal | int | float | str | None = None,
         max_spend: Decimal | int | float | str | None = None,
+        max_price: Decimal | int | float | str | None = None,
+        min_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
     ) -> OrderResponse:
         """Create, sign, and post a market order.
 
         BUY orders use ``amount`` as the spend amount and may include
-        ``max_spend``. SELL orders use ``shares`` as the number of shares to
-        sell.
+        ``max_spend`` and ``max_price``. SELL orders use ``shares`` as the
+        number of shares to sell and may include ``min_price``.
         """
         signed = await self._prepare_and_sign_market_order(
             token_id=token_id,
@@ -1924,6 +1938,8 @@ class AsyncSecureClient:
             amount=amount,
             shares=shares,
             max_spend=max_spend,
+            max_price=max_price,
+            min_price=min_price,
             order_type=order_type,
             builder_code=builder_code,
         )

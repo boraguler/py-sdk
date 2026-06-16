@@ -48,6 +48,21 @@ def _multi_route_handler(routes: dict[str, dict[str, Any]]) -> httpx.MockTranspo
     return httpx.MockTransport(handler)
 
 
+def _tracked_route_handler(
+    routes: dict[str, dict[str, Any]], captured: list[str]
+) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        from urllib.parse import urlparse
+
+        path = urlparse(str(request.url)).path
+        captured.append(path)
+        if path in routes:
+            return httpx.Response(200, json=routes[path], request=request)
+        return httpx.Response(404, json={"error": "not mocked"}, request=request)
+
+    return httpx.MockTransport(handler)
+
+
 def _install_public_clob(client: AsyncSecureClient, handler: httpx.MockTransport) -> None:
     transport = AsyncTransport(
         base_url="https://clob.test",
@@ -86,6 +101,20 @@ def test_validate_market_order_params_rejects_max_spend_on_sell() -> None:
     with pytest.raises(UserInputError, match="max_spend is only valid"):
         validate_market_order_params(
             token_id="8501497", side="SELL", shares=Decimal(10), max_spend=Decimal(10)
+        )
+
+
+def test_validate_market_order_params_rejects_min_price_on_buy() -> None:
+    with pytest.raises(UserInputError, match="min_price is only valid"):
+        validate_market_order_params(
+            token_id="8501497", side="BUY", amount=Decimal(10), min_price=Decimal("0.50")
+        )
+
+
+def test_validate_market_order_params_rejects_max_price_on_sell() -> None:
+    with pytest.raises(UserInputError, match="max_price is only valid"):
+        validate_market_order_params(
+            token_id="8501497", side="SELL", shares=Decimal(10), max_price=Decimal("0.50")
         )
 
 
@@ -191,3 +220,61 @@ def test_prepare_market_order_draft_sell_swaps_amounts() -> None:
     offered, requested = asyncio.run(run())
     assert offered == 4_000_000  # 4 shares
     assert requested == 2_000_000  # 4 * 0.5 = 2 USDC
+
+
+def test_prepare_market_order_draft_buy_uses_max_price_without_book() -> None:
+    captured: list[str] = []
+    routes = {
+        "/tick-size": {"minimum_tick_size": 0.01},
+        "/neg-risk": {"neg_risk": False},
+    }
+
+    async def run() -> tuple[int, int]:
+        client = await _make_client()
+        try:
+            _install_public_clob(client, _tracked_route_handler(routes, captured))
+            params = validate_market_order_params(
+                token_id="8501497",
+                side="BUY",
+                amount=Decimal("100"),
+                max_price=Decimal("0.55"),
+                order_type="FAK",
+            )
+            draft = await prepare_market_order_draft(client._ctx, params)
+            return draft.offered_amount, draft.requested_amount
+        finally:
+            await client.close()
+
+    offered, requested = asyncio.run(run())
+    assert offered == 100_000_000
+    assert requested == 181_818_200
+    assert "/book" not in captured
+
+
+def test_prepare_market_order_draft_sell_uses_min_price_without_book() -> None:
+    captured: list[str] = []
+    routes = {
+        "/tick-size": {"minimum_tick_size": 0.01},
+        "/neg-risk": {"neg_risk": False},
+    }
+
+    async def run() -> tuple[int, int]:
+        client = await _make_client()
+        try:
+            _install_public_clob(client, _tracked_route_handler(routes, captured))
+            params = validate_market_order_params(
+                token_id="8501497",
+                side="SELL",
+                shares=Decimal("180"),
+                min_price=Decimal("0.54"),
+                order_type="FOK",
+            )
+            draft = await prepare_market_order_draft(client._ctx, params)
+            return draft.offered_amount, draft.requested_amount
+        finally:
+            await client.close()
+
+    offered, requested = asyncio.run(run())
+    assert offered == 180_000_000
+    assert requested == 97_200_000
+    assert "/book" not in captured

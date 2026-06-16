@@ -46,7 +46,9 @@ class TestOverloadStructure:
         params = inspect.signature(buy_overload).parameters
         assert "amount" in params
         assert "max_spend" in params
+        assert "max_price" in params
         assert "shares" not in params
+        assert "min_price" not in params
 
     def test_create_market_order_sell_overload_accepts_shares_rejects_amount(self) -> None:
         sell_overload = next(
@@ -58,6 +60,8 @@ class TestOverloadStructure:
         assert "shares" in params
         assert "amount" not in params
         assert "max_spend" not in params
+        assert "max_price" not in params
+        assert "min_price" in params
 
     def test_place_market_order_buy_overload_accepts_amount_rejects_shares(self) -> None:
         buy_overload = next(
@@ -68,7 +72,9 @@ class TestOverloadStructure:
         params = inspect.signature(buy_overload).parameters
         assert "amount" in params
         assert "max_spend" in params
+        assert "max_price" in params
         assert "shares" not in params
+        assert "min_price" not in params
 
     def test_place_market_order_sell_overload_accepts_shares_rejects_amount(self) -> None:
         sell_overload = next(
@@ -80,6 +86,8 @@ class TestOverloadStructure:
         assert "shares" in params
         assert "amount" not in params
         assert "max_spend" not in params
+        assert "max_price" not in params
+        assert "min_price" in params
 
     def test_buy_overload_amount_is_required(self) -> None:
         for method in (AsyncSecureClient.create_market_order, AsyncSecureClient.place_market_order):
@@ -186,6 +194,36 @@ class TestRuntimeValidationStillCatchesMisuse:
         finally:
             asyncio.run(client.close())
 
+    def test_buy_with_min_price_raises(self) -> None:
+        client = _make_client()
+        try:
+            with pytest.raises(UserInputError, match="min_price is only valid for SELL"):
+                asyncio.run(
+                    cast(Any, client.create_market_order)(
+                        token_id="1",
+                        side="BUY",
+                        amount=Decimal(1),
+                        min_price=Decimal("0.50"),
+                    )
+                )
+        finally:
+            asyncio.run(client.close())
+
+    def test_sell_with_max_price_raises(self) -> None:
+        client = _make_client()
+        try:
+            with pytest.raises(UserInputError, match="max_price is only valid for BUY"):
+                asyncio.run(
+                    cast(Any, client.create_market_order)(
+                        token_id="1",
+                        side="SELL",
+                        shares=Decimal(1),
+                        max_price=Decimal("0.50"),
+                    )
+                )
+        finally:
+            asyncio.run(client.close())
+
     def test_invalid_side_raises(self) -> None:
         client = _make_client()
         try:
@@ -206,12 +244,24 @@ class TestPyrightStaticContract:
         await client.create_market_order(
             token_id="1", side="BUY", amount=Decimal(2), max_spend=Decimal(3)
         )
+        await client.create_market_order(
+            token_id="1", side="BUY", amount=Decimal(2), max_price=Decimal("0.55")
+        )
         await client.place_market_order(token_id="1", side="BUY", amount=Decimal(2))
+        await client.place_market_order(
+            token_id="1", side="BUY", amount=Decimal(2), max_price=Decimal("0.55")
+        )
 
     @staticmethod
     async def _example_sell(client: AsyncSecureClient) -> None:
         await client.create_market_order(token_id="1", side="SELL", shares=Decimal(5))
+        await client.create_market_order(
+            token_id="1", side="SELL", shares=Decimal(5), min_price=Decimal("0.45")
+        )
         await client.place_market_order(token_id="1", side="SELL", shares=Decimal(5))
+        await client.place_market_order(
+            token_id="1", side="SELL", shares=Decimal(5), min_price=Decimal("0.45")
+        )
 
     def test_typed_examples_are_callable(self) -> None:
         assert inspect.iscoroutinefunction(self._example_buy)
