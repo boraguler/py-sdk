@@ -152,7 +152,6 @@ from polymarket.rfq import (
     RfqRequestorPublicId,
     RfqSession,
     RfqSide,
-    RfqTradeEvent,
 )
 from polymarket.transactions import (
     EoaTransactionHandle,
@@ -291,7 +290,6 @@ __all__ = [
     "RfqRequestorPublicId",
     "RfqSession",
     "RfqSide",
-    "RfqTradeEvent",
     "SearchResults",
     "SearchTag",
     "SecureClient",
