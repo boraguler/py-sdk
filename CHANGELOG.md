@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.1.0-b8](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b7...polymarket-client-v0.1.0-b8) (2026-06-17)
+
+
+### Features
+
+* **client:** support protected market orders ([f68cd62](https://github.com/Polymarket/py-sdk/commit/f68cd62ab0d71b8e4b234e644f226acbefd6cccf))
+* **client:** support protected market orders ([34422bb](https://github.com/Polymarket/py-sdk/commit/34422bbc9d3c40e4941f5dcfa528b94d1080b7c4))
+* **models:** add parent_event_id to Event ([4b87156](https://github.com/Polymarket/py-sdk/commit/4b87156ad42daafcef5a84febcb7c3a437d9052d))
+* **models:** add parent_event_id to Event ([c966aec](https://github.com/Polymarket/py-sdk/commit/c966aec4368d6f037869385b79efac5c209d48fb))
+* **rfq:** support confirmed trade broadcasts ([f55b613](https://github.com/Polymarket/py-sdk/commit/f55b613836e6dd7841f238d72653e90d4db66a16))
+* **rfq:** support confirmed trade broadcasts ([a4ba05b](https://github.com/Polymarket/py-sdk/commit/a4ba05b249cbbff4f22b27e45cd4d1645aaa89f8))
+
+
+### Bug Fixes
+
+* **data:** parse combo trade activity ([24d3cf2](https://github.com/Polymarket/py-sdk/commit/24d3cf2b81447a61af5899e8d742d9b04fbee545))
+* **data:** parse combo trade activity ([dc9150a](https://github.com/Polymarket/py-sdk/commit/dc9150aa9c7377725038994eb29fedf53a2fcc39))
+* **gamma:** omit legacy non-binary market listings ([f649c6c](https://github.com/Polymarket/py-sdk/commit/f649c6cb3d065f43efbf258a6a02aff79befd9a0))
+* **gamma:** omit legacy non-binary market listings ([abbce8c](https://github.com/Polymarket/py-sdk/commit/abbce8c3437e08d82b303baa19ad3fc9237b544b))
+* **models:** expose missing activity market icons as None ([0adfad7](https://github.com/Polymarket/py-sdk/commit/0adfad74041b27ea9d4f84f34c9d13dec000244f))
+* **models:** expose missing activity market icons as None ([b36b41f](https://github.com/Polymarket/py-sdk/commit/b36b41f1c77a846804ac468bc8301550736a1188))
+* **models:** normalize empty-string trade and position icons to None ([233cb2d](https://github.com/Polymarket/py-sdk/commit/233cb2dbb3f40b3f7527c7827e9fc23c942b78ab))
+* **models:** normalize empty-string trade and position icons to None ([5949925](https://github.com/Polymarket/py-sdk/commit/5949925393bb72260a86013c2cf1f37d5201421f))
+* omit user stream market filter for all markets ([1718ece](https://github.com/Polymarket/py-sdk/commit/1718eceb7d981c6ede8dd5daba924040a10daa48))
+* omit user stream market filter for all markets ([65f3ece](https://github.com/Polymarket/py-sdk/commit/65f3ece018800da5f245dd5bc400e1920718ef40))
+* **rfq:** support balance error codes ([59e366d](https://github.com/Polymarket/py-sdk/commit/59e366d5ca917d5bd56046140d28c0423d933858))
+* **rfq:** support balance error codes ([0a0387e](https://github.com/Polymarket/py-sdk/commit/0a0387ec735d244e4787cc53a26013bfedabf358))
+
+
+### Reverts
+
+* **rfq:** remove confirmed trade broadcasts ([b5315cd](https://github.com/Polymarket/py-sdk/commit/b5315cdff76962f9711e15fabc1ab16f70508835))
+
 ## [0.1.0-b7](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b6...polymarket-client-v0.1.0-b7) (2026-06-10)
 
 
