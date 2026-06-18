@@ -451,6 +451,9 @@ class RfqQuoterSession:
         request_type = raw.get("request_type")
         rfq_id = raw.get("rfq_id")
         quote_id = raw.get("quote_id")
+        error_id = raw.get("error_id")
+        if error_id is not None and not isinstance(error_id, str):
+            raise UnexpectedResponseError("Expected RFQ error_id to be a string.")
         code = _parse_error_code(raw.get("code"))
         message = raw.get("error")
         text = message if isinstance(message, str) else "RFQ request failed."
@@ -459,7 +462,7 @@ class RfqQuoterSession:
                 raise TransportError("Uncorrelated RFQ quoter error.")
             self._reject(
                 _quote_ack_key(rfq_id),
-                RfqQuoteRejectedError(text, rfq_id=rfq_id, code=code),
+                RfqQuoteRejectedError(text, rfq_id=rfq_id, code=code, error_id=error_id),
             )
         elif request_type == "RFQ_QUOTE_CANCEL":
             if not isinstance(rfq_id, str) or not isinstance(quote_id, str):
@@ -471,6 +474,7 @@ class RfqQuoterSession:
                     rfq_id=rfq_id,
                     quote_id=quote_id,
                     code=code,
+                    error_id=error_id,
                 ),
             )
         elif request_type == "RFQ_CONFIRMATION_RESPONSE":
@@ -483,6 +487,7 @@ class RfqQuoterSession:
                     rfq_id=rfq_id,
                     quote_id=quote_id,
                     code=code,
+                    error_id=error_id,
                 ),
             )
 

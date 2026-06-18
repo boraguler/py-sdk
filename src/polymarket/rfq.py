@@ -63,6 +63,8 @@ class RfqErrorCode(StrEnum):
     INVALID_RFQ = "INVALID_RFQ"
     INVALID_RFQ_STATE = "INVALID_RFQ_STATE"
     INVALID_ROLE = "INVALID_ROLE"
+    INVALID_SIGNATURE = "INVALID_SIGNATURE"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
     LEG_METADATA_UNAVAILABLE = "LEG_METADATA_UNAVAILABLE"
     MAKER_ALREADY_RESPONDED = "MAKER_ALREADY_RESPONDED"
     MAKER_NOT_REQUIRED = "MAKER_NOT_REQUIRED"
@@ -170,10 +172,18 @@ RfqEvent = RfqQuoteRequestEvent | RfqConfirmationRequestEvent | RfqExecutionUpda
 
 
 class RfqQuoteRejectedError(PolymarketError):
-    def __init__(self, message: str, *, rfq_id: RfqId, code: RfqErrorCode | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        rfq_id: RfqId,
+        code: RfqErrorCode | None = None,
+        error_id: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.rfq_id = rfq_id
         self.code = code
+        self.error_id = error_id
 
 
 class RfqCancelQuoteRejectedError(PolymarketError):
@@ -184,11 +194,13 @@ class RfqCancelQuoteRejectedError(PolymarketError):
         rfq_id: RfqId,
         quote_id: RfqQuoteId,
         code: RfqErrorCode | None = None,
+        error_id: str | None = None,
     ) -> None:
         super().__init__(message)
         self.rfq_id = rfq_id
         self.quote_id = quote_id
         self.code = code
+        self.error_id = error_id
 
 
 class RfqConfirmationRejectedError(PolymarketError):
@@ -199,11 +211,13 @@ class RfqConfirmationRejectedError(PolymarketError):
         rfq_id: RfqId,
         quote_id: RfqQuoteId,
         code: RfqErrorCode | None = None,
+        error_id: str | None = None,
     ) -> None:
         super().__init__(message)
         self.rfq_id = rfq_id
         self.quote_id = quote_id
         self.code = code
+        self.error_id = error_id
 
 
 @runtime_checkable

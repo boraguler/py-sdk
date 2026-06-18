@@ -389,6 +389,7 @@ async def test_rfq_session_quote_rejection_raises_typed_error(
                         {
                             "type": "RFQ_ERROR",
                             "request_type": "RFQ_QUOTE",
+                            "error_id": "reqerr-1",
                             "rfq_id": RFQ_ID,
                             "code": code,
                             "error": "quote rejected",
@@ -406,6 +407,7 @@ async def test_rfq_session_quote_rejection_raises_typed_error(
             with pytest.raises(RfqQuoteRejectedError, match="quote rejected") as exc_info:
                 await event.quote(price=Decimal("0.45"))
             assert exc_info.value.code == code
+            assert exc_info.value.error_id == "reqerr-1"
             break
 
 
