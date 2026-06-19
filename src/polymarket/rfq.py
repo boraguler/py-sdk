@@ -114,6 +114,20 @@ class RfqExecutionUpdateEvent:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class RfqTradeEvent:
+    type: Literal["trade"]
+    rfq_id: RfqId
+    requester_id: RfqRequestorPublicId
+    condition_id: ComboConditionId
+    leg_position_ids: tuple[PositionId, ...]
+    direction: RfqDirection
+    side: RfqSide
+    price: Decimal
+    size: Decimal
+    executed_at: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class RfqQuoteRequestEvent:
     type: Literal["quote_request"]
     rfq_id: RfqId
@@ -168,7 +182,9 @@ class RfqConfirmationRequestEvent:
         )
 
 
-RfqEvent = RfqQuoteRequestEvent | RfqConfirmationRequestEvent | RfqExecutionUpdateEvent
+RfqEvent = (
+    RfqQuoteRequestEvent | RfqConfirmationRequestEvent | RfqExecutionUpdateEvent | RfqTradeEvent
+)
 
 
 class RfqQuoteRejectedError(PolymarketError):
@@ -273,4 +289,5 @@ __all__ = [
     "RfqRequestorPublicId",
     "RfqSession",
     "RfqSide",
+    "RfqTradeEvent",
 ]
