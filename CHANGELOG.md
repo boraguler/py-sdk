@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.0-b9](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b8...polymarket-client-v0.1.0-b9) (2026-06-19)
+
+
+### Features
+
+* **rfq:** expose confirmed trade broadcasts ([62f040a](https://github.com/Polymarket/py-sdk/commit/62f040afbcd5030f65d72960a40afe11fcb4ca41))
+* **rfq:** expose confirmed trade broadcasts ([7c91ac8](https://github.com/Polymarket/py-sdk/commit/7c91ac89a0e5a0d05ec0ee8a86c0ab1ad6b09fd7))
+* **rfq:** expose error ids ([c907fc6](https://github.com/Polymarket/py-sdk/commit/c907fc692a8bae9e970a96b5ec101e26e20e3b61))
+* **rfq:** expose RFQ error IDs ([a537547](https://github.com/Polymarket/py-sdk/commit/a53754752e6bd802fef5f00ba537c78f2b0c6e2c))
+
 ## [0.1.0-b8](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b7...polymarket-client-v0.1.0-b8) (2026-06-17)
 
 
