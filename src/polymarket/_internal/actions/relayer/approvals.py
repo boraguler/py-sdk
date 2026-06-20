@@ -35,16 +35,29 @@ async def resolve_missing_trading_approval_calls(
     rpc: JsonRpcClient, *, wallet: EvmAddress, environment: Environment
 ) -> list[TransactionCall]:
     erc20, erc1155 = _required_trading_approvals(environment)
-    erc20_missing: list[TransactionCall] = []
-    for approval in erc20:
-        check = erc20_allowance_call(
+    erc20_checks = [
+        erc20_allowance_call(
             token_address=approval.token_address,
             owner=wallet,
             spender=approval.spender,
         )
-        allowance = decode_erc20_allowance_result(
-            await rpc.eth_call(to=str(check.to), data=check.data)
+        for approval in erc20
+    ]
+    erc1155_checks = [
+        erc1155_is_approved_for_all_call(
+            token_address=approval.token_address,
+            owner=wallet,
+            operator=approval.operator,
         )
+        for approval in erc1155
+    ]
+    results = await rpc.eth_call_batch(
+        [(str(check.to), check.data) for check in [*erc20_checks, *erc1155_checks]]
+    )
+
+    erc20_missing: list[TransactionCall] = []
+    for approval, result in zip(erc20, results[: len(erc20)], strict=True):
+        allowance = decode_erc20_allowance_result(result)
         if allowance < approval.amount:
             erc20_missing.append(
                 erc20_approval_call(
@@ -55,15 +68,8 @@ async def resolve_missing_trading_approval_calls(
             )
 
     erc1155_missing: list[TransactionCall] = []
-    for approval in erc1155:
-        check = erc1155_is_approved_for_all_call(
-            token_address=approval.token_address,
-            owner=wallet,
-            operator=approval.operator,
-        )
-        approved = decode_erc1155_is_approved_for_all_result(
-            await rpc.eth_call(to=str(check.to), data=check.data)
-        )
+    for approval, result in zip(erc1155, results[len(erc20) :], strict=True):
+        approved = decode_erc1155_is_approved_for_all_result(result)
         if not approved:
             erc1155_missing.append(
                 erc1155_set_approval_for_all_call(
@@ -80,14 +86,29 @@ def resolve_missing_trading_approval_calls_sync(
     rpc: SyncJsonRpcClient, *, wallet: EvmAddress, environment: Environment
 ) -> list[TransactionCall]:
     erc20, erc1155 = _required_trading_approvals(environment)
-    erc20_missing: list[TransactionCall] = []
-    for approval in erc20:
-        check = erc20_allowance_call(
+    erc20_checks = [
+        erc20_allowance_call(
             token_address=approval.token_address,
             owner=wallet,
             spender=approval.spender,
         )
-        allowance = decode_erc20_allowance_result(rpc.eth_call(to=str(check.to), data=check.data))
+        for approval in erc20
+    ]
+    erc1155_checks = [
+        erc1155_is_approved_for_all_call(
+            token_address=approval.token_address,
+            owner=wallet,
+            operator=approval.operator,
+        )
+        for approval in erc1155
+    ]
+    results = rpc.eth_call_batch(
+        [(str(check.to), check.data) for check in [*erc20_checks, *erc1155_checks]]
+    )
+
+    erc20_missing: list[TransactionCall] = []
+    for approval, result in zip(erc20, results[: len(erc20)], strict=True):
+        allowance = decode_erc20_allowance_result(result)
         if allowance < approval.amount:
             erc20_missing.append(
                 erc20_approval_call(
@@ -98,15 +119,8 @@ def resolve_missing_trading_approval_calls_sync(
             )
 
     erc1155_missing: list[TransactionCall] = []
-    for approval in erc1155:
-        check = erc1155_is_approved_for_all_call(
-            token_address=approval.token_address,
-            owner=wallet,
-            operator=approval.operator,
-        )
-        approved = decode_erc1155_is_approved_for_all_result(
-            rpc.eth_call(to=str(check.to), data=check.data)
-        )
+    for approval, result in zip(erc1155, results[len(erc20) :], strict=True):
+        approved = decode_erc1155_is_approved_for_all_result(result)
         if not approved:
             erc1155_missing.append(
                 erc1155_set_approval_for_all_call(
