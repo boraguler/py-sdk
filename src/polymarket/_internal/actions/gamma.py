@@ -43,6 +43,15 @@ from polymarket.models.gamma.common import parse_string_sequence
 CommentParentEntityType = Literal["Event", "Series"]
 TagMatch = Literal["any", "all"]
 Recurrence = Literal["daily", "weekly", "monthly"]
+SearchSort = Literal[
+    "volume",
+    "volume_24hr",
+    "liquidity",
+    "competitive",
+    "closed_time",
+    "start_date",
+    "end_date",
+]
 
 _T = TypeVar("_T")
 
@@ -172,6 +181,22 @@ def _add_optional_seq(
 def _check_recurrence(value: Recurrence | None) -> None:
     if value is not None and value not in {"daily", "weekly", "monthly"}:
         raise UserInputError("recurrence must be one of: daily, weekly, monthly")
+
+
+def _check_search_sort(value: SearchSort | None) -> None:
+    if value is not None and value not in {
+        "volume",
+        "volume_24hr",
+        "liquidity",
+        "competitive",
+        "closed_time",
+        "start_date",
+        "end_date",
+    }:
+        raise UserInputError(
+            "sort must be one of: volume, volume_24hr, liquidity, competitive, "
+            "closed_time, start_date, end_date"
+        )
 
 
 def _check_tag_match(value: TagMatch | None) -> None:
@@ -689,10 +714,11 @@ def search_spec(
     recurrence: Recurrence | None = None,
     search_profiles: bool | None = None,
     search_tags: bool | None = None,
-    sort: str | None = None,
+    sort: SearchSort | None = None,
 ) -> PageBasedSpec[SearchResults]:
     require_nonempty("q", q)
     _check_recurrence(recurrence)
+    _check_search_sort(sort)
 
     params: dict[str, QueryParamValue] = {"q": q}
     _add_optional(params, "ascending", ascending)

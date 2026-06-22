@@ -45,6 +45,7 @@ from polymarket._internal.actions.gamma import (
     CommentParentEntityType,
     DateFilter,
     Recurrence,
+    SearchSort,
     TagMatch,
     TimestampFilter,
 )
@@ -1489,10 +1490,17 @@ class AsyncSecureClient:
         recurrence: Recurrence | None = None,
         search_profiles: bool | None = None,
         search_tags: bool | None = None,
-        sort: str | None = None,
+        sort: SearchSort | None = None,
         page_size: int = 10,
     ) -> AsyncPaginator[SearchResults]:
         """Search Polymarket content.
+
+        Args:
+            keep_closed_markets: Include markets closed within this many hours when
+                searching active events.
+            sort: Event sort field. Supported values are ``volume``, ``volume_24hr``,
+                ``liquidity``, ``competitive``, ``closed_time``, ``start_date``, and
+                ``end_date``.
 
         Returns:
             An async paginator over search result pages.
