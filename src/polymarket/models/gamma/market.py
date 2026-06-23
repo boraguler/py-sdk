@@ -382,6 +382,7 @@ class Market(BaseModel):
         validation_alias=AliasChoices("conditionId", "condition"),
     )
     question: str | None = None
+    group_item_title: str | None = Field(default=None, validation_alias="groupItemTitle")
     description: str | None = None
     category: str | None = None
     image: str | None = None
@@ -458,6 +459,7 @@ class Market(BaseModel):
             "slug": data.get("slug"),
             "condition_id": empty_string_to_none(data.get("conditionId")),
             "question": data.get("question"),
+            "group_item_title": data.get("groupItemTitle"),
             "description": data.get("description"),
             "category": data.get("category"),
             "image": data.get("image"),
