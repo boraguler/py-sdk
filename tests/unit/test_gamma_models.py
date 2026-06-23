@@ -57,6 +57,7 @@ def test_market_normalizes_groups_from_flat_payload() -> None:
     payload = _minimal_market_payload(
         slug="my-market",
         question="Will it rain?",
+        groupItemTitle="Rain tomorrow",
         description="A market.",
         category="weather",
         image="https://example.test/i.png",
@@ -108,6 +109,7 @@ def test_market_normalizes_groups_from_flat_payload() -> None:
 
     assert market.slug == "my-market"
     assert market.condition_id == _CONDITION_ID
+    assert market.group_item_title == "Rain tomorrow"
     assert market.state.active is True
     assert market.state.start_date == datetime(2026, 5, 1, tzinfo=UTC)
     assert market.state.end_date == datetime(2026, 6, 1, tzinfo=UTC)
