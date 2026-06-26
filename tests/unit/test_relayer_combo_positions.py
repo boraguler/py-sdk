@@ -135,8 +135,8 @@ def test_merge_multiple_positions_async_batches_combo_merges() -> None:
             return await client.merge_multiple_positions(
                 positions=[
                     {"position_id": _combo_position("0x03" + "11" * 30, 0), "amount": 1},
-                    {"position_id": _combo_position("0x03" + "22" * 30, 1)},
-                    {"position_id": _combo_position("0x03" + "33" * 30, 0), "amount": 3},
+                    {"position_id": _combo_position("0x03" + "22" * 30, 1), "amount": "max"},
+                    {"position_id": _combo_position("0x03" + "33" * 30, 0)},
                 ],
                 metadata="Merge selected combo positions",
             )
@@ -154,7 +154,7 @@ def test_merge_multiple_positions_async_batches_combo_merges() -> None:
     assert [call["data"][-64:] for call in calls] == [
         f"{1:064x}",
         f"{60:064x}",
-        f"{3:064x}",
+        f"{60:064x}",
     ]
 
 

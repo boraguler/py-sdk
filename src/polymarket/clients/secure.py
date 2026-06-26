@@ -2206,8 +2206,8 @@ class SecureClient:
 
         Args:
             positions: Combo position merge requests, one per combo condition.
-                Omit ``amount`` to merge the largest available balanced amount
-                for that condition.
+                Omit ``amount`` or pass ``"max"`` to merge the largest available
+                balanced amount for that condition.
 
         Returns:
             A transaction handle. Call ``wait()`` to wait for a terminal outcome.
