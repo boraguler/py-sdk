@@ -243,10 +243,15 @@ def derive_combo_position_context(legs: CanonicalComboLegs) -> ComboPositionCont
     condition_id = to_combo_condition_id(f"0x03{base_hash.hex()[32:]}{'0' * 28}")
     return ComboPositionContext(
         condition_id=condition_id,
-        position_ids=(
-            PositionId(str(int(f"{condition_id}00", 16))),
-            PositionId(str(int(f"{condition_id}01", 16))),
-        ),
+        position_ids=derive_combo_outcome_position_ids(condition_id),
+    )
+
+
+def derive_combo_outcome_position_ids(condition_id: str) -> tuple[PositionId, PositionId]:
+    combo_condition_id = to_combo_condition_id(condition_id)
+    return (
+        PositionId(str(int(f"{combo_condition_id}00", 16))),
+        PositionId(str(int(f"{combo_condition_id}01", 16))),
     )
 
 
@@ -303,6 +308,7 @@ __all__ = [
     "calculate_max_merge_amount_from_balances",
     "canonicalize_combo_legs",
     "decode_combo_outcome_position_id",
+    "derive_combo_outcome_position_ids",
     "derive_combo_position_context",
     "expect_binary_positions",
     "expect_negative_risk_flag",

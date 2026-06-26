@@ -124,6 +124,37 @@ def test_execute_transaction_async_batches_custom_calls() -> None:
     assert {call["target"].lower() for call in calls} == {router.lower()}
 
 
+def test_merge_multiple_positions_async_batches_combo_merges() -> None:
+    captured: list[httpx.Request] = []
+
+    async def run() -> object:
+        client = await make_deposit_client()
+        _setup_relayer(client, captured, "tx-merge-multiple")
+        install_rpc_handler(client, _eth_call_result("uint256[]", [100, 60]))
+        try:
+            return await client.merge_multiple_positions(
+                position_ids=[
+                    _combo_position("0x03" + "11" * 30, 0),
+                    _combo_position("0x03" + "22" * 30, 1),
+                    _combo_position("0x03" + "33" * 30, 0),
+                ],
+                metadata="Merge selected combo positions",
+            )
+        finally:
+            await client.close()
+
+    handle = asyncio.run(run())
+
+    assert isinstance(handle, GaslessTransactionHandle)
+    body = _submit_body(captured)
+    calls = _deposit_wallet_calls(body)
+    assert len(calls) == 3
+    assert body["metadata"] == "Merge selected combo positions"
+    assert {call["target"].lower() for call in calls} == {
+        PRODUCTION.protocol_v2_router.lower()
+    }
+
+
 def test_redeem_positions_market_id_resolves_condition_before_fetching_positions() -> None:
     captured: list[httpx.Request] = []
     market_calls: list[dict[str, object]] = []

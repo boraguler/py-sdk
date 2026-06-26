@@ -104,6 +104,7 @@ from polymarket._internal.actions.relayer.positions import (
     MarketPositionContext,
     canonicalize_combo_legs,
     decode_combo_outcome_position_id,
+    derive_combo_outcome_position_ids,
     derive_combo_position_context,
     normalize_market_position_context,
     parse_market_id,
@@ -2299,6 +2300,60 @@ class AsyncSecureClient:
             else f"Merge {resolved_amount} positions for condition {context.condition_id}"
         )
         return await self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    async def merge_multiple_positions(
+        self,
+        *,
+        position_ids: Sequence[str],
+        amount: int | Literal["max"] = "max",
+        metadata: str | None = None,
+    ) -> TransactionHandle:
+        """Merge multiple combo positions back into collateral.
+
+        Args:
+            position_ids: Combo YES/NO position IDs, one per combo condition.
+            amount: Base-units position amount to merge for each condition, or
+                ``"max"`` to merge the largest available balanced amount per condition.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
+        if not position_ids:
+            raise UserInputError("position_ids must include at least one position ID")
+
+        env = self._ctx.environment
+        seen_conditions: set[str] = set()
+        calls: list[TransactionCall] = []
+        for position_id in position_ids:
+            decoded = decode_combo_outcome_position_id(position_id)
+            condition_key = str(decoded.condition_id)
+            if condition_key in seen_conditions:
+                raise UserInputError("position_ids must reference distinct combo conditions")
+            seen_conditions.add(condition_key)
+            token_ids = derive_combo_outcome_position_ids(decoded.condition_id)
+            balance_call = erc1155_balance_of_batch_call(
+                token_address=cast(EvmAddress, env.position_manager),
+                owners=[self._ctx.wallet, self._ctx.wallet],
+                token_ids=list(token_ids),
+            )
+            balances = decode_erc1155_balance_of_batch_result(
+                await self._ctx.rpc.eth_call(to=str(balance_call.to), data=balance_call.data)
+            )
+            resolved_amount = resolve_merge_amount_from_balances(
+                decoded.condition_id, balances, amount
+            )
+            calls.append(
+                merge_v2_call(
+                    router=cast(EvmAddress, env.protocol_v2_router),
+                    condition_id=decoded.condition_id,
+                    amount=resolved_amount,
+                )
+            )
+
+        resolved_metadata = (
+            metadata if metadata is not None else f"Merge {len(calls)} combo positions"
+        )
+        return await self.execute_transaction(calls=calls, metadata=resolved_metadata)
 
     async def redeem_positions(
         self,
