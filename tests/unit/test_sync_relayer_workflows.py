@@ -21,6 +21,7 @@ from _relayer_helpers import (
 from eth_abi.abi import encode as abi_encode
 
 from polymarket import SecureClient
+from polymarket.calls import merge_v2_call
 from polymarket.environments import PRODUCTION
 from polymarket.errors import (
     TimeoutError as PolyTimeoutError,
@@ -31,6 +32,7 @@ from polymarket.errors import (
     UserInputError,
 )
 from polymarket.transactions import SyncEoaTransactionHandle, SyncGaslessTransactionHandle
+from polymarket.types import EvmAddress
 
 _CONDITION_ID = "0x" + "11" * 32
 
@@ -326,6 +328,36 @@ def test_setup_trading_approvals_safe_uses_multisend_delegatecall() -> None:
     assert body["type"] == "SAFE"
     assert body["signatureParams"]["operation"] == "1"
     assert body["to"].lower() == PRODUCTION.safe_multisend.lower()
+
+
+def test_execute_transaction_batches_custom_calls() -> None:
+    captured: list[httpx.Request] = []
+    router = EvmAddress(PRODUCTION.protocol_v2_router)
+
+    with make_sync_deposit_client() as client:
+        install_sync_relayer_handler(client, _deposit_relayer_handler(captured))
+        handle = client.execute_transaction(
+            calls=[
+                merge_v2_call(router=router, condition_id="0x03" + "11" * 30, amount=1),
+                merge_v2_call(router=router, condition_id="0x03" + "22" * 30, amount=2),
+                merge_v2_call(router=router, condition_id="0x03" + "33" * 30, amount=3),
+            ],
+            metadata="Merge 3 combo positions",
+        )
+
+    assert isinstance(handle, SyncGaslessTransactionHandle)
+    submit = [r for r in captured if urlparse(str(r.url)).path == "/submit"][0]
+    body = request_json(submit)
+    assert body["metadata"] == "Merge 3 combo positions"
+    inner_calls = body["depositWalletParams"]["calls"]
+    assert len(inner_calls) == 3
+    assert {call["target"].lower() for call in inner_calls} == {router.lower()}
+
+
+def test_execute_transaction_rejects_empty_calls() -> None:
+    with make_sync_deposit_client() as client:
+        with pytest.raises(UserInputError, match="At least one transaction call is required"):
+            client.execute_transaction(calls=[])
 
 
 def _stub_binary_positions(  # type: ignore[no-untyped-def]

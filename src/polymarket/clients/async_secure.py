@@ -2083,6 +2083,24 @@ class AsyncSecureClient:
         """
         return True
 
+    async def execute_transaction(
+        self,
+        *,
+        calls: Sequence[TransactionCall],
+        metadata: str | None = None,
+    ) -> TransactionHandle:
+        """Submit one or more transaction calls for the authenticated wallet.
+
+        Use this low-level escape hatch when the higher-level SDK workflows do
+        not cover the transaction shape you need. Calls are executed in order.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
+        return await self._dispatch_calls(
+            list(calls), metadata=metadata if metadata is not None else "Execute transaction"
+        )
+
     async def _broadcast_eoa_call(self, call: TransactionCall) -> EoaTransactionHandle:
         env = self._ctx.environment
         return await broadcast_eoa_call(

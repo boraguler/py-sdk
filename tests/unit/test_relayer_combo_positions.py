@@ -18,8 +18,11 @@ from eth_abi.abi import encode as abi_encode
 from eth_utils.crypto import keccak
 
 from polymarket import AsyncSecureClient
+from polymarket.calls import merge_v2_call
 from polymarket.environments import PRODUCTION
 from polymarket.errors import UnexpectedResponseError, UserInputError
+from polymarket.transactions import GaslessTransactionHandle
+from polymarket.types import EvmAddress
 
 _COMBO_CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
 _CONDITION_ID = "0x" + "11" * 32
@@ -90,6 +93,35 @@ def test_redeem_positions_with_combo_position_id_uses_onchain_balance() -> None:
     assert calls[0]["target"].lower() == PRODUCTION.protocol_v2_router.lower()
     assert calls[0]["data"].startswith("0x" + keccak(b"redeem(bytes31,uint256,uint256)")[:4].hex())
     assert body["metadata"] == f"Redeem combo position {position_id}"
+
+
+def test_execute_transaction_async_batches_custom_calls() -> None:
+    captured: list[httpx.Request] = []
+    router = EvmAddress(PRODUCTION.protocol_v2_router)
+
+    async def run() -> object:
+        client = await make_deposit_client()
+        _setup_relayer(client, captured, "tx-execute")
+        try:
+            return await client.execute_transaction(
+                calls=[
+                    merge_v2_call(router=router, condition_id="0x03" + "11" * 30, amount=1),
+                    merge_v2_call(router=router, condition_id="0x03" + "22" * 30, amount=2),
+                    merge_v2_call(router=router, condition_id="0x03" + "33" * 30, amount=3),
+                ],
+                metadata="Merge 3 combo positions",
+            )
+        finally:
+            await client.close()
+
+    handle = asyncio.run(run())
+
+    assert isinstance(handle, GaslessTransactionHandle)
+    body = _submit_body(captured)
+    calls = _deposit_wallet_calls(body)
+    assert len(calls) == 3
+    assert body["metadata"] == "Merge 3 combo positions"
+    assert {call["target"].lower() for call in calls} == {router.lower()}
 
 
 def test_redeem_positions_market_id_resolves_condition_before_fetching_positions() -> None:
