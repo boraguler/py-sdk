@@ -1,54 +1,18 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any, Literal, TypeAlias, cast
 
 from pydantic import Field, field_validator
 
 from polymarket.models.base import BaseModel
 from polymarket.models.clob._validators import (
+    EpochOrIsoTimestamp,
+    RequiredEpochOrIsoTimestamp,
     _DecimalFromString,  # pyright: ignore[reportPrivateUsage]
 )
 from polymarket.models.types import OrderSide, TokenId
 
 AssetType: TypeAlias = Literal["COLLATERAL", "CONDITIONAL"]
-
-
-_EPOCH_MS_THRESHOLD = 100_000_000_000
-
-
-def _parse_epoch(value: object) -> datetime:
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, bool):
-        msg = f"expected an epoch timestamp, got bool {value!r}"
-        raise ValueError(msg)
-    if isinstance(value, str):
-        if value.isdigit() or (value.startswith("-") and value[1:].isdigit()):
-            value = int(value)
-        else:
-            try:
-                normalized = value.replace("Z", "+00:00")
-                parsed = datetime.fromisoformat(normalized)
-            except ValueError as error:
-                msg = f"invalid epoch or ISO timestamp: {value!r}"
-                raise ValueError(msg) from error
-            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
-    if isinstance(value, int):
-        seconds = value / 1000 if abs(value) >= _EPOCH_MS_THRESHOLD else value
-        try:
-            return datetime.fromtimestamp(seconds, tz=UTC)
-        except (OverflowError, OSError, ValueError) as error:
-            msg = f"epoch timestamp out of range: {value!r}"
-            raise ValueError(msg) from error
-    msg = f"expected an epoch timestamp, got {type(value).__name__}"
-    raise ValueError(msg)
-
-
-def _parse_optional_epoch(value: object) -> datetime | None:
-    if value in (None, ""):
-        return None
-    return _parse_epoch(value)
 
 
 class OpenOrder(BaseModel):
@@ -67,18 +31,8 @@ class OpenOrder(BaseModel):
     order_type: str = Field(validation_alias="order_type")
     status: str
     associate_trades: tuple[str, ...] = Field(default=(), validation_alias="associate_trades")
-    created_at: datetime = Field(validation_alias="created_at")
-    expires_at: datetime | None = Field(default=None, validation_alias="expiration")
-
-    @field_validator("created_at", mode="before")
-    @classmethod
-    def _parse_created_at(cls, value: object) -> datetime:
-        return _parse_epoch(value)
-
-    @field_validator("expires_at", mode="before")
-    @classmethod
-    def _parse_expires_at(cls, value: object) -> datetime | None:
-        return _parse_optional_epoch(value)
+    created_at: RequiredEpochOrIsoTimestamp = Field(validation_alias="created_at")
+    expires_at: EpochOrIsoTimestamp = Field(default=None, validation_alias="expiration")
 
     def _repr_html_(self) -> str:
         from polymarket._jupyter import card, safe_html_repr, truncate_mid
@@ -136,13 +90,8 @@ class ClobTrade(BaseModel):
     bucket_index: int = Field(validation_alias="bucket_index")
     transaction_hash: str = Field(validation_alias="transaction_hash")
     maker_orders: tuple[MakerOrder, ...] = Field(validation_alias="maker_orders")
-    matched_at: datetime = Field(validation_alias="match_time")
-    updated_at: datetime = Field(validation_alias="last_update")
-
-    @field_validator("matched_at", "updated_at", mode="before")
-    @classmethod
-    def _parse_epoch_field(cls, value: object) -> datetime:
-        return _parse_epoch(value)
+    matched_at: RequiredEpochOrIsoTimestamp = Field(validation_alias="match_time")
+    updated_at: RequiredEpochOrIsoTimestamp = Field(validation_alias="last_update")
 
     def _repr_html_(self) -> str:
         from polymarket._jupyter import card, safe_html_repr, truncate_mid
@@ -168,7 +117,7 @@ class Notification(BaseModel):
     owner: str
     type: int
     payload: Any = None
-    timestamp: datetime
+    timestamp: RequiredEpochOrIsoTimestamp
 
     @field_validator("id", mode="before")
     @classmethod
@@ -184,11 +133,6 @@ class Notification(BaseModel):
             return int(value)
         msg = f"notification id must be an integer or numeric string, got {type(value).__name__}"
         raise ValueError(msg)
-
-    @field_validator("timestamp", mode="before")
-    @classmethod
-    def _parse_timestamp(cls, value: object) -> datetime:
-        return _parse_epoch(value)
 
 
 class BalanceAllowance(BaseModel):
