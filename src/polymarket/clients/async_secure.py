@@ -2092,8 +2092,8 @@ class AsyncSecureClient:
     ) -> TransactionHandle:
         """Submit one or more transaction calls for the authenticated wallet.
 
-        Use this low-level escape hatch when the higher-level SDK workflows do
-        not cover the transaction shape you need. Calls are executed in order.
+        Use this low-level escape hatch to combine supported transaction calls
+        differently than the higher-level SDK workflows. Calls are executed in order.
 
         Returns:
             A transaction handle. Await ``wait()`` to wait for a terminal outcome.
