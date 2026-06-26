@@ -132,10 +132,13 @@ def _parse_epoch_or_iso_timestamp(value: object) -> object:
             magnitude = int(value)
         else:
             try:
-                return datetime.fromisoformat(value)
+                parsed = datetime.fromisoformat(value)
             except ValueError as error:
                 msg = f"invalid timestamp: {value!r}"
                 raise ValueError(msg) from error
+            # Assume a naive ISO timestamp is UTC, matching how epoch inputs are
+            # parsed (tz=UTC) and the prior account-model behavior.
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
     else:
         msg = f"expected epoch or ISO timestamp, got {type(value).__name__}"
         raise ValueError(msg)
