@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0-b10](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b9...polymarket-client-v0.1.0-b10) (2026-06-23)
+
+
+### Bug Fixes
+
+* **gamma:** preserve market group item title ([e4b8185](https://github.com/Polymarket/py-sdk/commit/e4b81854001d50d1db290f8701fb830ab7d0c17c))
+* **gamma:** preserve market group item title ([264ef60](https://github.com/Polymarket/py-sdk/commit/264ef6068aae49f69dfb9f826ede1f2b5ade58cb))
+
 ## [0.1.0-b9](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b8...polymarket-client-v0.1.0-b9) (2026-06-19)
 
 
