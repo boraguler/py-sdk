@@ -369,10 +369,10 @@ def test_merge_multiple_positions_batches_combo_merges() -> None:
         install_sync_relayer_handler(client, _deposit_relayer_handler(captured))
         install_sync_rpc_handler(client, _eth_call_result("uint256[]", [100, 60]))
         handle = client.merge_multiple_positions(
-            position_ids=[
-                _combo_position("0x03" + "11" * 30, 0),
-                _combo_position("0x03" + "22" * 30, 1),
-                _combo_position("0x03" + "33" * 30, 0),
+            positions=[
+                {"position_id": _combo_position("0x03" + "11" * 30, 0), "amount": 1},
+                {"position_id": _combo_position("0x03" + "22" * 30, 1)},
+                {"position_id": _combo_position("0x03" + "33" * 30, 0), "amount": 3},
             ],
             metadata="Merge selected combo positions",
         )
@@ -386,14 +386,19 @@ def test_merge_multiple_positions_batches_combo_merges() -> None:
     assert {call["target"].lower() for call in inner_calls} == {
         PRODUCTION.protocol_v2_router.lower()
     }
+    assert [call["data"][-64:] for call in inner_calls] == [
+        f"{1:064x}",
+        f"{60:064x}",
+        f"{3:064x}",
+    ]
 
 
-def test_merge_multiple_positions_rejects_empty_position_ids() -> None:
+def test_merge_multiple_positions_rejects_empty_positions() -> None:
     with (
         make_sync_deposit_client() as client,
-        pytest.raises(UserInputError, match="position_ids must include at least one"),
+        pytest.raises(UserInputError, match="positions must include at least one"),
     ):
-        client.merge_multiple_positions(position_ids=[])
+        client.merge_multiple_positions(positions=[])
 
 
 def _stub_binary_positions(  # type: ignore[no-untyped-def]

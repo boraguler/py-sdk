@@ -190,6 +190,7 @@ from polymarket.models.data import (
 from polymarket.models.types import CtfConditionId
 from polymarket.pagination import Page, Paginator
 from polymarket.transactions import (
+    MergePositionRequest,
     SyncDeprecatedTransactionHandle,
     SyncEoaTransactionHandle,
     SyncTransactionHandle,
@@ -2198,27 +2199,31 @@ class SecureClient:
     def merge_multiple_positions(
         self,
         *,
-        position_ids: Sequence[str],
-        amount: int | Literal["max"] = "max",
+        positions: Sequence[MergePositionRequest],
         metadata: str | None = None,
     ) -> SyncTransactionHandle:
         """Merge multiple combo positions back into collateral.
 
         Args:
-            position_ids: Combo YES/NO position IDs, one per combo condition.
-            amount: Base-units position amount to merge for each condition, or
-                ``"max"`` to merge the largest available balanced amount per condition.
+            positions: Combo position merge requests, one per combo condition.
+                Omit ``amount`` to merge the largest available balanced amount
+                for that condition.
 
         Returns:
             A transaction handle. Call ``wait()`` to wait for a terminal outcome.
         """
-        if not position_ids:
-            raise UserInputError("position_ids must include at least one position ID")
+        if not positions:
+            raise UserInputError("positions must include at least one merge request")
 
         env = self._ctx.environment
         seen_conditions: set[str] = set()
         calls: list[TransactionCall] = []
-        for position_id in position_ids:
+        for position in positions:
+            try:
+                position_id = position["position_id"]
+            except KeyError as error:
+                raise UserInputError("Each merge request must include position_id") from error
+            amount = position.get("amount", "max")
             decoded = decode_combo_outcome_position_id(position_id)
             condition_key = str(decoded.condition_id)
             if condition_key in seen_conditions:

@@ -133,10 +133,10 @@ def test_merge_multiple_positions_async_batches_combo_merges() -> None:
         install_rpc_handler(client, _eth_call_result("uint256[]", [100, 60]))
         try:
             return await client.merge_multiple_positions(
-                position_ids=[
-                    _combo_position("0x03" + "11" * 30, 0),
-                    _combo_position("0x03" + "22" * 30, 1),
-                    _combo_position("0x03" + "33" * 30, 0),
+                positions=[
+                    {"position_id": _combo_position("0x03" + "11" * 30, 0), "amount": 1},
+                    {"position_id": _combo_position("0x03" + "22" * 30, 1)},
+                    {"position_id": _combo_position("0x03" + "33" * 30, 0), "amount": 3},
                 ],
                 metadata="Merge selected combo positions",
             )
@@ -151,6 +151,11 @@ def test_merge_multiple_positions_async_batches_combo_merges() -> None:
     assert len(calls) == 3
     assert body["metadata"] == "Merge selected combo positions"
     assert {call["target"].lower() for call in calls} == {PRODUCTION.protocol_v2_router.lower()}
+    assert [call["data"][-64:] for call in calls] == [
+        f"{1:064x}",
+        f"{60:064x}",
+        f"{3:064x}",
+    ]
 
 
 def test_redeem_positions_market_id_resolves_condition_before_fetching_positions() -> None:

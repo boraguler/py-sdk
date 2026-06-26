@@ -157,6 +157,7 @@ from polymarket.rfq import (
 from polymarket.transactions import (
     EoaTransactionHandle,
     GaslessTransactionHandle,
+    MergePositionRequest,
     SyncEoaTransactionHandle,
     SyncGaslessTransactionHandle,
     SyncTransactionHandle,
@@ -232,6 +233,7 @@ __all__ = [
     "MarketRewardToken",
     "MarketVolume",
     "MergeActivity",
+    "MergePositionRequest",
     "MetaHolder",
     "MetaMarketPosition",
     "Notification",

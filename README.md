@@ -77,8 +77,11 @@ Batch combo-position merges:
 
 ```python
 handle = client.merge_multiple_positions(
-    position_ids=[combo_position_id_1, combo_position_id_2, combo_position_id_3],
-    amount="max",
+    positions=[
+        {"position_id": combo_position_id_1},
+        {"position_id": combo_position_id_2, "amount": 1_000_000},
+        {"position_id": combo_position_id_3, "amount": 500_000},
+    ],
 )
 
 outcome = handle.wait()
