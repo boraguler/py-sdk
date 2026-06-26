@@ -33,7 +33,7 @@ def _is_order_example_candidate(client: MarketLookupClient, market: Market) -> b
     token_id = market.outcomes.yes.token_id
     if (
         market.state.enable_order_book is not True
-        or market.state.accepting_orders is False
+        or market.state.accepting_orders is not True
         or market.trading.minimum_order_size is None
         or market.trading.minimum_tick_size is None
         or token_id is None
