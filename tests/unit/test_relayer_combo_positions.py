@@ -150,9 +150,7 @@ def test_merge_multiple_positions_async_batches_combo_merges() -> None:
     calls = _deposit_wallet_calls(body)
     assert len(calls) == 3
     assert body["metadata"] == "Merge selected combo positions"
-    assert {call["target"].lower() for call in calls} == {
-        PRODUCTION.protocol_v2_router.lower()
-    }
+    assert {call["target"].lower() for call in calls} == {PRODUCTION.protocol_v2_router.lower()}
 
 
 def test_redeem_positions_market_id_resolves_condition_before_fetching_positions() -> None:

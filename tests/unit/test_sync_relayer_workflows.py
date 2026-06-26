@@ -355,9 +355,11 @@ def test_execute_transaction_batches_custom_calls() -> None:
 
 
 def test_execute_transaction_rejects_empty_calls() -> None:
-    with make_sync_deposit_client() as client:
-        with pytest.raises(UserInputError, match="At least one transaction call is required"):
-            client.execute_transaction(calls=[])
+    with (
+        make_sync_deposit_client() as client,
+        pytest.raises(UserInputError, match="At least one transaction call is required"),
+    ):
+        client.execute_transaction(calls=[])
 
 
 def test_merge_multiple_positions_batches_combo_merges() -> None:
@@ -387,9 +389,11 @@ def test_merge_multiple_positions_batches_combo_merges() -> None:
 
 
 def test_merge_multiple_positions_rejects_empty_position_ids() -> None:
-    with make_sync_deposit_client() as client:
-        with pytest.raises(UserInputError, match="position_ids must include at least one"):
-            client.merge_multiple_positions(position_ids=[])
+    with (
+        make_sync_deposit_client() as client,
+        pytest.raises(UserInputError, match="position_ids must include at least one"),
+    ):
+        client.merge_multiple_positions(position_ids=[])
 
 
 def _stub_binary_positions(  # type: ignore[no-untyped-def]
