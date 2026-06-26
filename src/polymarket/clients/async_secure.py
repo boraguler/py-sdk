@@ -128,7 +128,7 @@ from polymarket._internal.wallet import (
     derive_current_deposit_wallet_address,
     signature_type_for,
 )
-from polymarket.auth import ApiKey
+from polymarket.auth import ApiKey, BuilderApiKey
 from polymarket.clients._transport import AsyncTransport
 from polymarket.clients.async_public import AsyncPublicClient
 from polymarket.environments import PRODUCTION, Environment
@@ -168,6 +168,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
+from polymarket.models.clob.api_key import BuilderApiKeyInfo
 from polymarket.models.clob.cancel import CancelOrdersResponse
 from polymarket.models.clob.market_events import MarketEvent
 from polymarket.models.clob.order_response import OrderResponse
@@ -1598,6 +1599,28 @@ class AsyncSecureClient:
     async def delete_api_key(self) -> None:
         """Delete the API key currently used by this client."""
         await _auth_actions.delete_api_key(self._ctx.secure_clob)
+
+    async def create_builder_api_key(self) -> BuilderApiKey:
+        """Create a new builder API key for the authenticated account."""
+        return await _auth_actions.create_builder_api_key(self._ctx.secure_clob)
+
+    async def fetch_builder_api_keys(self) -> tuple[BuilderApiKeyInfo, ...]:
+        """List the builder API keys for the authenticated account."""
+        return await _auth_actions.fetch_builder_api_keys(self._ctx.secure_clob)
+
+    async def revoke_builder_api_key(self) -> None:
+        """Revoke the builder API key this client is configured with.
+
+        The revocation is authenticated by the builder key itself, so the client must have been
+        created with the key to revoke (``AsyncSecureClient.create(api_key=BuilderApiKey(...))``).
+        """
+        builder_key = self._ctx.api_key
+        if not isinstance(builder_key, BuilderApiKey):
+            raise UserInputError(
+                "revoke_builder_api_key requires a client created with the builder key to "
+                "revoke (pass api_key=BuilderApiKey(...) to AsyncSecureClient.create)."
+            )
+        await _auth_actions.revoke_builder_api_key(self._ctx.clob, builder_key)
 
     async def end_authentication(self) -> "AsyncPublicClient":
         """Delete current credentials, close this client, and return an async public client."""
