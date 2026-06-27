@@ -2685,6 +2685,18 @@ class AsyncSecureClient:
         )
         return await self.execute_transaction(calls=calls, metadata=resolved_metadata)
 
+    @overload
+    async def redeem_positions(
+        self, *, condition_id: str, metadata: str | None = None
+    ) -> TransactionHandle: ...
+    @overload
+    async def redeem_positions(
+        self, *, market_id: str, metadata: str | None = None
+    ) -> TransactionHandle: ...
+    @overload
+    async def redeem_positions(
+        self, *, position_id: str, metadata: str | None = None
+    ) -> TransactionHandle: ...
     async def redeem_positions(
         self,
         *,

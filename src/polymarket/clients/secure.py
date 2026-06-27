@@ -2398,6 +2398,18 @@ class SecureClient:
         )
         return self.execute_transaction(calls=calls, metadata=resolved_metadata)
 
+    @overload
+    def redeem_positions(
+        self, *, condition_id: str, metadata: str | None = None
+    ) -> SyncTransactionHandle: ...
+    @overload
+    def redeem_positions(
+        self, *, market_id: str, metadata: str | None = None
+    ) -> SyncTransactionHandle: ...
+    @overload
+    def redeem_positions(
+        self, *, position_id: str, metadata: str | None = None
+    ) -> SyncTransactionHandle: ...
     def redeem_positions(
         self,
         *,
