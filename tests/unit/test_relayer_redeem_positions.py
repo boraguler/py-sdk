@@ -103,7 +103,10 @@ def test_redeem_positions_rejects_both_condition_id_and_market_id() -> None:
         client = await make_deposit_client()
         try:
             with pytest.raises(UserInputError, match="exactly one"):
-                await client.redeem_positions(condition_id=_CONDITION_ID, market_id="123")
+                # Two selectors is intentionally invalid — exercises the runtime guard.
+                await client.redeem_positions(  # pyright: ignore[reportCallIssue]
+                    condition_id=_CONDITION_ID, market_id="123"
+                )
         finally:
             await client.close()
 
@@ -115,7 +118,8 @@ def test_redeem_positions_rejects_neither_argument() -> None:
         client = await make_deposit_client()
         try:
             with pytest.raises(UserInputError, match="exactly one"):
-                await client.redeem_positions()
+                # Zero selectors is intentionally invalid — exercises the runtime guard.
+                await client.redeem_positions()  # pyright: ignore[reportCallIssue]
         finally:
             await client.close()
 
