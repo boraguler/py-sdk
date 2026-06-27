@@ -348,6 +348,18 @@ class AsyncPublicClient:
                                     finally:
                                         await self._ctx.perps.close()
 
+    @overload
+    async def get_market(
+        self, *, id: str, include_tag: bool | None = None, locale: str | None = None
+    ) -> Market: ...
+    @overload
+    async def get_market(
+        self, *, slug: str, include_tag: bool | None = None, locale: str | None = None
+    ) -> Market: ...
+    @overload
+    async def get_market(
+        self, *, url: str, include_tag: bool | None = None, locale: str | None = None
+    ) -> Market: ...
     async def get_market(
         self,
         *,
@@ -373,6 +385,36 @@ class AsyncPublicClient:
         """Get a market's tags."""
         return await async_dispatch(self._ctx, _gamma_actions.get_market_tags_spec(id))
 
+    @overload
+    async def get_event(
+        self,
+        *,
+        id: str,
+        include_best_lines: bool | None = None,
+        include_chat: bool | None = None,
+        include_template: bool | None = None,
+        locale: str | None = None,
+    ) -> Event: ...
+    @overload
+    async def get_event(
+        self,
+        *,
+        slug: str,
+        include_best_lines: bool | None = None,
+        include_chat: bool | None = None,
+        include_template: bool | None = None,
+        locale: str | None = None,
+    ) -> Event: ...
+    @overload
+    async def get_event(
+        self,
+        *,
+        url: str,
+        include_best_lines: bool | None = None,
+        include_chat: bool | None = None,
+        include_template: bool | None = None,
+        locale: str | None = None,
+    ) -> Event: ...
     async def get_event(
         self,
         *,
@@ -414,6 +456,12 @@ class AsyncPublicClient:
             _gamma_actions.get_series_spec(id, locale=locale),
         )
 
+    @overload
+    async def get_tag(
+        self, *, id: str, include_template: bool | None = None, locale: str | None = None
+    ) -> Tag: ...
+    @overload
+    async def get_tag(self, *, slug: str, locale: str | None = None) -> Tag: ...
     async def get_tag(
         self,
         *,

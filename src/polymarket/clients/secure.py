@@ -471,6 +471,18 @@ class SecureClient:
     def _user_or_wallet(self, user: str | None) -> str:
         return self._ctx.wallet if user is None else user
 
+    @overload
+    def get_market(
+        self, *, id: str, include_tag: bool | None = None, locale: str | None = None
+    ) -> Market: ...
+    @overload
+    def get_market(
+        self, *, slug: str, include_tag: bool | None = None, locale: str | None = None
+    ) -> Market: ...
+    @overload
+    def get_market(
+        self, *, url: str, include_tag: bool | None = None, locale: str | None = None
+    ) -> Market: ...
     def get_market(
         self,
         *,
@@ -496,6 +508,36 @@ class SecureClient:
         """Get a market's tags."""
         return sync_dispatch(self._ctx, _gamma_actions.get_market_tags_spec(id))
 
+    @overload
+    def get_event(
+        self,
+        *,
+        id: str,
+        include_best_lines: bool | None = None,
+        include_chat: bool | None = None,
+        include_template: bool | None = None,
+        locale: str | None = None,
+    ) -> Event: ...
+    @overload
+    def get_event(
+        self,
+        *,
+        slug: str,
+        include_best_lines: bool | None = None,
+        include_chat: bool | None = None,
+        include_template: bool | None = None,
+        locale: str | None = None,
+    ) -> Event: ...
+    @overload
+    def get_event(
+        self,
+        *,
+        url: str,
+        include_best_lines: bool | None = None,
+        include_chat: bool | None = None,
+        include_template: bool | None = None,
+        locale: str | None = None,
+    ) -> Event: ...
     def get_event(
         self,
         *,
@@ -537,6 +579,12 @@ class SecureClient:
             _gamma_actions.get_series_spec(id, locale=locale),
         )
 
+    @overload
+    def get_tag(
+        self, *, id: str, include_template: bool | None = None, locale: str | None = None
+    ) -> Tag: ...
+    @overload
+    def get_tag(self, *, slug: str, locale: str | None = None) -> Tag: ...
     def get_tag(
         self,
         *,
