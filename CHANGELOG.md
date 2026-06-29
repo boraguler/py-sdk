@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.0-b11](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b10...polymarket-client-v0.1.0-b11) (2026-06-29)
+
+
+### Bug Fixes
+
+* **client:** clean up deposit wallet deployment ([4140f72](https://github.com/Polymarket/py-sdk/commit/4140f723debabc218c88c8998d3240bf3972e441))
+* **client:** clean up deposit wallet deployment ([c098c9b](https://github.com/Polymarket/py-sdk/commit/c098c9bc0eb8ef34522f99b0dcbec92e84b1a4db))
+* **client:** split rejected RPC batches ([245b97a](https://github.com/Polymarket/py-sdk/commit/245b97a8147697db178ebe84941f80ccf7475849))
+* **gamma:** type search sort fields ([238811a](https://github.com/Polymarket/py-sdk/commit/238811a540167298572c305f676bbfe2205af23e))
+
 ## [0.1.0-b10](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b9...polymarket-client-v0.1.0-b10) (2026-06-23)
 
 
