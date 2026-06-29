@@ -1,6 +1,7 @@
 # pyright: reportPrivateUsage=false
 import asyncio
 import dataclasses
+from typing import cast
 
 import httpx
 import pytest
@@ -8,7 +9,6 @@ from _relayer_helpers import (
     make_eoa_client_with_rpc,
     make_rpc_handler,
 )
-from eth_utils.crypto import keccak
 
 from polymarket import TransactionCall
 from polymarket.errors import TimeoutError, TransactionFailedError, UserInputError
@@ -140,24 +140,33 @@ def test_eoa_setup_trading_approvals_submits_and_waits_for_required_calls_sequen
     send_iter = iter(send_hashes)
     receipts: list[dict[str, object] | None] = [{"status": "0x1"} for _ in range(16)]
     receipt_iter = iter(receipts)
-    calls: list[dict[str, object]] = []
+    calls: list[object] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         import json
 
-        body = json.loads(request.content.decode("utf-8"))
+        body = cast(object, json.loads(request.content.decode("utf-8")))
         calls.append(body)
+        if isinstance(body, list):
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "jsonrpc": "2.0",
+                        "id": item["id"],
+                        "result": _approval_check_result(item),
+                    }
+                    for item in cast(list[dict[str, object]], body)
+                ],
+                request=request,
+            )
+
+        body = cast(dict[str, object], body)
         method = body["method"]
         if method == "eth_chainId":
             result: object = hex(137)
         elif method == "eth_call":
-            data = body["params"][0]["data"]
-            allowance_selector = "0x" + keccak(b"allowance(address,address)")[:4].hex()
-            approved_selector = "0x" + keccak(b"isApprovedForAll(address,address)")[:4].hex()
-            if data.startswith(allowance_selector) or data.startswith(approved_selector):
-                result = "0x" + "0" * 64
-            else:
-                result = "0x" + "0" * 64
+            result = _approval_check_result(body)
         elif method == "eth_getTransactionCount":
             result = hex(7)
         elif method == "eth_gasPrice":
@@ -179,6 +188,9 @@ def test_eoa_setup_trading_approvals_submits_and_waits_for_required_calls_sequen
             200, json={"jsonrpc": "2.0", "id": body["id"], "result": result}, request=request
         )
 
+    def _approval_check_result(body: dict[str, object]) -> str:
+        return "0x" + "0" * 64
+
     async def run() -> object:
         client = await make_eoa_client_with_rpc(rpc_handler=handler)
         client._ctx = dataclasses.replace(
@@ -193,10 +205,19 @@ def test_eoa_setup_trading_approvals_submits_and_waits_for_required_calls_sequen
     handle = asyncio.run(run())
     assert isinstance(handle, DeprecatedTransactionHandle)
     assert handle.transaction_hash is None
-    send_methods = [c for c in calls if c["method"] == "eth_sendRawTransaction"]
-    assert len(send_methods) == 16
-    receipt_methods = [c for c in calls if c["method"] == "eth_getTransactionReceipt"]
-    assert len(receipt_methods) >= 16
+    assert _rpc_method_count(calls, "eth_sendRawTransaction") == 16
+    assert _rpc_method_count(calls, "eth_getTransactionReceipt") >= 16
+
+
+def _rpc_method_count(calls: list[object], method: str) -> int:
+    total = 0
+    for call in calls:
+        if not isinstance(call, dict):
+            continue
+        rpc_call = cast(dict[str, object], call)
+        if rpc_call.get("method") == method:
+            total += 1
+    return total
 
 
 def test_rpc_client_closes_with_client() -> None:
