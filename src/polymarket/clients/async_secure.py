@@ -125,7 +125,8 @@ from polymarket._internal.streams.handle import AsyncSubscriptionHandle, Subscri
 from polymarket._internal.wallet import (
     WalletType,
     classify_wallet_type,
-    derive_current_deposit_wallet_address,
+    derive_beacon_deposit_wallet_address,
+    derive_uups_deposit_wallet_address,
     signature_type_for,
 )
 from polymarket.auth import ApiKey
@@ -310,7 +311,7 @@ class AsyncSecureClient:
 
         Args:
             private_key: EVM private key used for signing.
-            wallet: Wallet address to act for. Defaults to the signer's current Deposit Wallet.
+            wallet: Wallet address to act for. Defaults to the signer's Deposit Wallet.
             credentials: Existing API credentials. When omitted, credentials are
                 derived during client creation.
             api_key: Optional key for gasless wallet and relayed transaction workflows.
@@ -2134,8 +2135,8 @@ class AsyncSecureClient:
 
     async def _deploy_default_deposit_wallet(self) -> None:
         ctx = self._ctx
-        current_deposit_wallet = await derive_current_deposit_wallet_address(
-            ctx.rpc, ctx.signer.address, ctx.environment.wallet_derivation
+        current_deposit_wallet = derive_beacon_deposit_wallet_address(
+            ctx.signer.address, ctx.environment.wallet_derivation
         )
         if str(ctx.wallet).lower() != current_deposit_wallet.lower():
             raise UserInputError(
@@ -2620,14 +2621,20 @@ async def _resolve_requested_wallet(
 ) -> str:
     if wallet is not None:
         return wallet
-    rpc_transport = AsyncTransport(base_url=environment.rpc_url, logger=logger)
-    rpc = JsonRpcClient(rpc_transport)
+    legacy_deposit_wallet = derive_uups_deposit_wallet_address(
+        signer.address, environment.wallet_derivation
+    )
+    relayer = AsyncTransport(base_url=environment.relayer_url, logger=logger)
     try:
-        return await derive_current_deposit_wallet_address(
-            rpc, signer.address, environment.wallet_derivation
-        )
+        if await fetch_deployed(
+            relayer,
+            address=legacy_deposit_wallet,
+            type=RelayerTransactionType.WALLET,
+        ):
+            return legacy_deposit_wallet
+        return derive_beacon_deposit_wallet_address(signer.address, environment.wallet_derivation)
     finally:
-        await rpc.close()
+        await relayer.close()
 
 
 def _relayer_transaction_type_for_wallet(
