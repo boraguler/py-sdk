@@ -14,6 +14,7 @@ from _relayer_helpers import (
     make_deposit_client,
     request_json,
 )
+from eth_abi.abi import decode as abi_decode
 from eth_abi.abi import encode as abi_encode
 from eth_utils.crypto import keccak
 
@@ -158,6 +159,76 @@ def test_merge_multiple_positions_async_batches_combo_merges() -> None:
     ]
 
 
+def test_merge_multiple_positions_async_batches_market_merges() -> None:
+    captured: list[httpx.Request] = []
+    first_condition_id = "0x" + "11" * 32
+    second_condition_id = "0x" + "22" * 32
+    market_calls: list[dict[str, object]] = []
+
+    async def run() -> object:
+        client = await make_deposit_client()
+        _setup_relayer(client, captured, "tx-market-merge-multiple")
+
+        def list_markets_stub(**kwargs: object):  # type: ignore[no-untyped-def]
+            market_calls.append(kwargs)
+            condition_ids = kwargs.get("condition_ids")
+            if condition_ids == [first_condition_id]:
+                return _AsyncStubPaginator((_stub_market(first_condition_id),))
+            if condition_ids == [second_condition_id]:
+                return _AsyncStubPaginator((_stub_market(second_condition_id),))
+            return _AsyncStubPaginator(())
+
+        client.list_markets = list_markets_stub  # type: ignore[method-assign]
+        client.list_positions = _fail_list_positions  # type: ignore[method-assign]
+        install_rpc_handler(client, _eth_call_result("uint256[]", [100_000_000, 60_000_000]))
+        try:
+            return await client.merge_multiple_positions(
+                positions=[
+                    {"condition_id": first_condition_id, "amount": 1_000_000},
+                    {"condition_id": second_condition_id, "amount": "max"},
+                ],
+                metadata="Merge selected market positions",
+            )
+        finally:
+            await client.close()
+
+    handle = asyncio.run(run())
+
+    assert isinstance(handle, GaslessTransactionHandle)
+    assert market_calls == [
+        {"condition_ids": [first_condition_id], "page_size": 1},
+        {"condition_ids": [second_condition_id], "page_size": 1},
+    ]
+    body = _submit_body(captured)
+    calls = _deposit_wallet_calls(body)
+    assert len(calls) == 2
+    assert body["metadata"] == "Merge selected market positions"
+    assert {call["target"].lower() for call in calls} == {
+        PRODUCTION.neg_risk_collateral_adapter.lower()
+    }
+    assert [_decode_merge_positions_amount(call["data"]) for call in calls] == [
+        1_000_000,
+        60_000_000,
+    ]
+
+
+def test_merge_multiple_positions_async_rejects_mixed_market_and_combo_positions() -> None:
+    async def run() -> None:
+        client = await make_deposit_client()
+        try:
+            await client.merge_multiple_positions(
+                positions=[
+                    {"condition_id": _CONDITION_ID},
+                    {"position_id": _combo_position(_COMBO_CONDITION_ID, 0)},
+                ]
+            )
+        finally:
+            await client.close()
+
+    with pytest.raises(UserInputError, match="Cannot mix market and combo"):
+        asyncio.run(run())
+
+
 def test_redeem_positions_market_id_resolves_condition_before_fetching_positions() -> None:
     captured: list[httpx.Request] = []
     market_calls: list[dict[str, object]] = []
@@ -242,6 +313,16 @@ def _eth_call_result(abi_type: str, value: object) -> Callable[[httpx.Request], 
         )
 
     return handler
+
+
+def _decode_merge_positions_amount(data: str) -> int:
+    decoded = abi_decode(
+        ["address", "bytes32", "bytes32", "uint256[]", "uint256"],
+        bytes.fromhex(data[10:]),
+    )
+    amount = decoded[4]
+    assert isinstance(amount, int)
+    return amount
 
 
 def _submit_body(captured: list[httpx.Request]) -> dict[str, object]:

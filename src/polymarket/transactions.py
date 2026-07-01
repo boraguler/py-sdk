@@ -10,11 +10,29 @@ if TYPE_CHECKING:
     from polymarket.clients._transport import AsyncTransport, SyncTransport
 
 
-class MergePositionRequest(TypedDict):
+class MergeComboPositionRequest(TypedDict):
     """Combo position merge request used by batch merge workflows."""
 
     position_id: str
     amount: NotRequired[int | Literal["max"]]
+
+
+class MergeMarketConditionRequest(TypedDict):
+    """Market position merge request identified by condition id."""
+
+    condition_id: str
+    amount: NotRequired[int | Literal["max"]]
+
+
+class MergeMarketIdRequest(TypedDict):
+    """Market position merge request identified by market id."""
+
+    market_id: str
+    amount: NotRequired[int | Literal["max"]]
+
+
+MergeMarketPositionRequest: TypeAlias = MergeMarketConditionRequest | MergeMarketIdRequest
+MergePositionRequest: TypeAlias = MergeComboPositionRequest | MergeMarketPositionRequest
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +167,10 @@ SyncTransactionHandle: TypeAlias = SyncGaslessTransactionHandle | SyncEoaTransac
 __all__ = [
     "EoaTransactionHandle",
     "GaslessTransactionHandle",
+    "MergeComboPositionRequest",
+    "MergeMarketConditionRequest",
+    "MergeMarketIdRequest",
+    "MergeMarketPositionRequest",
     "MergePositionRequest",
     "DeprecatedTransactionHandle",
     "SyncDeprecatedTransactionHandle",

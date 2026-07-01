@@ -73,9 +73,22 @@ handle = client.execute_transaction(
 outcome = handle.wait()
 ```
 
-Batch combo-position merges:
+Batch position merges:
 
 ```python
+# Merge regular market positions by condition or market id.
+handle = client.merge_multiple_positions(
+    positions=[
+        {"condition_id": condition_id_1},
+        {"market_id": market_id_2, "amount": "max"},
+        {"condition_id": condition_id_3, "amount": 500_000},
+    ],
+)
+
+outcome = handle.wait()
+
+# Or merge combo positions by position id. Do not mix market and combo
+# requests in the same batch.
 handle = client.merge_multiple_positions(
     positions=[
         {"position_id": combo_position_id_1},

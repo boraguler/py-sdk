@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Literal
+from typing import Literal, cast
 
 from eth_abi.abi import encode as abi_encode
 from eth_utils.crypto import keccak
@@ -51,6 +51,15 @@ class MarketPositionContext:
 class DecodedComboOutcomePositionId:
     condition_id: ComboConditionId
     outcome_index: Literal[0, 1]
+
+
+@dataclass(frozen=True, slots=True)
+class BatchMergePositionRequest:
+    kind: Literal["combo", "market"]
+    amount: int | Literal["max"]
+    position_id: str | None = None
+    condition_id: str | None = None
+    market_id: str | None = None
 
 
 def parse_market_id(market_id: str) -> int:
@@ -270,6 +279,32 @@ def decode_combo_outcome_position_id(position_id: str) -> DecodedComboOutcomePos
     )
 
 
+def normalize_batch_merge_position_request(
+    request: Mapping[str, object],
+) -> BatchMergePositionRequest:
+    identifiers = [key for key in ("position_id", "condition_id", "market_id") if key in request]
+    if len(identifiers) != 1:
+        raise UserInputError(
+            "Each merge request must include exactly one of position_id, condition_id, or market_id"
+        )
+
+    identifier = identifiers[0]
+    value = request[identifier]
+    if not isinstance(value, str):
+        raise UserInputError(f"{identifier} must be a string")
+
+    raw_amount = request.get("amount", "max")
+    if raw_amount != "max" and (isinstance(raw_amount, bool) or not isinstance(raw_amount, int)):
+        raise UserInputError("amount must be an int or 'max'")
+    amount = cast(int | Literal["max"], raw_amount)
+
+    if identifier == "position_id":
+        return BatchMergePositionRequest(kind="combo", position_id=value, amount=amount)
+    if identifier == "condition_id":
+        return BatchMergePositionRequest(kind="market", condition_id=value, amount=amount)
+    return BatchMergePositionRequest(kind="market", market_id=value, amount=amount)
+
+
 def _to_position_amount(position: Position | None, *, expected_outcome_index: Literal[0, 1]) -> int:
     if position is None:
         return 0
@@ -300,6 +335,7 @@ def _parse_position_id(position_id: str) -> int:
 
 __all__ = [
     "BinaryPositions",
+    "BatchMergePositionRequest",
     "CanonicalComboLegs",
     "ComboPositionContext",
     "DecodedComboOutcomePositionId",
@@ -312,6 +348,7 @@ __all__ = [
     "derive_combo_position_context",
     "expect_binary_positions",
     "expect_negative_risk_flag",
+    "normalize_batch_merge_position_request",
     "normalize_market_position_context",
     "parse_market_id",
     "resolve_binary_positions_condition_id",
