@@ -66,11 +66,23 @@ def test_fetch_tick_size_returns_decimal_for_valid_response() -> None:
     assert urlparse(str(captured[0].url)).path == "/tick-size"
 
 
-def test_fetch_tick_size_rejects_unsupported_value() -> None:
+def test_fetch_tick_size_accepts_new_supported_value() -> None:
     async def run() -> Decimal:
         client = await _make_client()
         try:
             _install_public_clob(client, _capture([], 200, {"minimum_tick_size": 0.005}))
+            return await fetch_tick_size(client._ctx, token_id="8501497")
+        finally:
+            await client.close()
+
+    assert asyncio.run(run()) == Decimal("0.005")
+
+
+def test_fetch_tick_size_rejects_unsupported_value() -> None:
+    async def run() -> Decimal:
+        client = await _make_client()
+        try:
+            _install_public_clob(client, _capture([], 200, {"minimum_tick_size": 0.0005}))
             return await fetch_tick_size(client._ctx, token_id="8501497")
         finally:
             await client.close()
