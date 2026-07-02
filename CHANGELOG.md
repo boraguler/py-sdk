@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0-b12](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b11...polymarket-client-v0.1.0-b12) (2026-07-02)
+
+
+### Bug Fixes
+
+* **client:** support new clob tick sizes ([a45aa1e](https://github.com/Polymarket/py-sdk/commit/a45aa1ecfaec242d85bf6b194d684d975bfa8f9a))
+* **client:** support new CLOB tick sizes ([7e1bb17](https://github.com/Polymarket/py-sdk/commit/7e1bb1763c5165bf366d7351548dc59fbbd7790a))
+
 ## [0.1.0-b11](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b10...polymarket-client-v0.1.0-b11) (2026-06-29)
 
 
