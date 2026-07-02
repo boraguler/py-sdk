@@ -16,6 +16,8 @@ class RoundingConfig:
 _ROUNDING_BY_TICK: dict[Decimal, RoundingConfig] = {
     Decimal("0.1"): RoundingConfig(amount=3, price=1, size=2),
     Decimal("0.01"): RoundingConfig(amount=4, price=2, size=2),
+    Decimal("0.005"): RoundingConfig(amount=5, price=3, size=2),
+    Decimal("0.0025"): RoundingConfig(amount=6, price=4, size=2),
     Decimal("0.001"): RoundingConfig(amount=5, price=3, size=2),
     Decimal("0.0001"): RoundingConfig(amount=6, price=4, size=2),
 }

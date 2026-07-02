@@ -6,7 +6,7 @@ from polymarket.types import EvmAddress, HexString
 
 OrderType: TypeAlias = Literal["GTC", "GTD", "FAK", "FOK"]
 MarketOrderType: TypeAlias = Literal["FAK", "FOK"]
-TickSize: TypeAlias = Literal["0.1", "0.01", "0.001", "0.0001"]
+TickSize: TypeAlias = Literal["0.1", "0.01", "0.005", "0.0025", "0.001", "0.0001"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -10,7 +10,14 @@ from polymarket.models.clob.builder import BuilderFeeRates
 from polymarket.models.types import CtfConditionId, TokenId, validate_ctf_condition_id
 
 _ALLOWED_TICK_SIZES: frozenset[Decimal] = frozenset(
-    {Decimal("0.1"), Decimal("0.01"), Decimal("0.001"), Decimal("0.0001")}
+    {
+        Decimal("0.1"),
+        Decimal("0.01"),
+        Decimal("0.005"),
+        Decimal("0.0025"),
+        Decimal("0.001"),
+        Decimal("0.0001"),
+    }
 )
 
 
