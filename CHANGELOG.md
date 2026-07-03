@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0-b13](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b12...polymarket-client-v0.1.0-b13) (2026-07-03)
+
+
+### Bug Fixes
+
+* **client:** require 3 minute GTD expirations ([d487124](https://github.com/Polymarket/py-sdk/commit/d4871249fa7f953c43edef18fa80d1e7bd07a8e1))
+* **client:** require 3 minute GTD expirations ([0c113cd](https://github.com/Polymarket/py-sdk/commit/0c113cde698b7b5cfbc1c6162b2d534fda5e436a))
+
 ## [0.1.0-b12](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b11...polymarket-client-v0.1.0-b12) (2026-07-02)
 
 
