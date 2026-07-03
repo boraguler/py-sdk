@@ -758,6 +758,10 @@ class PerpsSession:
         return position.size < 0
 
     def _on_message(self, raw: object) -> None:
+        if isinstance(raw, list):
+            for item in cast("list[object]", raw):
+                self._on_message(item)
+            return
         if self._handle_response(raw):
             return
         try:

@@ -187,6 +187,37 @@ def test_place_order_signs_command_and_returns_order_update() -> None:
     assert command["sig"].startswith("0x") and len(command["sig"]) == 132
 
 
+def test_batched_session_updates_feed_queue_and_order_waiters() -> None:
+    async def handler(ws: ServerConnection) -> None:
+        await _handshake(ws)
+        async for raw in ws:
+            message = json.loads(raw)
+            if _is_ping(message):
+                continue
+            await ws.send(json.dumps({"id": message["id"], "data": [{"status": "ok", "oid": 77}]}))
+            await ws.send(json.dumps([_order_update(76), _order_update(77, sequence=2)]))
+
+    async def run() -> None:
+        async with ws_server(handler) as url, _open_session(url) as session:
+            placement = await session.place_order(
+                instrument_id=1,
+                side="BUY",
+                price="0.5",
+                quantity="10",
+                time_in_force="gtc",
+            )
+            assert placement.order.id == 77
+
+            first = await asyncio.wait_for(session.__anext__(), timeout=5.0)
+            second = await asyncio.wait_for(session.__anext__(), timeout=5.0)
+            assert isinstance(first, PerpsOrderEvent)
+            assert first.payload.id == 76
+            assert isinstance(second, PerpsOrderEvent)
+            assert second.payload.id == 77
+
+    asyncio.run(asyncio.wait_for(run(), timeout=10.0))
+
+
 def test_place_order_with_tp_sl_groups_rows_and_returns_trigger_ids() -> None:
     from polymarket.models.perps.requests import PerpsTpSlTrigger
 
