@@ -1542,7 +1542,7 @@ class SecureClient:
         :meth:`place_limit_order` to create and post in one call.
 
         When ``expiration`` is provided, it must be a Unix timestamp at least
-        60 seconds in the future. Use extra buffer for immediate submissions to
+        3 minutes in the future. Use extra buffer for immediate submissions to
         account for latency and clock skew.
 
         Raises:
@@ -1632,7 +1632,7 @@ class SecureClient:
         """Create, sign, and post a limit order.
 
         When ``expiration`` is provided, it must be a Unix timestamp at least
-        60 seconds in the future. Use extra buffer for immediate submissions to
+        3 minutes in the future. Use extra buffer for immediate submissions to
         account for latency and clock skew.
 
         Raises:

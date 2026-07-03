@@ -154,7 +154,7 @@ def test_validate_limit_order_params_rejects_negative_expiration() -> None:
 
 
 def test_validate_limit_order_params_rejects_near_expiration() -> None:
-    with pytest.raises(UserInputError, match="60 seconds"):
+    with pytest.raises(UserInputError, match="180 seconds"):
         validate_limit_order_params(
             token_id="8501497",
             price="0.5",
@@ -169,13 +169,13 @@ def test_validate_limit_order_params_rejects_expiration_below_minimum(
 ) -> None:
     now = 1_700_000_000
     monkeypatch.setattr("polymarket._internal.actions.orders.limit.time.time", lambda: now)
-    with pytest.raises(UserInputError, match="60 seconds"):
+    with pytest.raises(UserInputError, match="180 seconds"):
         validate_limit_order_params(
             token_id="8501497",
             price="0.5",
             size="10",
             side="BUY",
-            expiration=now + 59,
+            expiration=now + 179,
         )
 
 
@@ -189,9 +189,9 @@ def test_validate_limit_order_params_accepts_minimum_expiration_boundary(
         price="0.5",
         size="10",
         side="BUY",
-        expiration=now + 60,
+        expiration=now + 180,
     )
-    assert params.expiration == now + 60
+    assert params.expiration == now + 180
 
 
 def test_validate_limit_order_params_accepts_far_expiration() -> None:

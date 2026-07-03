@@ -1775,7 +1775,7 @@ class AsyncSecureClient:
         :meth:`place_limit_order` to create and post in one call.
 
         When ``expiration`` is provided, it must be a Unix timestamp at least
-        60 seconds in the future. Use extra buffer for immediate submissions to
+        3 minutes in the future. Use extra buffer for immediate submissions to
         account for latency and clock skew.
         """
         params = validate_limit_order_params(
@@ -1885,7 +1885,7 @@ class AsyncSecureClient:
         """Create, sign, and post a limit order.
 
         When ``expiration`` is provided, it must be a Unix timestamp at least
-        60 seconds in the future. Use extra buffer for immediate submissions to
+        3 minutes in the future. Use extra buffer for immediate submissions to
         account for latency and clock skew.
         """
         signed = await self.create_limit_order(
