@@ -9,7 +9,8 @@ from polymarket._internal.actions.perps.paging import (
     NINETY_DAYS_MS,
     ONE_DAY_MS,
     as_json_dict,
-    decode_perps_cursor,
+    decode_perps_ascending_account_cursor,
+    decode_perps_descending_account_cursor,
     encode_perps_cursor,
     interval_ms,
     parse_data_envelope,
@@ -254,7 +255,9 @@ def _descending_history(
                 **initial_extra,
             }
         else:
-            state = decode_perps_cursor(cursor, kind=kind)
+            state = decode_perps_descending_account_cursor(
+                cursor, kind=kind, fund_statuses=_FUND_STATUSES
+            )
         params = {
             key: value
             for key, value in state.items()
@@ -322,7 +325,9 @@ def _ascending_history(
                 "end_timestamp": end_ms if end_ms is not None else int(time.time() * 1000),
             }
         else:
-            state = decode_perps_cursor(cursor, kind=kind)
+            state = decode_perps_ascending_account_cursor(
+                cursor, kind=kind, intervals=_PNL_INTERVALS
+            )
         data, more = parse_data_envelope(
             await api.get_json(
                 path,

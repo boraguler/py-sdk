@@ -8,7 +8,9 @@ from typing import Any, cast
 from polymarket._internal.actions.perps.paging import (
     ONE_DAY_MS,
     as_json_dict,
-    decode_perps_cursor,
+    decode_perps_candles_cursor,
+    decode_perps_funding_cursor,
+    decode_perps_trades_cursor,
     encode_perps_cursor,
     interval_ms,
     parse_data_envelope,
@@ -141,7 +143,7 @@ def list_candles(
                 "end_timestamp": end_ms if end_ms is not None else now,
             }
         else:
-            state = decode_perps_cursor(cursor, kind="perpsCandles")
+            state = decode_perps_candles_cursor(cursor, intervals=_KLINE_INTERVALS)
         payload = await perps.get_json(
             "/v1/info/klines",
             params={
@@ -186,7 +188,7 @@ def list_funding_history(
                 "end_timestamp": end_ms if end_ms is not None else now,
             }
         else:
-            state = decode_perps_cursor(cursor, kind="perpsFundingHistory")
+            state = decode_perps_funding_cursor(cursor)
         payload = await perps.get_json(
             "/v1/info/funding",
             params={
@@ -230,7 +232,7 @@ def list_trades(
                 "seen_trade_ids": [],
             }
         else:
-            state = decode_perps_cursor(cursor, kind="perpsTrades")
+            state = decode_perps_trades_cursor(cursor)
         payload = await perps.get_json(
             "/v1/info/trades",
             params={

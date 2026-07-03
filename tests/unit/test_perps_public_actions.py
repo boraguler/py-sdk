@@ -1,6 +1,7 @@
 """Perps public read and pagination behavior against a mocked transport."""
 
 import asyncio
+import base64
 import json
 from collections.abc import Callable
 from decimal import Decimal
@@ -26,6 +27,10 @@ def _transport(handler: Callable[[httpx.Request], httpx.Response]) -> AsyncTrans
 
 def _query(request: httpx.Request) -> dict[str, str]:
     return {key: values[0] for key, values in parse_qs(urlparse(str(request.url)).query).items()}
+
+
+def _cursor(state: dict[str, Any]) -> str:
+    return base64.b64encode(json.dumps(state, separators=(",", ":")).encode()).decode()
 
 
 def test_list_candles_steps_forward_by_interval() -> None:
@@ -161,12 +166,55 @@ def test_trades_cursor_is_bound_to_its_endpoint() -> None:
         transport = _transport(handler)
         try:
             paginator = perps_public.list_trades(transport, instrument_id=1)
-            candles_cursor = json.dumps({"kind": "perpsCandles"})
-            import base64
-
-            bogus = base64.b64encode(candles_cursor.encode()).decode()
+            bogus = _cursor({"kind": "perpsCandles"})
             with pytest.raises(UserInputError, match="cursor"):
                 await paginator.from_cursor(bogus).first_page()
+        finally:
+            await transport.close()
+
+    asyncio.run(run())
+
+
+def test_public_paginators_reject_malformed_cursor_fields() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("must not fetch with a malformed cursor")
+
+    async def run() -> None:
+        transport = _transport(handler)
+        try:
+            trades = perps_public.list_trades(transport, instrument_id=1)
+            bad_trade_cursors: list[dict[str, Any]] = [
+                {
+                    "kind": "perpsTrades",
+                    "start_timestamp": 0,
+                    "end_timestamp": 1,
+                    "seen_trade_ids": [],
+                },
+                {
+                    "kind": "perpsTrades",
+                    "instrument_id": 1,
+                    "start_timestamp": 0,
+                    "end_timestamp": 1,
+                    "seen_trade_ids": ["bad"],
+                },
+            ]
+            for state in bad_trade_cursors:
+                with pytest.raises(UserInputError, match="cursor"):
+                    await trades.from_cursor(_cursor(state)).first_page()
+
+            candles = perps_public.list_candles(transport, instrument_id=1, interval="1m")
+            with pytest.raises(UserInputError, match="cursor"):
+                await candles.from_cursor(
+                    _cursor(
+                        {
+                            "kind": "perpsCandles",
+                            "instrument_id": 1,
+                            "interval": "30m",
+                            "start_timestamp": 0,
+                            "end_timestamp": 1,
+                        }
+                    )
+                ).first_page()
         finally:
             await transport.close()
 
