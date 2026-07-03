@@ -41,6 +41,7 @@ class AsyncClientContext:
     data: AsyncTransport
     rfq: AsyncTransport
     clob: AsyncTransport
+    perps: AsyncTransport
 
 
 @dataclass(frozen=True, slots=True)

@@ -74,6 +74,9 @@ from polymarket._internal.actions.orders.typed_data import (
     build_order_typed_data,
 )
 from polymarket._internal.actions.orders.types import OrderDraft
+from polymarket._internal.actions.perps import credentials as _perps_credentials
+from polymarket._internal.actions.perps import funds as _perps_funds
+from polymarket._internal.actions.perps import public as _perps_actions
 from polymarket._internal.actions.relayer.approvals import (
     resolve_missing_trading_approval_calls,
 )
@@ -204,6 +207,21 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
+from polymarket.models.perps import (
+    PerpsBook,
+    PerpsBookDepth,
+    PerpsCandle,
+    PerpsCredentials,
+    PerpsFeeScheduleEntry,
+    PerpsFundingRate,
+    PerpsInstrument,
+    PerpsInstrumentCategory,
+    PerpsKlineInterval,
+    PerpsMarketEvent,
+    PerpsTicker,
+    PerpsTrade,
+    PerpsWithdrawalId,
+)
 from polymarket.models.rtds_events import (
     CommentsEvent,
     CryptoPricesEvent,
@@ -218,6 +236,7 @@ from polymarket.streams._specs import (
     CryptoPricesSpec,
     EquityPricesSpec,
     MarketSpec,
+    PerpsSpec,
     SecureSubscription,
     SportsSpec,
     UserSpec,
@@ -231,9 +250,13 @@ from polymarket.transactions import (
 from polymarket.types import EvmAddress, HexString
 
 if TYPE_CHECKING:
+    from datetime import datetime, timedelta
+
+    from polymarket._internal.perps_session import PerpsSession
     from polymarket._internal.rfq import RfqQuoterSession
     from polymarket._internal.streams.clob.market import ClobMarketStreamManager
     from polymarket._internal.streams.clob.user import ClobUserStreamManager
+    from polymarket._internal.streams.perps.market import PerpsMarketStreamManager
     from polymarket._internal.streams.rtds.manager import RtdsStreamManager
     from polymarket._internal.streams.sports.manager import SportsStreamManager
     from polymarket.rfq import RfqSession
@@ -278,6 +301,8 @@ class AsyncSecureClient:
         self._sports_manager: SportsStreamManager | None = None
         self._rtds_manager: RtdsStreamManager | None = None
         self._user_manager: ClobUserStreamManager | None = None
+        self._perps_manager: PerpsMarketStreamManager | None = None
+        self._perps_sessions: set[PerpsSession] = set()
         self._rfq_session: RfqQuoterSession | None = None
         self._rfq_session_connecting: RfqQuoterSession | None = None
         self._rfq_session_opening: asyncio.Task[RfqQuoterSession] | None = None
@@ -438,6 +463,7 @@ class AsyncSecureClient:
             data=data,
             rfq=rfq,
             clob=clob,
+            perps=AsyncTransport(base_url=environment.perps_url, logger=logger),
             signer=signer,
             credentials=credentials,
             secure_clob=secure_clob,
@@ -489,6 +515,8 @@ class AsyncSecureClient:
         self, specs: EquityPricesSpec, /
     ) -> SubscriptionHandle[EquityPricesEvent]: ...
     @overload
+    async def subscribe(self, specs: PerpsSpec, /) -> SubscriptionHandle[PerpsMarketEvent]: ...
+    @overload
     async def subscribe(self, specs: UserSpec, /) -> SubscriptionHandle[UserEvent]: ...
     @overload
     async def subscribe(
@@ -511,15 +539,21 @@ class AsyncSecureClient:
         self, specs: Sequence[EquityPricesSpec], /
     ) -> SubscriptionHandle[EquityPricesEvent]: ...
     @overload
+    async def subscribe(
+        self, specs: Sequence[PerpsSpec], /
+    ) -> SubscriptionHandle[PerpsMarketEvent]: ...
+    @overload
     async def subscribe(self, specs: Sequence[UserSpec], /) -> SubscriptionHandle[UserEvent]: ...
     @overload
     async def subscribe(
         self, specs: Sequence[SecureSubscription], /
-    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent]: ...
+    ) -> SubscriptionHandle[
+        MarketEvent | SportsEvent | RtdsEvent | PerpsMarketEvent | UserEvent
+    ]: ...
     async def subscribe(
         self,
         specs: SecureSubscription | Sequence[SecureSubscription],
-    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent]:
+    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | PerpsMarketEvent | UserEvent]:
         """Subscribe to one or more public or authenticated realtime streams.
 
         Pass a single subscription spec for one stream or a sequence of specs to
@@ -545,6 +579,8 @@ class AsyncSecureClient:
                     handles.append(await self._get_sports_manager().subscribe())
                 elif isinstance(spec, UserSpec):
                     handles.append(await self._get_user_manager().subscribe(markets=spec.markets))
+                elif isinstance(spec, PerpsSpec):
+                    handles.append(await self._get_perps_manager().subscribe(spec))
                 elif isinstance(spec, CommentsSpec | CryptoPricesSpec | EquityPricesSpec):  # pyright: ignore[reportUnnecessaryIsInstance]
                     handles.append(await self._get_rtds_manager().subscribe(spec))
                 else:
@@ -556,13 +592,17 @@ class AsyncSecureClient:
             raise
         if len(handles) == 1:
             return cast(
-                SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent],
+                SubscriptionHandle[
+                    MarketEvent | SportsEvent | RtdsEvent | PerpsMarketEvent | UserEvent
+                ],
                 handles[0],
             )
         from polymarket._internal.streams.merged_handle import MergedSubscriptionHandle
 
         return cast(
-            SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | UserEvent],
+            SubscriptionHandle[
+                MarketEvent | SportsEvent | RtdsEvent | PerpsMarketEvent | UserEvent
+            ],
             MergedSubscriptionHandle(handles),
         )
 
@@ -607,8 +647,139 @@ class AsyncSecureClient:
             )
         return self._user_manager
 
+    def _get_perps_manager(self) -> "PerpsMarketStreamManager":
+        if self._perps_manager is None:
+            from polymarket._internal.streams.perps.market import PerpsMarketStreamManager
+
+            self._perps_manager = PerpsMarketStreamManager(
+                url=self._ctx.environment.perps_ws_url,
+                logger=self._streams_logger,
+            )
+        return self._perps_manager
+
     async def _resolve_api_key_credentials(self) -> ApiKeyCreds:
         return self._ctx.credentials
+
+    async def open_perps_session(
+        self,
+        *,
+        credentials: PerpsCredentials | None = None,
+        expires_in: "timedelta | None" = None,
+        label: str | None = None,
+    ) -> "PerpsSession":
+        """Open an authenticated Perps account session.
+
+        With no arguments, new delegated session credentials are created with
+        a wallet signature and expire after one week. Pass ``expires_in`` for
+        a different credential lifetime, or pass previously returned
+        ``credentials`` to validate and resume them without a new wallet
+        signature.
+
+        Returns:
+            A connected session. Use it to place and cancel orders, read
+            account state, and iterate over realtime account events. Close it
+            when finished.
+        """
+        from polymarket._internal.perps_session import PerpsSession
+
+        if credentials is not None:
+            if expires_in is not None or label is not None:
+                raise UserInputError("expires_in and label cannot be combined with credentials")
+            resolved = await _perps_credentials.resume_credentials(
+                self._ctx.perps,
+                signer_address=self._ctx.signer.address,
+                credentials=credentials,
+            )
+        else:
+            resolved = await _perps_credentials.create_credentials(
+                self._ctx.perps,
+                signer=self._ctx.signer,
+                chain_id=self._ctx.environment.chain_id,
+                expires_in=(
+                    expires_in
+                    if expires_in is not None
+                    else _perps_credentials.DEFAULT_CREDENTIAL_TTL
+                ),
+                label=label,
+            )
+        session = PerpsSession(
+            chain_id=self._ctx.environment.chain_id,
+            credentials=resolved,
+            rest_url=self._ctx.environment.perps_url,
+            ws_url=self._ctx.environment.perps_ws_url,
+            logger=self._streams_logger,
+            on_close=self._perps_sessions.discard,
+        )
+        self._perps_sessions.add(session)
+        try:
+            await session.open()
+        except BaseException:
+            await session.close()
+            raise
+        return session
+
+    async def revoke_perps_credentials(self, *, proxy: str) -> None:
+        """Revoke delegated Perps session credentials by proxy address.
+
+        The revocation is signed by the owner account and also works for
+        credentials that are not currently in use.
+        """
+        await _perps_credentials.revoke_credentials(
+            self._ctx.perps,
+            signer=self._ctx.signer,
+            chain_id=self._ctx.environment.chain_id,
+            proxy=proxy,
+        )
+
+    async def deposit_to_perps(
+        self, *, amount: int, metadata: str | None = None
+    ) -> TransactionHandle:
+        """Deposit collateral into the Perps account.
+
+        The deposit sends approved collateral into the Perps deposit contract
+        and credits the authenticated signer account. It does not approve
+        collateral spending; approve the Perps deposit contract first when
+        allowance is missing.
+
+        Args:
+            amount: Base-units collateral amount to deposit.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
+        env = self._ctx.environment
+        call = _perps_funds.perps_deposit_call(
+            deposit_contract=cast(EvmAddress, to_checksum_address(env.perps_deposit_contract)),
+            token=cast(EvmAddress, to_checksum_address(env.collateral_token)),
+            amount=amount,
+            to=cast(EvmAddress, self._ctx.signer.address),
+        )
+        resolved_metadata = metadata if metadata is not None else f"Deposit {amount} to Perps"
+        return await self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    async def withdraw_from_perps(self, *, amount: int) -> PerpsWithdrawalId:
+        """Request a Perps withdrawal to the authenticated wallet.
+
+        The withdrawal is signed by the owner account and sends funds to the
+        wallet address associated with this client.
+
+        Args:
+            amount: Base-units collateral amount to withdraw.
+
+        Returns:
+            The withdrawal identifier. Track its status with the session's
+            ``list_withdrawals``.
+        """
+        env = self._ctx.environment
+        return await _perps_funds.withdraw_from_perps(
+            self._ctx.perps,
+            signer=self._ctx.signer,
+            chain_id=env.chain_id,
+            deposit_contract=env.perps_deposit_contract,
+            token=env.collateral_token,
+            amount=amount,
+            to=str(self._ctx.wallet),
+        )
 
     def open_rfq_session(self) -> "RfqSession":
         """Open an RFQ event session.
@@ -687,11 +858,14 @@ class AsyncSecureClient:
             self._sports_manager,
             self._rtds_manager,
             self._user_manager,
+            self._perps_manager,
+            *tuple(self._perps_sessions),
             _RfqSessionCloser(self._close_rfq_session),
             ctx.gamma,
             ctx.data,
             ctx.rfq,
             ctx.clob,
+            ctx.perps,
             ctx.secure_clob,
             ctx.relayer,
             ctx.rpc,
@@ -2567,6 +2741,99 @@ class AsyncSecureClient:
         )
         return _rewards_actions.parse_reward_percentages(
             await self._ctx.secure_clob.get_json(path, params=params)
+        )
+
+    async def fetch_perps_instruments(
+        self,
+        *,
+        instrument_id: int | None = None,
+        category: PerpsInstrumentCategory | None = None,
+    ) -> tuple[PerpsInstrument, ...]:
+        """Fetch Perps instruments, optionally filtered by id or category."""
+        return await _perps_actions.fetch_instruments(
+            self._ctx.perps, instrument_id=instrument_id, category=category
+        )
+
+    async def fetch_perps_ticker(self, *, instrument_id: int) -> PerpsTicker:
+        """Fetch the current Perps ticker for an instrument."""
+        return await _perps_actions.fetch_ticker(self._ctx.perps, instrument_id=instrument_id)
+
+    async def fetch_perps_tickers(
+        self, *, instrument_id: int | None = None
+    ) -> tuple[PerpsTicker, ...]:
+        """Fetch current Perps tickers."""
+        return await _perps_actions.fetch_tickers(self._ctx.perps, instrument_id=instrument_id)
+
+    async def fetch_perps_book(
+        self, *, instrument_id: int, depth: PerpsBookDepth = 100
+    ) -> PerpsBook:
+        """Fetch a Perps order book snapshot."""
+        return await _perps_actions.fetch_book(
+            self._ctx.perps, instrument_id=instrument_id, depth=depth
+        )
+
+    async def fetch_perps_fees(self) -> tuple[PerpsFeeScheduleEntry, ...]:
+        """Fetch the Perps fee schedule."""
+        return await _perps_actions.fetch_fees(self._ctx.perps)
+
+    def list_perps_candles(
+        self,
+        *,
+        instrument_id: int,
+        interval: PerpsKlineInterval,
+        start: "datetime | int | None" = None,
+        end: "datetime | int | None" = None,
+    ) -> AsyncPaginator[PerpsCandle]:
+        """List Perps candles for an instrument.
+
+        Defaults to the past 24 hours when ``start`` is omitted. ``start`` and
+        ``end`` accept a ``datetime`` or an epoch-milliseconds int.
+
+        Returns:
+            An async paginator over matching candles.
+        """
+        return _perps_actions.list_candles(
+            self._ctx.perps,
+            instrument_id=instrument_id,
+            interval=interval,
+            start=start,
+            end=end,
+        )
+
+    def list_perps_funding_history(
+        self,
+        *,
+        instrument_id: int,
+        start: "datetime | int | None" = None,
+        end: "datetime | int | None" = None,
+    ) -> AsyncPaginator[PerpsFundingRate]:
+        """List Perps funding-rate history for an instrument.
+
+        Defaults to the past 24 hours when ``start`` is omitted.
+
+        Returns:
+            An async paginator over funding-rate observations.
+        """
+        return _perps_actions.list_funding_history(
+            self._ctx.perps, instrument_id=instrument_id, start=start, end=end
+        )
+
+    def list_perps_trades(
+        self,
+        *,
+        instrument_id: int,
+        start: "datetime | int | None" = None,
+        end: "datetime | int | None" = None,
+    ) -> AsyncPaginator[PerpsTrade]:
+        """List recent public Perps trades for an instrument.
+
+        Defaults to the past 24 hours when ``start`` is omitted.
+
+        Returns:
+            An async paginator over matching trades.
+        """
+        return _perps_actions.list_trades(
+            self._ctx.perps, instrument_id=instrument_id, start=start, end=end
         )
 
 

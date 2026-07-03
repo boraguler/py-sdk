@@ -13,6 +13,16 @@ _CRYPTO_PRICES_TOPICS: frozenset[str] = frozenset(
     {"prices.crypto.binance", "prices.crypto.chainlink"}
 )
 _EQUITY_EVENT_TYPES: frozenset[str] = frozenset({"update", "subscribe"})
+_PERPS_CANDLE_INTERVALS: frozenset[str] = frozenset({"1m", "5m", "15m", "1h", "4h", "1d", "1w"})
+
+
+def _validate_perps_instrument_id(instrument_id: object, *, optional: bool = False) -> None:
+    if instrument_id is None and optional:
+        return
+    if isinstance(instrument_id, bool) or not isinstance(instrument_id, int):
+        raise UserInputError("instrument_id must be an int")
+    if instrument_id < 0:
+        raise UserInputError("instrument_id must be non-negative")
 
 
 CommentsEventType = Literal[
@@ -184,25 +194,111 @@ class UserSpec:
         object.__setattr__(self, "markets", tuple(normalized) if normalized else None)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PerpsTradesSpec:
+    """Subscribe to public trades for one Perps instrument."""
+
+    instrument_id: int
+    topic: Literal["perps.trades"] = field(default="perps.trades", init=False)
+
+    def __post_init__(self) -> None:
+        _validate_perps_instrument_id(self.instrument_id)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PerpsBboSpec:
+    """Subscribe to best bid/ask updates for one Perps instrument."""
+
+    instrument_id: int
+    topic: Literal["perps.bbo"] = field(default="perps.bbo", init=False)
+
+    def __post_init__(self) -> None:
+        _validate_perps_instrument_id(self.instrument_id)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PerpsBookSpec:
+    """Subscribe to order book deltas for one Perps instrument."""
+
+    instrument_id: int
+    topic: Literal["perps.book"] = field(default="perps.book", init=False)
+
+    def __post_init__(self) -> None:
+        _validate_perps_instrument_id(self.instrument_id)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PerpsCandlesSpec:
+    """Subscribe to streaming candles for one Perps instrument and interval."""
+
+    instrument_id: int
+    interval: Literal["1m", "5m", "15m", "1h", "4h", "1d", "1w"]
+    topic: Literal["perps.candles"] = field(default="perps.candles", init=False)
+
+    def __post_init__(self) -> None:
+        _validate_perps_instrument_id(self.instrument_id)
+        if self.interval not in _PERPS_CANDLE_INTERVALS:
+            raise UserInputError(
+                f"interval must be one of {sorted(_PERPS_CANDLE_INTERVALS)}, got {self.interval!r}"
+            )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PerpsTickersSpec:
+    """Subscribe to ticker updates for one Perps instrument or all instruments.
+
+    When ``instrument_id`` is omitted, the subscription receives ticker
+    updates for every instrument.
+    """
+
+    instrument_id: int | None = None
+    topic: Literal["perps.tickers"] = field(default="perps.tickers", init=False)
+
+    def __post_init__(self) -> None:
+        _validate_perps_instrument_id(self.instrument_id, optional=True)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PerpsStatisticsSpec:
+    """Subscribe to statistics updates for one Perps instrument or all instruments.
+
+    When ``instrument_id`` is omitted, the subscription receives statistics
+    updates for every instrument.
+    """
+
+    instrument_id: int | None = None
+    topic: Literal["perps.statistics"] = field(default="perps.statistics", init=False)
+
+    def __post_init__(self) -> None:
+        _validate_perps_instrument_id(self.instrument_id, optional=True)
+
+
 RtdsSpec = CommentsSpec | CryptoPricesSpec | EquityPricesSpec
-PublicSubscription = MarketSpec | SportsSpec | RtdsSpec
+PerpsSpec = (
+    PerpsTradesSpec
+    | PerpsBboSpec
+    | PerpsBookSpec
+    | PerpsCandlesSpec
+    | PerpsTickersSpec
+    | PerpsStatisticsSpec
+)
+PublicSubscription = MarketSpec | SportsSpec | RtdsSpec | PerpsSpec
 SecureSubscription = PublicSubscription | UserSpec
 Subscription = SecureSubscription
 
 
-_SPEC_TYPES: tuple[
-    type[MarketSpec],
-    type[SportsSpec],
-    type[CommentsSpec],
-    type[CryptoPricesSpec],
-    type[EquityPricesSpec],
-    type[UserSpec],
-] = (
+_SPEC_TYPES: tuple[type[Subscription], ...] = (
     MarketSpec,
     SportsSpec,
     CommentsSpec,
     CryptoPricesSpec,
     EquityPricesSpec,
+    PerpsTradesSpec,
+    PerpsBboSpec,
+    PerpsBookSpec,
+    PerpsCandlesSpec,
+    PerpsTickersSpec,
+    PerpsStatisticsSpec,
     UserSpec,
 )
 
@@ -236,6 +332,13 @@ __all__ = [
     "EquityPricesSpec",
     "MarketSpec",
     "ParentEntityType",
+    "PerpsBboSpec",
+    "PerpsBookSpec",
+    "PerpsCandlesSpec",
+    "PerpsSpec",
+    "PerpsStatisticsSpec",
+    "PerpsTickersSpec",
+    "PerpsTradesSpec",
     "RtdsSpec",
     "SportsSpec",
     "Subscription",

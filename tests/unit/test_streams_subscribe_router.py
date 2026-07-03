@@ -47,11 +47,16 @@ def _env_with_all(market_url: str, sports_url: str, rtds_url: str) -> Environmen
     return _env_with(clob_market_ws_url=market_url, sports_ws_url=sports_url, rtds_ws_url=rtds_url)
 
 
+def _env_with_perps_ws(url: str) -> Environment:
+    return _env_with(perps_ws_url=url)
+
+
 def _env_with(
     *,
     clob_market_ws_url: str = PRODUCTION.clob_market_ws_url,
     sports_ws_url: str = PRODUCTION.sports_ws_url,
     rtds_ws_url: str = PRODUCTION.rtds_ws_url,
+    perps_ws_url: str = PRODUCTION.perps_ws_url,
 ) -> Environment:
     return Environment(
         name="test",
@@ -85,6 +90,7 @@ def _env_with(
         rtds_ws_url=rtds_ws_url,
         sports_ws_url=sports_ws_url,
         rpc_url=PRODUCTION.rpc_url,
+        perps_ws_url=perps_ws_url,
     )
 
 
@@ -631,3 +637,53 @@ def test_user_spec_normalizes_empty_markets_to_none() -> None:
     assert UserSpec(markets=[]).markets is None
     assert UserSpec(markets=()).markets is None
     assert UserSpec().markets is None
+
+
+def test_subscribe_routes_perps_specs_to_perps_stream() -> None:
+    from polymarket.models.perps.events import PerpsBboEvent
+    from polymarket.streams import PerpsBboSpec
+
+    received: list[dict[str, Any]] = []
+
+    async def handler(ws: ServerConnection) -> None:
+        raw = await ws.recv()
+        assert isinstance(raw, str)
+        received.append(json.loads(raw))
+        await ws.send(
+            json.dumps(
+                {
+                    "ch": "bbo::3",
+                    "ts": 1751500000000,
+                    "sq": 1,
+                    "data": {"iid": 3, "bp": "0.5", "bq": "10", "ap": "0.6", "aq": "4"},
+                }
+            )
+        )
+        async for _ in ws:
+            pass
+
+    async def run() -> int:
+        async with ws_server(handler) as url:
+            client = AsyncPublicClient(environment=_env_with_perps_ws(url))
+            try:
+                async with await client.subscribe(PerpsBboSpec(instrument_id=3)) as stream:
+                    event = await asyncio.wait_for(stream.__aiter__().__anext__(), timeout=2.0)
+                    assert isinstance(event, PerpsBboEvent)
+                    return int(event.payload.instrument_id)
+            finally:
+                await client.close()
+
+    instrument_id = asyncio.run(run())
+    assert instrument_id == 3
+    assert received[0] == {"id": 1, "req": "sub", "chs": ["bbo::3"]}
+
+
+def test_perps_spec_validation_rejects_bad_inputs() -> None:
+    from polymarket.streams import PerpsCandlesSpec, PerpsTradesSpec
+
+    with pytest.raises(UserInputError):
+        PerpsTradesSpec(instrument_id=-1)
+    with pytest.raises(UserInputError):
+        PerpsTradesSpec(instrument_id="1")  # pyright: ignore[reportArgumentType]
+    with pytest.raises(UserInputError):
+        PerpsCandlesSpec(instrument_id=1, interval="1s")  # pyright: ignore[reportArgumentType]
