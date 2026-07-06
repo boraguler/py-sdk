@@ -105,7 +105,9 @@ from polymarket._internal.actions.relayer.positions import (
     MarketPositionContext,
     canonicalize_combo_legs,
     decode_combo_outcome_position_id,
+    derive_combo_outcome_position_ids,
     derive_combo_position_context,
+    normalize_batch_merge_position_request,
     normalize_market_position_context,
     parse_market_id,
     resolve_merge_amount_from_balances,
@@ -226,6 +228,7 @@ from polymarket.streams._specs import (
 from polymarket.transactions import (
     DeprecatedTransactionHandle,
     EoaTransactionHandle,
+    MergePositionRequest,
     TransactionHandle,
 )
 from polymarket.types import EvmAddress, HexString
@@ -2092,6 +2095,24 @@ class AsyncSecureClient:
         """
         return True
 
+    async def execute_transaction(
+        self,
+        *,
+        calls: Sequence[TransactionCall],
+        metadata: str | None = None,
+    ) -> TransactionHandle:
+        """Submit one or more transaction calls for the authenticated wallet.
+
+        Use this low-level escape hatch to combine supported transaction calls
+        differently than the higher-level SDK workflows. Calls are executed in order.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
+        return await self._dispatch_calls(
+            list(calls), metadata=metadata if metadata is not None else "Execute transaction"
+        )
+
     async def _broadcast_eoa_call(self, call: TransactionCall) -> EoaTransactionHandle:
         env = self._ctx.environment
         return await broadcast_eoa_call(
@@ -2290,6 +2311,101 @@ class AsyncSecureClient:
             else f"Merge {resolved_amount} positions for condition {context.condition_id}"
         )
         return await self._dispatch_single_call(call, metadata=resolved_metadata)
+
+    async def merge_multiple_positions(
+        self,
+        *,
+        positions: Sequence[MergePositionRequest],
+        metadata: str | None = None,
+    ) -> TransactionHandle:
+        """Merge multiple market positions or multiple combo positions back into collateral.
+
+        Args:
+            positions: Position merge requests. Use ``position_id`` for combo
+                positions, or ``condition_id`` / ``market_id`` for market positions.
+                Do not mix combo and market requests in the same batch.
+                Omit ``amount`` or pass ``"max"`` to merge the largest available
+                balanced amount for that condition.
+
+        Returns:
+            A transaction handle. Await ``wait()`` to wait for a terminal outcome.
+        """
+        if not positions:
+            raise UserInputError("positions must include at least one merge request")
+
+        env = self._ctx.environment
+        normalized = [
+            normalize_batch_merge_position_request(cast(Mapping[str, object], position))
+            for position in positions
+        ]
+        batch_kinds = {position.kind for position in normalized}
+        if len(batch_kinds) != 1:
+            raise UserInputError("Cannot mix market and combo positions in one merge batch")
+
+        seen_conditions: set[str] = set()
+        calls: list[TransactionCall] = []
+        for position in normalized:
+            if position.kind == "combo":
+                assert position.position_id is not None
+                decoded = decode_combo_outcome_position_id(position.position_id)
+                condition_key = str(decoded.condition_id)
+                if condition_key in seen_conditions:
+                    raise UserInputError("position_ids must reference distinct combo conditions")
+                seen_conditions.add(condition_key)
+                token_ids = derive_combo_outcome_position_ids(decoded.condition_id)
+                balance_call = erc1155_balance_of_batch_call(
+                    token_address=cast(EvmAddress, env.position_manager),
+                    owners=[self._ctx.wallet, self._ctx.wallet],
+                    token_ids=list(token_ids),
+                )
+                balances = decode_erc1155_balance_of_batch_result(
+                    await self._ctx.rpc.eth_call(to=str(balance_call.to), data=balance_call.data)
+                )
+                resolved_amount = resolve_merge_amount_from_balances(
+                    decoded.condition_id, balances, position.amount
+                )
+                calls.append(
+                    merge_v2_call(
+                        router=cast(EvmAddress, env.protocol_v2_router),
+                        condition_id=decoded.condition_id,
+                        amount=resolved_amount,
+                    )
+                )
+                continue
+
+            context = await self._resolve_market_position_context(
+                condition_id=position.condition_id,
+                market_id=position.market_id,
+            )
+            condition_key = str(context.condition_id)
+            if condition_key in seen_conditions:
+                raise UserInputError("positions must reference distinct market conditions")
+            seen_conditions.add(condition_key)
+            balance_call = erc1155_balance_of_batch_call(
+                token_address=context.position_erc1155_address,
+                owners=[self._ctx.wallet, self._ctx.wallet],
+                token_ids=[str(token_id) for token_id in context.token_ids],
+            )
+            balances = decode_erc1155_balance_of_batch_result(
+                await self._ctx.rpc.eth_call(to=str(balance_call.to), data=balance_call.data)
+            )
+            resolved_amount = resolve_merge_amount_from_balances(
+                context.condition_id, balances, position.amount
+            )
+            calls.append(
+                merge_positions_call(
+                    target=context.adapter_address,
+                    collateral=cast(EvmAddress, env.collateral_token),
+                    condition_id=context.condition_id,
+                    amount=resolved_amount,
+                )
+            )
+
+        batch_label = "combo positions" if "combo" in batch_kinds else "positions"
+        resolved_metadata = (
+            metadata if metadata is not None else f"Merge {len(calls)} {batch_label}"
+        )
+        return await self.execute_transaction(calls=calls, metadata=resolved_metadata)
 
     async def redeem_positions(
         self,
