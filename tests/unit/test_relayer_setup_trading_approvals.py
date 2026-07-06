@@ -39,7 +39,7 @@ def test_setup_trading_approvals_bundles_required_calls_for_deposit_wallet() -> 
                     "transactionID": "tx-setup",
                 },
                 "/v1/account/transactions/tx-setup": {
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transaction_hash": "0x" + "ab" * 32,
                     "transaction_id": "tx-setup",
                 },
@@ -149,7 +149,7 @@ def test_setup_trading_approvals_uses_safe_multisend_for_safe() -> None:
                     "transactionID": "tx-setup-safe",
                 },
                 "/v1/account/transactions/tx-setup-safe": {
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transaction_hash": "0x" + "cd" * 32,
                     "transaction_id": "tx-setup-safe",
                 },
