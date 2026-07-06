@@ -2477,6 +2477,7 @@ class AsyncSecureClient:
         context = await self._resolve_market_position_context(
             condition_id=condition_id,
             market_id=market_id,
+            closed=True,
         )
         call = ctf_redeem_positions_call(
             ctf=context.adapter_address,
@@ -2495,19 +2496,32 @@ class AsyncSecureClient:
         *,
         condition_id: str | None = None,
         market_id: str | None = None,
+        closed: bool | None = None,
     ) -> MarketPositionContext:
         if (condition_id is None) == (market_id is None):
             raise UserInputError("Provide exactly one of condition_id or market_id")
         env = self._ctx.environment
         if condition_id is not None:
             context = f"condition {condition_id}"
-            page = await self.list_markets(condition_ids=[condition_id], page_size=1).first_page()
+            if closed is None:
+                page = await self.list_markets(
+                    condition_ids=[condition_id], page_size=1
+                ).first_page()
+            else:
+                page = await self.list_markets(
+                    condition_ids=[condition_id], closed=closed, page_size=1
+                ).first_page()
         else:
             assert market_id is not None
             context = f"market {market_id}"
-            page = await self.list_markets(
-                ids=[parse_market_id(market_id)], page_size=1
-            ).first_page()
+            if closed is None:
+                page = await self.list_markets(
+                    ids=[parse_market_id(market_id)], page_size=1
+                ).first_page()
+            else:
+                page = await self.list_markets(
+                    ids=[parse_market_id(market_id)], closed=closed, page_size=1
+                ).first_page()
         markets = page.items
         if not markets:
             raise UserInputError(f"No market found for {context}")

@@ -72,13 +72,16 @@ def test_redeem_positions_uses_collateral_adapter_when_neg_risk_false() -> None:
 
 def test_redeem_positions_uses_neg_risk_collateral_adapter_when_neg_risk_true() -> None:
     captured: list[httpx.Request] = []
+    market_calls: list[dict[str, object]] = []
+
+    def list_markets_stub(**kwargs: object) -> _StubPaginator:
+        market_calls.append(kwargs)
+        return _StubPaginator((_market(neg_risk=True),))
 
     async def run() -> None:
         client = await make_deposit_client()
         _setup_relayer(client, captured, "tx-redeem-nr")
-        client.list_markets = lambda **_: _StubPaginator(  # type: ignore[method-assign]
-            (_market(neg_risk=True),)
-        )
+        client.list_markets = list_markets_stub  # type: ignore[method-assign]
         client.list_positions = _fail_list_positions  # type: ignore[method-assign]
         try:
             await client.redeem_positions(condition_id=_CONDITION_ID)
@@ -86,6 +89,7 @@ def test_redeem_positions_uses_neg_risk_collateral_adapter_when_neg_risk_true() 
             await client.close()
 
     asyncio.run(run())
+    assert market_calls == [{"condition_ids": [_CONDITION_ID], "closed": True, "page_size": 1}]
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     body = request_json(submit_calls[0])
     inner = body["depositWalletParams"]["calls"][0]
@@ -137,7 +141,7 @@ def test_redeem_positions_accepts_market_id() -> None:
             await client.close()
 
     asyncio.run(run())
-    assert market_calls == [{"ids": [123], "page_size": 1}]
+    assert market_calls == [{"ids": [123], "closed": True, "page_size": 1}]
     submit_calls = [r for r in captured if urlparse(str(r.url)).path == "/submit"]
     assert len(submit_calls) == 1
 

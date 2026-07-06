@@ -553,13 +553,20 @@ def test_merge_positions_routes_through_collateral_adapter() -> None:
 
 def test_redeem_positions_routes_through_neg_risk_collateral_adapter() -> None:
     captured: list[httpx.Request] = []
+    market_calls: list[dict[str, object]] = []
+    condition_id = "0x" + "11" * 32
+
+    def list_markets_stub(**kwargs: object):  # type: ignore[no-untyped-def]
+        market_calls.append(kwargs)
+        return _stub_page((_stub_market(_CONDITION_ID, neg_risk=True),))
 
     with make_sync_deposit_client() as client:
-        client.list_markets = lambda **_: _stub_page((_stub_market(_CONDITION_ID, neg_risk=True),))  # type: ignore[method-assign]
+        client.list_markets = list_markets_stub  # type: ignore[method-assign]
         client.list_positions = _fail_list_positions  # type: ignore[method-assign]
         install_sync_relayer_handler(client, _deposit_relayer_handler(captured))
-        client.redeem_positions(condition_id="0x" + "11" * 32)
+        client.redeem_positions(condition_id=condition_id)
 
+    assert market_calls == [{"condition_ids": [condition_id], "closed": True, "page_size": 1}]
     submit = [r for r in captured if urlparse(str(r.url)).path == "/submit"][0]
     body = request_json(submit)
     inner = body["depositWalletParams"]["calls"][0]
@@ -580,7 +587,7 @@ def test_redeem_positions_market_id_resolves_condition_before_fetching_positions
         install_sync_relayer_handler(client, _deposit_relayer_handler(captured))
         client.redeem_positions(market_id="123")
 
-    assert market_calls == [{"ids": [123], "page_size": 1}]
+    assert market_calls == [{"ids": [123], "closed": True, "page_size": 1}]
     submit = [r for r in captured if urlparse(str(r.url)).path == "/submit"][0]
     body = request_json(submit)
     inner = body["depositWalletParams"]["calls"][0]
