@@ -55,19 +55,28 @@ def builder_code(require_env: Callable[[str], str]) -> str:
 
 
 @pytest.fixture
+def deposit_wallet_private_key(require_env: Callable[[str], str]) -> str:
+    return require_env("POLYMARKET_PRIVATE_KEY")
+
+
+@pytest.fixture
+def deposit_wallet_address(require_env: Callable[[str], str]) -> str:
+    return require_env("POLYMARKET_DEPOSIT_WALLET")
+
+
+@pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
 
 
 @pytest.fixture
 async def deposit_wallet_client(
-    require_env: Callable[[str], str],
+    deposit_wallet_private_key: str,
+    deposit_wallet_address: str,
 ) -> AsyncGenerator[AsyncSecureClient, None]:
-    private_key = require_env("POLYMARKET_PRIVATE_KEY")
-    wallet = require_env("POLYMARKET_DEPOSIT_WALLET")
     client = await AsyncSecureClient.create(
-        private_key=private_key,
-        wallet=wallet,
+        private_key=deposit_wallet_private_key,
+        wallet=deposit_wallet_address,
     )
     try:
         yield client
