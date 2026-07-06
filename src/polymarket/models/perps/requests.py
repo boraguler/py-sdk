@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from typing import Literal, overload
 
 from polymarket.errors import UserInputError
 from polymarket.models.perps.types import PerpsTimeInForce
@@ -34,7 +35,7 @@ def validate_client_order_id(value: str) -> str:
     return value
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, slots=True, kw_only=True, init=False)
 class PerpsOrderRequest:
     """One Perps order to submit.
 
@@ -57,6 +58,51 @@ class PerpsOrderRequest:
     """Whether the order must rest instead of taking liquidity."""
     client_order_id: str | None = None
     """Optional caller-supplied idempotency identifier."""
+
+    @overload
+    def __init__(
+        self,
+        *,
+        instrument_id: int,
+        side: OrderSide,
+        quantity: DecimalInput,
+        time_in_force: Literal["gtc"],
+        price: DecimalInput,
+        post_only: bool = False,
+        client_order_id: str | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        instrument_id: int,
+        side: OrderSide,
+        quantity: DecimalInput,
+        time_in_force: Literal["ioc", "fok"],
+        price: DecimalInput | None = None,
+        client_order_id: str | None = None,
+    ) -> None: ...
+
+    def __init__(
+        self,
+        *,
+        instrument_id: int,
+        side: OrderSide,
+        quantity: DecimalInput,
+        time_in_force: PerpsTimeInForce,
+        price: DecimalInput | None = None,
+        post_only: bool = False,
+        client_order_id: str | None = None,
+    ) -> None:
+        object.__setattr__(self, "instrument_id", instrument_id)
+        object.__setattr__(self, "side", side)
+        object.__setattr__(self, "quantity", quantity)
+        object.__setattr__(self, "time_in_force", time_in_force)
+        object.__setattr__(self, "price", price)
+        object.__setattr__(self, "post_only", post_only)
+        object.__setattr__(self, "client_order_id", client_order_id)
+        self.__post_init__()
 
     def __post_init__(self) -> None:
         if isinstance(self.instrument_id, bool) or not isinstance(self.instrument_id, int):  # pyright: ignore[reportUnnecessaryIsInstance]

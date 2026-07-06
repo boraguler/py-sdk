@@ -187,6 +187,7 @@ class PerpsSession:
         return self._dropped_events
 
     async def open(self) -> Self:
+        """Connect and authenticate the session WebSocket."""
         await self._connect(emit_resync=False)
         return self
 
@@ -205,6 +206,7 @@ class PerpsSession:
             self._on_session_close(self)
 
     def __aiter__(self) -> Self:
+        """Iterate authenticated Perps account events emitted by this session."""
         return self
 
     async def __anext__(self) -> PerpsSessionEvent:
@@ -269,22 +271,36 @@ class PerpsSession:
         stop_loss: PerpsTpSlTrigger | None = None,
         expires_at: datetime | int | None = None,
     ) -> PerpsOrderPlacement:
-        """Place one order and resolve with its first orders-channel update.
+        """Place one order and resolve with its first orders update.
 
         ``gtc`` orders require ``price`` and may set ``post_only``; ``ioc`` and
         ``fok`` orders may omit ``price`` for market-style execution. Pass
         ``take_profit`` and/or ``stop_loss`` to place reduce-only trigger
-        orders together with the order.
+        orders together with the entry order. ``expires_at`` is an optional
+        command expiration timestamp, accepted as ``datetime`` or epoch
+        milliseconds.
         """
-        request = PerpsOrderRequest(
-            instrument_id=instrument_id,
-            side=side,
-            quantity=quantity,
-            time_in_force=time_in_force,
-            price=price,
-            post_only=post_only,
-            client_order_id=client_order_id,
-        )
+        if time_in_force == "gtc":
+            request = PerpsOrderRequest(
+                instrument_id=instrument_id,
+                side=side,
+                quantity=quantity,
+                time_in_force=time_in_force,
+                price=cast(DecimalInput, price),
+                post_only=post_only,
+                client_order_id=client_order_id,
+            )
+        else:
+            if post_only:
+                raise UserInputError("post_only is only supported for gtc orders")
+            request = PerpsOrderRequest(
+                instrument_id=instrument_id,
+                side=side,
+                quantity=quantity,
+                time_in_force=time_in_force,
+                price=price,
+                client_order_id=client_order_id,
+            )
         if take_profit is None and stop_loss is None:
             acks = await self._send_create_orders(
                 [to_raw_order(request)], group=None, expires_at=expires_at
@@ -340,7 +356,8 @@ class PerpsSession:
     ) -> tuple[PerpsPostOrderAck, ...]:
         """Post one or more orders and return queue-entry acknowledgements.
 
-        This is a low-level method; :meth:`place_order` is the common path.
+        This is a low-level method; :meth:`place_order` is the common path when
+        callers want to wait for the resulting order update.
         """
         if not orders:
             raise UserInputError("orders must be non-empty")
@@ -360,7 +377,8 @@ class PerpsSession:
         """Protect the current position with take-profit/stop-loss triggers.
 
         The exit side is inferred from the open position; a flat position
-        raises :class:`~polymarket.errors.UserInputError`.
+        raises :class:`~polymarket.errors.UserInputError`. Provide
+        ``take_profit``, ``stop_loss``, or both.
         """
         if take_profit is None and stop_loss is None:
             raise UserInputError("Provide take_profit, stop_loss, or both")
@@ -398,6 +416,22 @@ class PerpsSession:
             stop_loss_order = PerpsPlacedTpSlOrder(order_id=placed[trigger_index])
         return PerpsPlacedTpSlOrders(take_profit=take_profit_order, stop_loss=stop_loss_order)
 
+    @overload
+    async def cancel_order(
+        self,
+        *,
+        order_id: int,
+        client_order_id: None = None,
+        expires_at: datetime | int | None = None,
+    ) -> PerpsCancelOrderResult: ...
+    @overload
+    async def cancel_order(
+        self,
+        *,
+        client_order_id: str,
+        order_id: None = None,
+        expires_at: datetime | int | None = None,
+    ) -> PerpsCancelOrderResult: ...
     async def cancel_order(
         self,
         *,
@@ -407,7 +441,8 @@ class PerpsSession:
     ) -> PerpsCancelOrderResult:
         """Cancel one order by ``order_id`` or ``client_order_id``.
 
-        The returned status reflects whether the cancel happened.
+        Provide exactly one identifier. The returned status reflects whether
+        the cancel happened.
         """
         if (order_id is None) == (client_order_id is None):
             raise UserInputError("Provide exactly one of order_id or client_order_id")
@@ -420,6 +455,22 @@ class PerpsSession:
             )
         return results[0]
 
+    @overload
+    async def cancel_orders(
+        self,
+        *,
+        order_ids: Sequence[int],
+        client_order_ids: None = None,
+        expires_at: datetime | int | None = None,
+    ) -> tuple[PerpsCancelOrderResult, ...]: ...
+    @overload
+    async def cancel_orders(
+        self,
+        *,
+        client_order_ids: Sequence[str],
+        order_ids: None = None,
+        expires_at: datetime | int | None = None,
+    ) -> tuple[PerpsCancelOrderResult, ...]: ...
     async def cancel_orders(
         self,
         *,
@@ -427,7 +478,11 @@ class PerpsSession:
         client_order_ids: Sequence[str] | None = None,
         expires_at: datetime | int | None = None,
     ) -> tuple[PerpsCancelOrderResult, ...]:
-        """Cancel orders and return one result per requested order."""
+        """Cancel orders and return one result per requested order.
+
+        Provide exactly one identifier list: ``order_ids`` or
+        ``client_order_ids``.
+        """
         if (order_ids is None) == (client_order_ids is None):
             raise UserInputError("Provide exactly one of order_ids or client_order_ids")
         if order_ids is not None:
@@ -457,27 +512,27 @@ class PerpsSession:
         )
 
     async def fetch_balances(self) -> tuple[PerpsBalance, ...]:
-        """Fetch asset balances for the session account."""
+        """Fetch current Perps balances for the session account."""
         return await _account.fetch_balances(self._api)
 
     async def fetch_portfolio(self) -> PerpsPortfolio:
-        """Fetch the portfolio snapshot for the session account."""
+        """Fetch the current Perps portfolio for the session account."""
         return await _account.fetch_portfolio(self._api)
 
     async def fetch_stats(self) -> PerpsAccountStats:
-        """Fetch rolling trading statistics for the session account."""
+        """Fetch account-level Perps statistics for the session account."""
         return await _account.fetch_stats(self._api)
 
     async def fetch_account_config(
         self, *, instrument_id: int | None = None
     ) -> tuple[PerpsAccountConfig, ...]:
-        """Fetch per-instrument leverage configuration."""
+        """Fetch Perps account configuration, optionally filtered by instrument."""
         return await _account.fetch_account_config(self._api, instrument_id=instrument_id)
 
     async def fetch_open_orders(
         self, *, instrument_id: int | None = None
     ) -> tuple[PerpsOrder, ...]:
-        """Fetch open orders for the session account."""
+        """Fetch currently open Perps orders, optionally filtered by instrument."""
         return await _account.fetch_open_orders(self._api, instrument_id=instrument_id)
 
     async def fetch_orders(
@@ -489,7 +544,7 @@ class PerpsSession:
         start: datetime | int | None = None,
         end: datetime | int | None = None,
     ) -> tuple[PerpsOrder, ...]:
-        """Fetch historical orders for the session account."""
+        """Fetch Perps orders for the session account."""
         return await _account.fetch_orders(
             self._api,
             order_id=order_id,
@@ -505,7 +560,7 @@ class PerpsSession:
         start: datetime | int | None = None,
         end: datetime | int | None = None,
     ) -> AsyncPaginator[PerpsFill]:
-        """List fills for the session account.
+        """List Perps fills for the session account.
 
         Defaults to the past 24 hours when ``start`` is omitted.
         """
@@ -518,7 +573,7 @@ class PerpsSession:
         start: datetime | int | None = None,
         end: datetime | int | None = None,
     ) -> AsyncPaginator[PerpsFundingPayment]:
-        """List funding payments for the session account.
+        """List Perps funding payments for the session account.
 
         Defaults to the past 24 hours when ``start`` is omitted.
         """
@@ -534,7 +589,7 @@ class PerpsSession:
         start: datetime | int | None = None,
         end: datetime | int | None = None,
     ) -> AsyncPaginator[PerpsDeposit]:
-        """List deposits for the session account.
+        """List Perps deposits for the session account.
 
         Defaults to the past 90 days when ``start`` is omitted.
         """
@@ -550,7 +605,7 @@ class PerpsSession:
         start: datetime | int | None = None,
         end: datetime | int | None = None,
     ) -> AsyncPaginator[PerpsWithdrawal]:
-        """List withdrawals for the session account.
+        """List Perps withdrawals for the session account.
 
         Defaults to the past 90 days when ``start`` is omitted.
         """
@@ -569,7 +624,7 @@ class PerpsSession:
         start: datetime | int,
         end: datetime | int | None = None,
     ) -> AsyncPaginator[PerpsEquityPoint]:
-        """List account equity history at the requested interval."""
+        """List Perps equity history at the requested interval."""
         return _account.list_equity_history(self._api, interval=interval, start=start, end=end)
 
     def list_pnl_history(
@@ -579,7 +634,7 @@ class PerpsSession:
         start: datetime | int,
         end: datetime | int | None = None,
     ) -> AsyncPaginator[PerpsPnlPoint]:
-        """List account profit-and-loss history at the requested interval."""
+        """List Perps profit-and-loss history at the requested interval."""
         return _account.list_pnl_history(self._api, interval=interval, start=start, end=end)
 
     async def _resolve_auth_headers(

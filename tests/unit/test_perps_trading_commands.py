@@ -1,5 +1,7 @@
 """Perps trading command construction tests."""
 
+from typing import Any, cast
+
 import pytest
 
 from polymarket._internal.actions.perps.signing import build_perps_op_typed_data
@@ -126,7 +128,12 @@ def test_cancel_and_leverage_ops() -> None:
 
 def test_gtc_order_requires_price() -> None:
     with pytest.raises(UserInputError, match="price is required for gtc"):
-        PerpsOrderRequest(instrument_id=1, side="BUY", quantity="1", time_in_force="gtc")
+        PerpsOrderRequest(
+            instrument_id=1,
+            side="BUY",
+            quantity="1",
+            time_in_force=cast(Any, "gtc"),
+        )
 
 
 def test_post_only_rejected_for_ioc_and_fok() -> None:
