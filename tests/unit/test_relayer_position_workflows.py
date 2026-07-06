@@ -247,7 +247,7 @@ def test_redeem_positions_market_id_resolves_condition_before_fetching_positions
 
     asyncio.run(run())
 
-    assert market_calls == [{"ids": [123], "page_size": 1}]
+    assert market_calls == [{"ids": [123], "closed": True, "page_size": 1}]
     body = _submit_body(captured)
     calls = _deposit_wallet_calls(body)
     assert calls[0]["target"].lower() == PRODUCTION.neg_risk_collateral_adapter.lower()
