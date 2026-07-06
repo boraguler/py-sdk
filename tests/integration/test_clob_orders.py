@@ -10,6 +10,7 @@ from polymarket import (
     AsyncSecureClient,
     Market,
     Position,
+    SecureClient,
 )
 from polymarket.errors import InsufficientLiquidityError, UserInputError
 
@@ -300,6 +301,53 @@ async def test_place_market_order_closes_inventory_or_buys_minimum_size(
         amount=amount,
         order_type="FAK",
     )
+    assert isinstance(response, AcceptedOrder)
+    assert response.status in ("live", "matched", "delayed")
+
+
+@pytest.mark.integration
+@pytest.mark.metered
+def test_sync_secure_client_create_places_market_order(
+    deposit_wallet_private_key: str,
+    deposit_wallet_address: str,
+    tradable_market: Market,
+) -> None:
+    # Live side effect: places a FAK market order, selling existing Yes inventory
+    # when present or buying the minimum size otherwise.
+    token_id = _yes_token_id(tradable_market)
+    market = _market_condition_id(tradable_market)
+    amount = _minimum_order_size(tradable_market)
+
+    with SecureClient.create(
+        private_key=deposit_wallet_private_key,
+        wallet=deposit_wallet_address,
+    ) as client:
+        positions = client.list_positions(market=[market], size_threshold=0.0).first_page()
+        position = next(
+            (
+                p
+                for p in positions.items
+                if p.token_id == token_id and p.size is not None and p.size > 0
+            ),
+            None,
+        )
+        if position is not None:
+            shares = position.size
+            assert shares is not None
+            response = client.place_market_order(
+                token_id=token_id,
+                side="SELL",
+                shares=shares,
+                order_type="FAK",
+            )
+        else:
+            response = client.place_market_order(
+                token_id=token_id,
+                side="BUY",
+                amount=amount,
+                order_type="FAK",
+            )
+
     assert isinstance(response, AcceptedOrder)
     assert response.status in ("live", "matched", "delayed")
 
