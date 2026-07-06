@@ -1304,7 +1304,7 @@ class AsyncPublicClient:
         instrument_id: int | None = None,
         category: PerpsInstrumentCategory | None = None,
     ) -> tuple[PerpsInstrument, ...]:
-        """Fetch Perps instruments, optionally filtered by id or category."""
+        """Fetch Perps instruments, optionally filtered by instrument or category."""
         return await _perps_actions.fetch_instruments(
             self._ctx.perps, instrument_id=instrument_id, category=category
         )
@@ -1322,7 +1322,10 @@ class AsyncPublicClient:
     async def fetch_perps_book(
         self, *, instrument_id: int, depth: PerpsBookDepth = 100
     ) -> PerpsBook:
-        """Fetch a Perps order book snapshot."""
+        """Fetch a Perps order book snapshot.
+
+        ``depth`` controls the number of price levels returned on each side.
+        """
         return await _perps_actions.fetch_book(
             self._ctx.perps, instrument_id=instrument_id, depth=depth
         )
@@ -1339,7 +1342,7 @@ class AsyncPublicClient:
         start: "datetime | int | None" = None,
         end: "datetime | int | None" = None,
     ) -> AsyncPaginator[PerpsCandle]:
-        """List Perps candles for an instrument.
+        """List Perps candles for an instrument with SDK-owned pagination.
 
         Defaults to the past 24 hours when ``start`` is omitted. ``start`` and
         ``end`` accept a ``datetime`` or an epoch-milliseconds int.
@@ -1362,9 +1365,10 @@ class AsyncPublicClient:
         start: "datetime | int | None" = None,
         end: "datetime | int | None" = None,
     ) -> AsyncPaginator[PerpsFundingRate]:
-        """List Perps funding-rate history for an instrument.
+        """List Perps funding-rate history with SDK-owned pagination.
 
-        Defaults to the past 24 hours when ``start`` is omitted.
+        Defaults to the past 24 hours when ``start`` is omitted. ``start`` and
+        ``end`` accept a ``datetime`` or an epoch-milliseconds int.
 
         Returns:
             An async paginator over funding-rate observations.
@@ -1380,9 +1384,10 @@ class AsyncPublicClient:
         start: "datetime | int | None" = None,
         end: "datetime | int | None" = None,
     ) -> AsyncPaginator[PerpsTrade]:
-        """List recent public Perps trades for an instrument.
+        """List recent public Perps trades with SDK-owned pagination.
 
-        Defaults to the past 24 hours when ``start`` is omitted.
+        Defaults to the past 24 hours when ``start`` is omitted. ``start`` and
+        ``end`` accept a ``datetime`` or an epoch-milliseconds int.
 
         Returns:
             An async paginator over matching trades.
