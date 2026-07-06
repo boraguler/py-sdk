@@ -175,7 +175,7 @@ def test_setup_trading_approvals_bundles_required_calls_for_deposit_wallet() -> 
             return httpx.Response(
                 200,
                 json={
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transaction_hash": "0x" + "ab" * 32,
                     "transaction_id": "tx-setup",
                 },
@@ -264,7 +264,7 @@ def _safe_relayer_handler(captured: list[httpx.Request]):  # type: ignore[no-unt
             return httpx.Response(
                 200,
                 json={
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transaction_hash": "0x" + "cd" * 32,
                     "transaction_id": "tx-safe",
                 },
@@ -693,7 +693,7 @@ def test_gasless_wait_returns_outcome_on_terminal_success() -> None:
             client._ctx,
             environment=dataclasses.replace(client._ctx.environment, relayer_poll_frequency_ms=1),
         )
-        install_sync_relayer_handler(client, _wait_relayer_handler("STATE_MINED"))
+        install_sync_relayer_handler(client, _wait_relayer_handler("STATE_CONFIRMED"))
         handle = client.approve_erc20(token_address=TOKEN, spender_address=SPENDER, amount=1)
         outcome = handle.wait()
 

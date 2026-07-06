@@ -13,7 +13,7 @@ from polymarket.models.clob.relayer import (
 )
 from polymarket.types import TransactionHash
 
-_TERMINAL_SUCCESS = (RelayerTransactionState.MINED, RelayerTransactionState.CONFIRMED)
+_TERMINAL_SUCCESS = (RelayerTransactionState.CONFIRMED,)
 _TERMINAL_FAILURE = (RelayerTransactionState.FAILED, RelayerTransactionState.INVALID)
 
 
