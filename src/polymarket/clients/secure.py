@@ -120,7 +120,7 @@ from polymarket._internal.wallet import (
     derive_uups_deposit_wallet_address,
     signature_type_for,
 )
-from polymarket.auth import ApiKey
+from polymarket.auth import ApiKey, BuilderApiKey
 from polymarket.clients._transport import SyncHeaderResolver, SyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import (
@@ -157,7 +157,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
-from polymarket.models.clob import BuilderTrade
+from polymarket.models.clob import BuilderApiKeyInfo, BuilderTrade
 from polymarket.models.clob.cancel import CancelOrdersResponse
 from polymarket.models.clob.order_response import OrderResponse
 from polymarket.models.clob.orders import MarketOrderType, SignedOrder
@@ -1416,6 +1416,28 @@ class SecureClient:
     def delete_api_key(self) -> None:
         """Delete the API key currently used by this client."""
         _auth_actions.delete_api_key_sync(self._ctx.secure_clob)
+
+    def create_builder_api_key(self) -> BuilderApiKey:
+        """Create a new builder API key for the authenticated account."""
+        return _auth_actions.create_builder_api_key_sync(self._ctx.secure_clob)
+
+    def fetch_builder_api_keys(self) -> tuple[BuilderApiKeyInfo, ...]:
+        """List the builder API keys for the authenticated account."""
+        return _auth_actions.fetch_builder_api_keys_sync(self._ctx.secure_clob)
+
+    def revoke_builder_api_key(self) -> None:
+        """Revoke the builder API key this client is configured with.
+
+        The revocation is authenticated by the builder key itself, so the client must have been
+        created with the key to revoke (``SecureClient.create(api_key=BuilderApiKey(...))``).
+        """
+        builder_key = self._ctx.api_key
+        if not isinstance(builder_key, BuilderApiKey):
+            raise UserInputError(
+                "revoke_builder_api_key requires a client created with the builder key to "
+                "revoke (pass api_key=BuilderApiKey(...) to SecureClient.create)."
+            )
+        _auth_actions.revoke_builder_api_key_sync(self._ctx.clob, builder_key)
 
     def end_authentication(self) -> "PublicClient":
         """Delete current credentials, close this client, and return a public client."""
