@@ -39,6 +39,9 @@
 - Do not add live trading tests to the default test suite.
 - Mark live service tests with `@pytest.mark.integration`.
 - Integration tests that need secrets must use the `require_env` fixture from `tests/integration/conftest.py`; do not read secret env vars at import time.
+- New integration tests should use shared fixtures from `tests/integration/conftest.py` for API keys, signer private keys, wallet addresses, and clients. Do not add local ad-hoc env helper functions in individual test files.
+- For most new authenticated integration tests, prefer the fixture-created `deposit_wallet_client`. Create bespoke `AsyncSecureClient` or `SecureClient` instances only when the test specifically needs a different wallet type, a sync client, custom auth, or another edge-case setup; still inject the key material and addresses through fixtures.
+- Do not refactor older ad-hoc integration tests unless specifically asked. Apply this fixture-based style to new tests and to files already being intentionally changed.
 - Keep `.env.example` as the source of truth for local integration-test env names. Do not duplicate the full env list in Markdown files.
 - Keep `.env` and real secrets uncommitted. GitHub Actions should receive integration secrets through repository or environment secrets/variables.
 - Tests that place orders, spend funds, or mutate live state must also use `@pytest.mark.metered`; they are skipped unless `POLYMARKET_RUN_METERED_TESTS=1` is set.
