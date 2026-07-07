@@ -148,6 +148,12 @@ class PerpsCancelOrderResult(BaseModel):
         return _default_ack_error(data)
 
 
+class PerpsCancelAllOrdersResponse(BaseModel):
+    """Accepted response for a Perps cancel-all request."""
+
+    status: Literal["ok"]
+
+
 class PerpsUpdateLeverageResult(BaseModel):
     """Result of a Perps leverage update."""
 
@@ -158,6 +164,7 @@ class PerpsUpdateLeverageResult(BaseModel):
 
 
 __all__ = [
+    "PerpsCancelAllOrdersResponse",
     "PerpsCancelOrderResult",
     "PerpsFill",
     "PerpsOrder",

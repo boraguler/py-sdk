@@ -90,6 +90,16 @@ def cancel_orders_by_client_id_op(client_order_ids: Sequence[str]) -> list[Any]:
     return ["cancelOrdersCOID", ids]
 
 
+def cancel_all_orders_op(*, instrument_id: int | None = None) -> list[Any]:
+    if instrument_id is None:
+        return ["cancelAll", []]
+    if isinstance(instrument_id, bool) or not isinstance(instrument_id, int):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise UserInputError("instrument_id must be an int")
+    if instrument_id < 0:
+        raise UserInputError("instrument_id must be non-negative")
+    return ["cancelAll", [instrument_id]]
+
+
 def update_leverage_op(*, instrument_id: int, leverage: int, cross_margin: bool) -> list[Any]:
     if isinstance(instrument_id, bool) or not isinstance(instrument_id, int):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise UserInputError("instrument_id must be an int")
@@ -113,6 +123,13 @@ def to_command_body_op(op: Sequence[Any]) -> dict[str, Any]:
         return body
     if op_type in ("cancelOrders", "cancelOrdersCOID"):
         return {"type": op_type, "args": op[1]}
+    if op_type == "cancelAll":
+        args = op[1]
+        instrument_id = args[0] if args else None
+        return {
+            "type": op_type,
+            "args": {} if instrument_id is None else {"iid": instrument_id},
+        }
     if op_type == "updateLeverage":
         instrument_id, leverage, cross_margin = op[1]
         return {
@@ -146,6 +163,7 @@ def _to_trigger_body(trigger: list[Any]) -> dict[str, Any]:
 
 __all__ = [
     "RawPerpsOrder",
+    "cancel_all_orders_op",
     "cancel_orders_by_client_id_op",
     "cancel_orders_op",
     "create_orders_op",

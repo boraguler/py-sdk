@@ -20,6 +20,7 @@ from polymarket._internal.actions.perps.signing import (
 )
 from polymarket._internal.actions.perps.trading import (
     RawPerpsOrder,
+    cancel_all_orders_op,
     cancel_orders_by_client_id_op,
     cancel_orders_op,
     create_orders_op,
@@ -58,6 +59,7 @@ from polymarket.models.perps.events import (
 )
 from polymarket.models.perps.funds import PerpsDeposit, PerpsWithdrawal
 from polymarket.models.perps.orders import (
+    PerpsCancelAllOrdersResponse,
     PerpsCancelOrderResult,
     PerpsFill,
     PerpsOrder,
@@ -89,7 +91,7 @@ from polymarket.pagination import AsyncPaginator
 _AUTH_TIMEOUT_S = 30.0
 _ACK_TIMEOUT_S = 30.0
 # Purposefully generous: backend order updates are expected in the ~100ms range.
-_ORDER_PLACEMENT_UPDATE_TIMEOUT_S = 1.0
+_ORDER_PLACEMENT_UPDATE_TIMEOUT_S = 2.0
 _QUEUE_SIZE = 1024
 
 _SESSION_CHANNELS = (
@@ -503,6 +505,28 @@ class PerpsSession:
         )
         return tuple(results)
 
+    async def cancel_all_orders(
+        self,
+        *,
+        instrument_id: int | None = None,
+        expires_at: datetime | int | None = None,
+    ) -> None:
+        """Cancel all open Perps orders for the session account.
+
+        Omit ``instrument_id`` to cancel open orders across all instruments.
+        The request returns once accepted; individual orders can still race with
+        fills or other cancels.
+        """
+        op = cancel_all_orders_op(instrument_id=instrument_id)
+        response = await self._api.delete_json(
+            "/v1/trade/orders/all",
+            json={
+                **self._create_signed_command(op, expires_at=expires_at),
+                "op": to_command_body_op(op),
+            },
+        )
+        PerpsCancelAllOrdersResponse.parse_response(response)
+
     async def update_leverage(
         self, *, instrument_id: int, leverage: int, cross_margin: bool
     ) -> PerpsUpdateLeverageResult:
@@ -720,6 +744,20 @@ class PerpsSession:
         timeout_message: str,
         expires_at: datetime | int | None = None,
     ) -> Any:
+        command = self._create_signed_command(op, expires_at=expires_at)
+        frame: dict[str, Any] = {
+            "id": self._take_request_id(),
+            "req": "post",
+            "op": to_command_body_op(op),
+            **command,
+        }
+        return await self._send_request(
+            frame, parse=parse, timeout_s=_ACK_TIMEOUT_S, timeout_message=timeout_message
+        )
+
+    def _create_signed_command(
+        self, op: list[Any], *, expires_at: datetime | int | None = None
+    ) -> dict[str, Any]:
         salt = random_perps_salt()
         timestamp = now_ms()
         signature = sign_perps_op_with_key(
@@ -729,20 +767,11 @@ class PerpsSession:
             salt=salt,
             timestamp_ms=timestamp,
         )
-        frame: dict[str, Any] = {
-            "id": self._take_request_id(),
-            "req": "post",
-            "op": to_command_body_op(op),
-            "salt": salt,
-            "sig": signature,
-            "ts": timestamp,
-        }
+        command: dict[str, Any] = {"salt": salt, "sig": signature, "ts": timestamp}
         expiry_ms = to_epoch_ms("expires_at", expires_at)
         if expiry_ms is not None:
-            frame["exp"] = expiry_ms
-        return await self._send_request(
-            frame, parse=parse, timeout_s=_ACK_TIMEOUT_S, timeout_message=timeout_message
-        )
+            command["exp"] = expiry_ms
+        return command
 
     async def _send_request(
         self,

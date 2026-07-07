@@ -6,6 +6,7 @@ import pytest
 
 from polymarket._internal.actions.perps.signing import build_perps_op_typed_data
 from polymarket._internal.actions.perps.trading import (
+    cancel_all_orders_op,
     cancel_orders_by_client_id_op,
     cancel_orders_op,
     create_orders_op,
@@ -136,6 +137,13 @@ def test_cancel_and_leverage_ops() -> None:
     assert to_command_body_op(
         cancel_orders_by_client_id_op(["aabbccddeeff00112233445566778899"])
     ) == {"type": "cancelOrdersCOID", "args": ["aabbccddeeff00112233445566778899"]}
+    assert cancel_all_orders_op() == ["cancelAll", []]
+    assert to_command_body_op(cancel_all_orders_op()) == {"type": "cancelAll", "args": {}}
+    assert cancel_all_orders_op(instrument_id=3) == ["cancelAll", [3]]
+    assert to_command_body_op(cancel_all_orders_op(instrument_id=3)) == {
+        "type": "cancelAll",
+        "args": {"iid": 3},
+    }
     assert to_command_body_op(
         update_leverage_op(instrument_id=3, leverage=20, cross_margin=True)
     ) == {"type": "updateLeverage", "args": {"cross": True, "iid": 3, "lev": 20}}
@@ -207,3 +215,10 @@ def test_empty_cancel_batches_rejected() -> None:
         cancel_orders_op([])
     with pytest.raises(UserInputError):
         cancel_orders_by_client_id_op([])
+
+
+def test_invalid_cancel_all_instrument_id_rejected() -> None:
+    with pytest.raises(UserInputError, match="instrument_id"):
+        cancel_all_orders_op(instrument_id=True)  # type: ignore[arg-type]
+    with pytest.raises(UserInputError, match="non-negative"):
+        cancel_all_orders_op(instrument_id=-1)
