@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from dotenv import load_dotenv
 
-from polymarket import AsyncPublicClient, AsyncSecureClient, Market
+from polymarket import AsyncPublicClient, AsyncSecureClient, BuilderApiKey, Market
 from polymarket.models.types import TokenId
 
 _DOTENV_PATH = Path(__file__).resolve().parents[2] / ".env"
@@ -55,6 +55,15 @@ def builder_code(require_env: Callable[[str], str]) -> str:
 
 
 @pytest.fixture
+def builder_api_key(require_env: Callable[[str], str]) -> BuilderApiKey:
+    return BuilderApiKey(
+        key=require_env("POLYMARKET_BUILDER_API_KEY"),
+        secret=require_env("POLYMARKET_BUILDER_SECRET"),
+        passphrase=require_env("POLYMARKET_BUILDER_PASSPHRASE"),
+    )
+
+
+@pytest.fixture
 def deposit_wallet_private_key(require_env: Callable[[str], str]) -> str:
     return require_env("POLYMARKET_PRIVATE_KEY")
 
@@ -62,6 +71,26 @@ def deposit_wallet_private_key(require_env: Callable[[str], str]) -> str:
 @pytest.fixture
 def deposit_wallet_address(require_env: Callable[[str], str]) -> str:
     return require_env("POLYMARKET_DEPOSIT_WALLET")
+
+
+@pytest.fixture
+def proxy_wallet_private_key(require_env: Callable[[str], str]) -> str:
+    return require_env("POLYMARKET_PROXY_PRIVATE_KEY")
+
+
+@pytest.fixture
+def proxy_wallet_address(require_env: Callable[[str], str]) -> str:
+    return require_env("POLYMARKET_PROXY_WALLET")
+
+
+@pytest.fixture
+def safe_wallet_private_key(require_env: Callable[[str], str]) -> str:
+    return require_env("POLYMARKET_SAFE_PRIVATE_KEY")
+
+
+@pytest.fixture
+def safe_wallet_address(require_env: Callable[[str], str]) -> str:
+    return require_env("POLYMARKET_SAFE_WALLET")
 
 
 @pytest.fixture
