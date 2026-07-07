@@ -91,7 +91,7 @@ from polymarket.pagination import AsyncPaginator
 _AUTH_TIMEOUT_S = 30.0
 _ACK_TIMEOUT_S = 30.0
 # Purposefully generous: backend order updates are expected in the ~100ms range.
-_ORDER_PLACEMENT_UPDATE_TIMEOUT_S = 1.0
+_ORDER_PLACEMENT_UPDATE_TIMEOUT_S = 2.0
 _QUEUE_SIZE = 1024
 
 _SESSION_CHANNELS = (
