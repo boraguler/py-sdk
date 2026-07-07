@@ -314,6 +314,7 @@ class TestAsyncPublicClientListBuilderTrades:
                             base_url=PRODUCTION.clob_url, transport=httpx.MockTransport(handler)
                         ),
                     ),
+                    perps=client._ctx.perps,
                 )
                 ids: list[str] = []
                 async for trade in client.list_builder_trades(

@@ -175,6 +175,11 @@ def _required_trading_approvals(
                 spender=cast(EvmAddress, environment.exchange_v3),
                 amount=MAX_UINT256,
             ),
+            _Erc20TradingApproval(
+                token_address=collateral,
+                spender=cast(EvmAddress, environment.perps_deposit_contract),
+                amount=MAX_UINT256,
+            ),
         ],
         [
             _Erc1155TradingApproval(
