@@ -238,6 +238,7 @@ class PerpsSession:
         time_in_force: Literal["gtc"],
         price: DecimalInput,
         post_only: bool = False,
+        reduce_only: bool = False,
         client_order_id: str | None = None,
         take_profit: PerpsTpSlTrigger | None = None,
         stop_loss: PerpsTpSlTrigger | None = None,
@@ -252,6 +253,7 @@ class PerpsSession:
         quantity: DecimalInput,
         time_in_force: Literal["ioc", "fok"],
         price: DecimalInput | None = None,
+        reduce_only: bool = False,
         client_order_id: str | None = None,
         take_profit: PerpsTpSlTrigger | None = None,
         stop_loss: PerpsTpSlTrigger | None = None,
@@ -266,6 +268,7 @@ class PerpsSession:
         time_in_force: PerpsTimeInForce,
         price: DecimalInput | None = None,
         post_only: bool = False,
+        reduce_only: bool = False,
         client_order_id: str | None = None,
         take_profit: PerpsTpSlTrigger | None = None,
         stop_loss: PerpsTpSlTrigger | None = None,
@@ -274,11 +277,11 @@ class PerpsSession:
         """Place one order and resolve with its first orders update.
 
         ``gtc`` orders require ``price`` and may set ``post_only``; ``ioc`` and
-        ``fok`` orders may omit ``price`` for market-style execution. Pass
-        ``take_profit`` and/or ``stop_loss`` to place reduce-only trigger
-        orders together with the entry order. ``expires_at`` is an optional
-        command expiration timestamp, accepted as ``datetime`` or epoch
-        milliseconds.
+        ``fok`` orders may omit ``price`` for market-style execution. Set
+        ``reduce_only`` to prevent the order from increasing exposure. Pass
+        ``take_profit`` and/or ``stop_loss`` to place reduce-only trigger orders
+        together with the entry order. ``expires_at`` is an optional command
+        expiration timestamp, accepted as ``datetime`` or epoch milliseconds.
         """
         if time_in_force == "gtc":
             request = PerpsOrderRequest(
@@ -288,6 +291,7 @@ class PerpsSession:
                 time_in_force=time_in_force,
                 price=cast(DecimalInput, price),
                 post_only=post_only,
+                reduce_only=reduce_only,
                 client_order_id=client_order_id,
             )
         else:
@@ -299,6 +303,7 @@ class PerpsSession:
                 quantity=quantity,
                 time_in_force=time_in_force,
                 price=price,
+                reduce_only=reduce_only,
                 client_order_id=client_order_id,
             )
         if take_profit is None and stop_loss is None:

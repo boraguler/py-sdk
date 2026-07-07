@@ -31,7 +31,7 @@ def to_raw_order(request: PerpsOrderRequest) -> RawPerpsOrder:
         to_decimal_string("quantity", request.quantity),
         request.time_in_force,
         request.post_only,
-        None,
+        True if request.reduce_only else None,
         request.client_order_id,
         None,
     ]

@@ -15,6 +15,7 @@ from polymarket.models.perps.events import (
     parse_perps_market_events,
     parse_perps_session_event,
 )
+from polymarket.models.perps.orders import PerpsOrder
 
 
 def _order_update(order_id: int = 5) -> dict[str, object]:
@@ -26,6 +27,7 @@ def _order_update(order_id: int = 5) -> dict[str, object]:
         "qty": "10",
         "tif": "gtc",
         "po": False,
+        "ro": True,
         "status": "open",
         "rest": "10",
         "fill": "0",
@@ -108,8 +110,31 @@ def test_session_order_event_normalizes_compact_order() -> None:
     )
     assert isinstance(event, PerpsOrderEvent)
     assert event.payload.id == 5
+    assert event.payload.reduce_only is True
     assert event.payload.side == "BUY"
     assert event.payload.status == "open"
+
+
+def test_order_model_normalizes_reduce_only_response_field() -> None:
+    order = PerpsOrder.parse_response(
+        {
+            "order_id": 5,
+            "instrument_id": 1,
+            "buy": True,
+            "price": "0.5",
+            "quantity": "10",
+            "tif": "gtc",
+            "post_only": False,
+            "ro": True,
+            "status": "open",
+            "resting_quantity": "10",
+            "filled_quantity": "0",
+            "created_timestamp": 1751500000000,
+            "updated_timestamp": 1751500000001,
+        }
+    )
+
+    assert order.reduce_only is True
 
 
 def test_session_tpsl_event_parses_lifecycle_update() -> None:

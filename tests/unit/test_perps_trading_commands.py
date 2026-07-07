@@ -50,6 +50,21 @@ def test_market_style_order_omits_price_from_body() -> None:
     assert body["args"] == [{"iid": 2, "buy": False, "po": False, "qty": "1.5", "tif": "ioc"}]
 
 
+def test_reduce_only_order_sets_body_flag() -> None:
+    request = PerpsOrderRequest(
+        instrument_id=2,
+        side="SELL",
+        price="99",
+        quantity="1.5",
+        reduce_only=True,
+        time_in_force="ioc",
+    )
+    body = to_command_body_op(create_orders_op([to_raw_order(request)]))
+    assert body["args"] == [
+        {"iid": 2, "buy": False, "po": False, "qty": "1.5", "ro": True, "tif": "ioc", "p": "99"}
+    ]
+
+
 def test_client_order_id_round_trips_into_body() -> None:
     request = PerpsOrderRequest(
         instrument_id=3,
@@ -146,6 +161,18 @@ def test_post_only_rejected_for_ioc_and_fok() -> None:
                 time_in_force=tif,  # type: ignore[arg-type]
                 post_only=True,
             )
+
+
+def test_reduce_only_must_be_bool() -> None:
+    with pytest.raises(UserInputError, match="reduce_only"):
+        PerpsOrderRequest(
+            instrument_id=1,
+            side="BUY",
+            price="1",
+            quantity="1",
+            reduce_only=cast(Any, "yes"),
+            time_in_force="gtc",
+        )
 
 
 def test_invalid_client_order_id_rejected() -> None:

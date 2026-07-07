@@ -57,8 +57,10 @@ async def _handshake(ws: ServerConnection) -> list[dict[str, Any]]:
     return frames
 
 
-def _order_update(order_id: int, *, sequence: int = 1) -> dict[str, Any]:
-    return {
+def _order_update(
+    order_id: int, *, sequence: int = 1, reduce_only: bool | None = None
+) -> dict[str, Any]:
+    update: dict[str, Any] = {
         "ch": "orders",
         "ts": 1751500000000,
         "sq": sequence,
@@ -70,6 +72,7 @@ def _order_update(order_id: int, *, sequence: int = 1) -> dict[str, Any]:
             "qty": "10",
             "tif": "gtc",
             "po": False,
+            "ro": reduce_only or False,
             "status": "open",
             "rest": "10",
             "fill": "0",
@@ -77,6 +80,7 @@ def _order_update(order_id: int, *, sequence: int = 1) -> dict[str, Any]:
             "uts": 1751500000001,
         },
     }
+    return update
 
 
 @asynccontextmanager
@@ -161,7 +165,7 @@ def test_place_order_signs_command_and_returns_order_update() -> None:
                 continue
             commands.append(message)
             await ws.send(json.dumps({"id": message["id"], "data": [{"status": "ok", "oid": 77}]}))
-            await ws.send(json.dumps(_order_update(77)))
+            await ws.send(json.dumps(_order_update(77, reduce_only=True)))
 
     async def run() -> None:
         async with ws_server(handler) as url, _open_session(url) as session:
@@ -170,9 +174,11 @@ def test_place_order_signs_command_and_returns_order_update() -> None:
                 side="BUY",
                 price="0.5",
                 quantity="10",
+                reduce_only=True,
                 time_in_force="gtc",
             )
             assert placement.order.id == 77
+            assert placement.order.reduce_only is True
             assert placement.order.status == "open"
             assert placement.tp_sl is None
 
@@ -180,7 +186,15 @@ def test_place_order_signs_command_and_returns_order_update() -> None:
     command = commands[0]
     assert command["op"]["type"] == "createOrders"
     assert command["op"]["args"] == [
-        {"iid": 1, "buy": True, "po": False, "qty": "10", "tif": "gtc", "p": "0.5"}
+        {
+            "iid": 1,
+            "buy": True,
+            "po": False,
+            "qty": "10",
+            "ro": True,
+            "tif": "gtc",
+            "p": "0.5",
+        }
     ]
     assert isinstance(command["salt"], int)
     assert isinstance(command["ts"], int)
