@@ -28,6 +28,7 @@ if TYPE_CHECKING:
         PerpsOrderRequest(
             instrument_id=1,
             quantity="1",
+            reduce_only=True,
             side="BUY",
             time_in_force="ioc",
         ),
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
                 instrument_id=1,
                 price="100",
                 quantity="1",
+                reduce_only=True,
                 side="BUY",
                 time_in_force="gtc",
             ),

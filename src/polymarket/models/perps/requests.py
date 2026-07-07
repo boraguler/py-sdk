@@ -41,7 +41,7 @@ class PerpsOrderRequest:
 
     ``gtc`` orders require a ``price`` and may set ``post_only``. ``ioc`` and
     ``fok`` orders may omit ``price`` for market-style execution and cannot be
-    post-only.
+    post-only. Set ``reduce_only`` to prevent the order from increasing exposure.
     """
 
     instrument_id: int
@@ -56,6 +56,8 @@ class PerpsOrderRequest:
     """Limit price. Required for ``gtc``; optional for ``ioc``/``fok``."""
     post_only: bool = False
     """Whether the order must rest instead of taking liquidity."""
+    reduce_only: bool = False
+    """Whether the order may only reduce or close an existing position."""
     client_order_id: str | None = None
     """Optional caller-supplied idempotency identifier."""
 
@@ -69,6 +71,7 @@ class PerpsOrderRequest:
         time_in_force: Literal["gtc"],
         price: DecimalInput,
         post_only: bool = False,
+        reduce_only: bool = False,
         client_order_id: str | None = None,
     ) -> None: ...
 
@@ -81,6 +84,7 @@ class PerpsOrderRequest:
         quantity: DecimalInput,
         time_in_force: Literal["ioc", "fok"],
         price: DecimalInput | None = None,
+        reduce_only: bool = False,
         client_order_id: str | None = None,
     ) -> None: ...
 
@@ -93,6 +97,7 @@ class PerpsOrderRequest:
         time_in_force: PerpsTimeInForce,
         price: DecimalInput | None = None,
         post_only: bool = False,
+        reduce_only: bool = False,
         client_order_id: str | None = None,
     ) -> None:
         object.__setattr__(self, "instrument_id", instrument_id)
@@ -101,6 +106,7 @@ class PerpsOrderRequest:
         object.__setattr__(self, "time_in_force", time_in_force)
         object.__setattr__(self, "price", price)
         object.__setattr__(self, "post_only", post_only)
+        object.__setattr__(self, "reduce_only", reduce_only)
         object.__setattr__(self, "client_order_id", client_order_id)
         self.__post_init__()
 
@@ -117,6 +123,8 @@ class PerpsOrderRequest:
             )
         if not isinstance(self.post_only, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise UserInputError("post_only must be a bool")
+        if not isinstance(self.reduce_only, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise UserInputError("reduce_only must be a bool")
         to_decimal_string("quantity", self.quantity)
         if self.time_in_force == "gtc":
             if self.price is None:

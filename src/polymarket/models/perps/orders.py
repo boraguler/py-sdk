@@ -55,6 +55,7 @@ class PerpsOrder(BaseModel):
     quantity: _Decimal = Field(validation_alias=AliasChoices("quantity", "qty"))
     time_in_force: PerpsTimeInForce = Field(validation_alias="tif")
     post_only: bool = Field(validation_alias=AliasChoices("post_only", "po"))
+    reduce_only: bool = Field(validation_alias="ro")
     status: PerpsOrderStatus
     resting_quantity: _Decimal = Field(validation_alias=AliasChoices("resting_quantity", "rest"))
     filled_quantity: _Decimal = Field(validation_alias=AliasChoices("filled_quantity", "fill"))
