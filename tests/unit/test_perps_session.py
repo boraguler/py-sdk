@@ -9,10 +9,12 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 import pytest
 from websockets.asyncio.server import ServerConnection, serve
 
 from polymarket._internal.perps_session import PerpsSession
+from polymarket.clients._transport import AsyncTransport
 from polymarket.errors import RequestRejectedError, TransportError
 from polymarket.models.perps.credentials import PerpsCredentials
 from polymarket.models.perps.events import PerpsOrderEvent, PerpsResyncEvent
@@ -326,6 +328,54 @@ def test_cancel_order_returns_result_without_raising_on_err_status() -> None:
             assert result.error == "order not found"
 
     asyncio.run(asyncio.wait_for(run(), timeout=10.0))
+
+
+def test_cancel_all_orders_uses_signed_rest_endpoint() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"status": "ok"}, request=request)
+
+    async def run() -> None:
+        session = PerpsSession(
+            chain_id=137,
+            credentials=_CREDENTIALS,
+            rest_url="https://perps.test",
+            ws_url="ws://127.0.0.1:9",
+        )
+        session._api = AsyncTransport(
+            base_url="https://perps.test",
+            client=httpx.AsyncClient(
+                base_url="https://perps.test",
+                transport=httpx.MockTransport(handler),
+            ),
+            header_resolver=session._resolve_auth_headers,
+        )
+        try:
+            await session.cancel_all_orders(instrument_id=1, expires_at=1_700_000_005_000)
+            await session.cancel_all_orders()
+        finally:
+            await session.close()
+
+    asyncio.run(asyncio.wait_for(run(), timeout=10.0))
+
+    assert len(captured) == 2
+    assert captured[0].method == "DELETE"
+    assert captured[0].url.path == "/v1/trade/orders/all"
+    assert captured[0].headers["polymarket-proxy"] == _PROXY_ADDRESS
+    assert captured[0].headers["polymarket-secret"] == "session-secret"
+
+    scoped_body = json.loads(captured[0].content)
+    assert scoped_body["op"] == {"type": "cancelAll", "args": {"iid": 1}}
+    assert scoped_body["exp"] == 1_700_000_005_000
+    assert isinstance(scoped_body["salt"], int)
+    assert isinstance(scoped_body["ts"], int)
+    assert scoped_body["sig"].startswith("0x") and len(scoped_body["sig"]) == 132
+
+    unscoped_body = json.loads(captured[1].content)
+    assert unscoped_body["op"] == {"type": "cancelAll", "args": {}}
+    assert "exp" not in unscoped_body
 
 
 def test_sequence_gap_emits_resync_event_before_update() -> None:

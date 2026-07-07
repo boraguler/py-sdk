@@ -12,6 +12,7 @@ Metered side effects:
 """
 
 import asyncio
+import contextlib
 import math
 from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime, timedelta
@@ -195,6 +196,49 @@ async def test_places_and_cancels_one_perps_order(
         result = await session.cancel_order(order_id=placement.order.id)
         assert result.status == "ok"
     finally:
+        await session.close()
+
+
+@pytest.mark.integration
+@pytest.mark.metered
+async def test_places_and_cancels_all_perps_orders_for_one_instrument(
+    deposit_wallet_client: AsyncSecureClient,
+) -> None:
+    instrument = await _first_instrument(deposit_wallet_client)
+    ticker = await deposit_wallet_client.fetch_perps_ticker(instrument_id=instrument.id)
+    # Places two resting orders and cancels all open orders for this instrument.
+    price = _format_perps_price(ticker.mark_price / 2, instrument.price_decimals)
+    quantity = _minimal_order_quantity(instrument, Decimal(price))
+    order_ids: list[int] = []
+    session = await deposit_wallet_client.open_perps_session()
+    try:
+        for _ in range(2):
+            placement = await session.place_order(
+                instrument_id=instrument.id,
+                side="BUY",
+                price=price,
+                quantity=quantity,
+                time_in_force="gtc",
+            )
+            order_ids.append(placement.order.id)
+
+        await session.cancel_all_orders(instrument_id=instrument.id)
+
+        async def poll() -> None:
+            while True:
+                open_order_ids = {
+                    order.id
+                    for order in await session.fetch_open_orders(instrument_id=instrument.id)
+                }
+                if all(order_id not in open_order_ids for order_id in order_ids):
+                    return
+                await asyncio.sleep(1.0)
+
+        await asyncio.wait_for(poll(), timeout=30.0)
+    finally:
+        if order_ids:
+            with contextlib.suppress(Exception):
+                await session.cancel_orders(order_ids=order_ids)
         await session.close()
 
 
