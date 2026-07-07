@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-b15](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b14...polymarket-client-v0.1.0-b15) (2026-07-07)
+
+
+### Features
+
+* **client:** add perps support ([9054e7a](https://github.com/Polymarket/py-sdk/commit/9054e7ae5538434f73619c4cded03d6cf985de21))
+
 ## [0.1.0-b14](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b13...polymarket-client-v0.1.0-b14) (2026-07-07)
 
 
