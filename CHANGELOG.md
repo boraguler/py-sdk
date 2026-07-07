@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.0-b14](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b13...polymarket-client-v0.1.0-b14) (2026-07-07)
+
+
+### Features
+
+* **auth:** add builder-api-key management (create/fetch/revoke) ([8f0925e](https://github.com/Polymarket/py-sdk/commit/8f0925ef99700c00f20700de325707319e9fd5ba))
+* **client:** support for multiple position merges ([24b8689](https://github.com/Polymarket/py-sdk/commit/24b86895969964bc40425262547e45054f7417e7))
+* **examples:** add runnable Python SDK examples ([9d87d2f](https://github.com/Polymarket/py-sdk/commit/9d87d2f813d6034ce27149d55ac69d4c81d996d9))
+
+
+### Bug Fixes
+
+* **client:** resolve closed markets for redeem ([58fc121](https://github.com/Polymarket/py-sdk/commit/58fc12112d0d45d40a53294360810195408f5fc0))
+* **client:** resolve closed markets for redeem ([205f989](https://github.com/Polymarket/py-sdk/commit/205f989b2aad6583edf3fb38ba110568ad67f79c))
+* wait for confirmed gasless transactions ([8d02ec1](https://github.com/Polymarket/py-sdk/commit/8d02ec1cf0b6fe3e2a82128a8839bd5a8190d55b))
+* wait for confirmed gasless transactions ([2fab25f](https://github.com/Polymarket/py-sdk/commit/2fab25f869de0a97cc55e48bc1f7b63c6f3b6405))
+
+
+### Documentation
+
+* clarify integration test fixture guidance ([ad8d23c](https://github.com/Polymarket/py-sdk/commit/ad8d23c1b98520f9e3c43916f69b54e44d17a891))
+
 ## [0.1.0-b13](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b12...polymarket-client-v0.1.0-b13) (2026-07-03)
 
 
