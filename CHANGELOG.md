@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0-b16](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b15...polymarket-client-v0.1.0-b16) (2026-07-08)
+
+
+### Bug Fixes
+
+* **client:** update auto-redeem operator ([cb709e2](https://github.com/Polymarket/py-sdk/commit/cb709e2bd6044ffe7b9907211d7c5d5c13d50f5c))
+* **client:** update auto-redeem operator ([5f7d828](https://github.com/Polymarket/py-sdk/commit/5f7d8283b40857e936474d1e00275e8428af5ea4))
+
 ## [0.1.0-b15](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b14...polymarket-client-v0.1.0-b15) (2026-07-07)
 
 
