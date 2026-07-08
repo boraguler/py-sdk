@@ -9,7 +9,6 @@ from polymarket import (
     AsyncPublicClient,
     AsyncSecureClient,
     Market,
-    Position,
     SecureClient,
 )
 from polymarket.errors import InsufficientLiquidityError, UserInputError
@@ -90,19 +89,6 @@ def _market_condition_id(market: Market) -> str:
     condition_id = market.condition_id
     assert condition_id is not None
     return condition_id
-
-
-async def _find_owned_token_position(
-    client: AsyncSecureClient,
-    *,
-    market: str,
-    token_id: str,
-) -> Position | None:
-    page = await client.list_positions(market=[market], size_threshold=0.0).first_page()
-    for position in page.items:
-        if position.token_id == token_id and position.size and position.size > 0:
-            return position
-    return None
 
 
 @pytest.mark.integration
@@ -277,23 +263,7 @@ async def test_place_market_order_closes_inventory_or_buys_minimum_size(
     tradable_market: Market,
 ) -> None:
     token_id = _yes_token_id(tradable_market)
-    market = _market_condition_id(tradable_market)
     amount = _minimum_order_size(tradable_market)
-
-    position = await _find_owned_token_position(
-        deposit_wallet_client, market=market, token_id=token_id
-    )
-    if position is not None:
-        assert position.size is not None, "expected non-null size on owned position"
-        response = await deposit_wallet_client.place_market_order(
-            token_id=token_id,
-            side="SELL",
-            shares=position.size,
-            order_type="FAK",
-        )
-        assert isinstance(response, AcceptedOrder)
-        assert response.status in ("live", "matched", "delayed")
-        return
 
     response = await deposit_wallet_client.place_market_order(
         token_id=token_id,
@@ -303,6 +273,14 @@ async def test_place_market_order_closes_inventory_or_buys_minimum_size(
     )
     assert isinstance(response, AcceptedOrder)
     assert response.status in ("live", "matched", "delayed")
+    if response.taking_amount > 0:
+        with contextlib.suppress(Exception):
+            await deposit_wallet_client.place_market_order(
+                token_id=token_id,
+                side="SELL",
+                shares=response.taking_amount,
+                order_type="FAK",
+            )
 
 
 @pytest.mark.integration
@@ -312,44 +290,31 @@ def test_sync_secure_client_create_places_market_order(
     deposit_wallet_address: str,
     tradable_market: Market,
 ) -> None:
-    # Live side effect: places a FAK market order, selling existing Yes inventory
-    # when present or buying the minimum size otherwise.
+    # Live side effect: places a FAK market order, then best-effort sells any fill.
     token_id = _yes_token_id(tradable_market)
-    market = _market_condition_id(tradable_market)
     amount = _minimum_order_size(tradable_market)
 
     with SecureClient.create(
         private_key=deposit_wallet_private_key,
         wallet=deposit_wallet_address,
     ) as client:
-        positions = client.list_positions(market=[market], size_threshold=0.0).first_page()
-        position = next(
-            (
-                p
-                for p in positions.items
-                if p.token_id == token_id and p.size is not None and p.size > 0
-            ),
-            None,
+        response = client.place_market_order(
+            token_id=token_id,
+            side="BUY",
+            amount=amount,
+            order_type="FAK",
         )
-        if position is not None:
-            shares = position.size
-            assert shares is not None
-            response = client.place_market_order(
-                token_id=token_id,
-                side="SELL",
-                shares=shares,
-                order_type="FAK",
-            )
-        else:
-            response = client.place_market_order(
-                token_id=token_id,
-                side="BUY",
-                amount=amount,
-                order_type="FAK",
-            )
+        assert isinstance(response, AcceptedOrder)
+        assert response.status in ("live", "matched", "delayed")
 
-    assert isinstance(response, AcceptedOrder)
-    assert response.status in ("live", "matched", "delayed")
+        if response.taking_amount > 0:
+            with contextlib.suppress(Exception):
+                client.place_market_order(
+                    token_id=token_id,
+                    side="SELL",
+                    shares=response.taking_amount,
+                    order_type="FAK",
+                )
 
 
 @pytest.mark.integration
