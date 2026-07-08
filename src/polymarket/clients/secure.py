@@ -35,6 +35,7 @@ from polymarket._internal.actions.gamma import (
     CommentParentEntityType,
     DateFilter,
     Recurrence,
+    SearchSort,
     TagMatch,
     TimestampFilter,
 )
@@ -94,7 +95,9 @@ from polymarket._internal.actions.relayer.positions import (
     MarketPositionContext,
     canonicalize_combo_legs,
     decode_combo_outcome_position_id,
+    derive_combo_outcome_position_ids,
     derive_combo_position_context,
+    normalize_batch_merge_position_request,
     normalize_market_position_context,
     parse_market_id,
     resolve_merge_amount_from_balances,
@@ -113,10 +116,11 @@ from polymarket._internal.l1_auth import sign_api_key_auth
 from polymarket._internal.wallet import (
     WalletType,
     classify_wallet_type,
-    derive_current_deposit_wallet_address_sync,
+    derive_beacon_deposit_wallet_address,
+    derive_uups_deposit_wallet_address,
     signature_type_for,
 )
-from polymarket.auth import ApiKey
+from polymarket.auth import ApiKey, BuilderApiKey
 from polymarket.clients._transport import SyncHeaderResolver, SyncTransport
 from polymarket.environments import PRODUCTION, Environment
 from polymarket.errors import (
@@ -153,7 +157,7 @@ from polymarket.models import (
     TagReference,
     Team,
 )
-from polymarket.models.clob import BuilderTrade
+from polymarket.models.clob import BuilderApiKeyInfo, BuilderTrade
 from polymarket.models.clob.cancel import CancelOrdersResponse
 from polymarket.models.clob.order_response import OrderResponse
 from polymarket.models.clob.orders import MarketOrderType, SignedOrder
@@ -189,6 +193,7 @@ from polymarket.models.data import (
 from polymarket.models.types import CtfConditionId
 from polymarket.pagination import Page, Paginator
 from polymarket.transactions import (
+    MergePositionRequest,
     SyncDeprecatedTransactionHandle,
     SyncEoaTransactionHandle,
     SyncTransactionHandle,
@@ -256,7 +261,7 @@ class SecureClient:
 
         Args:
             private_key: EVM private key used for signing.
-            wallet: Wallet address to act for. Defaults to the signer's current Deposit Wallet.
+            wallet: Wallet address to act for. Defaults to the signer's Deposit Wallet.
             credentials: Existing API credentials. When omitted, credentials are
                 derived during client creation.
             api_key: Optional key for gasless wallet and relayed transaction workflows.
@@ -1222,10 +1227,17 @@ class SecureClient:
         recurrence: Recurrence | None = None,
         search_profiles: bool | None = None,
         search_tags: bool | None = None,
-        sort: str | None = None,
+        sort: SearchSort | None = None,
         page_size: int = 10,
     ) -> Paginator[SearchResults]:
         """Search Polymarket content.
+
+        Args:
+            keep_closed_markets: Include markets closed within this many hours when
+                searching active events.
+            sort: Event sort field. Supported values are ``volume``, ``volume_24hr``,
+                ``liquidity``, ``competitive``, ``closed_time``, ``start_date``, and
+                ``end_date``.
 
         Returns:
             A paginator over search result pages.
@@ -1405,6 +1417,28 @@ class SecureClient:
         """Delete the API key currently used by this client."""
         _auth_actions.delete_api_key_sync(self._ctx.secure_clob)
 
+    def create_builder_api_key(self) -> BuilderApiKey:
+        """Create a new builder API key for the authenticated account."""
+        return _auth_actions.create_builder_api_key_sync(self._ctx.secure_clob)
+
+    def fetch_builder_api_keys(self) -> tuple[BuilderApiKeyInfo, ...]:
+        """List the builder API keys for the authenticated account."""
+        return _auth_actions.fetch_builder_api_keys_sync(self._ctx.secure_clob)
+
+    def revoke_builder_api_key(self) -> None:
+        """Revoke the builder API key this client is configured with.
+
+        The revocation is authenticated by the builder key itself, so the client must have been
+        created with the key to revoke (``SecureClient.create(api_key=BuilderApiKey(...))``).
+        """
+        builder_key = self._ctx.api_key
+        if not isinstance(builder_key, BuilderApiKey):
+            raise UserInputError(
+                "revoke_builder_api_key requires a client created with the builder key to "
+                "revoke (pass api_key=BuilderApiKey(...) to SecureClient.create)."
+            )
+        _auth_actions.revoke_builder_api_key_sync(self._ctx.clob, builder_key)
+
     def end_authentication(self) -> "PublicClient":
         """Delete current credentials, close this client, and return a public client."""
         from polymarket.clients.public import PublicClient
@@ -1533,7 +1567,7 @@ class SecureClient:
         :meth:`place_limit_order` to create and post in one call.
 
         When ``expiration`` is provided, it must be a Unix timestamp at least
-        60 seconds in the future. Use extra buffer for immediate submissions to
+        3 minutes in the future. Use extra buffer for immediate submissions to
         account for latency and clock skew.
 
         Raises:
@@ -1623,7 +1657,7 @@ class SecureClient:
         """Create, sign, and post a limit order.
 
         When ``expiration`` is provided, it must be a Unix timestamp at least
-        60 seconds in the future. Use extra buffer for immediate submissions to
+        3 minutes in the future. Use extra buffer for immediate submissions to
         account for latency and clock skew.
 
         Raises:
@@ -2039,6 +2073,24 @@ class SecureClient:
         """
         return True
 
+    def execute_transaction(
+        self,
+        *,
+        calls: Sequence[TransactionCall],
+        metadata: str | None = None,
+    ) -> SyncTransactionHandle:
+        """Submit one or more transaction calls for the authenticated wallet.
+
+        Use this low-level escape hatch to combine supported transaction calls
+        differently than the higher-level SDK workflows. Calls are executed in order.
+
+        Returns:
+            A transaction handle. Call ``wait()`` to wait for a terminal outcome.
+        """
+        return self._dispatch_calls(
+            list(calls), metadata=metadata if metadata is not None else "Execute transaction"
+        )
+
     def split_position(
         self,
         *,
@@ -2176,6 +2228,101 @@ class SecureClient:
         )
         return self._dispatch_single_call(call, metadata=resolved_metadata)
 
+    def merge_multiple_positions(
+        self,
+        *,
+        positions: Sequence[MergePositionRequest],
+        metadata: str | None = None,
+    ) -> SyncTransactionHandle:
+        """Merge multiple market positions or multiple combo positions back into collateral.
+
+        Args:
+            positions: Position merge requests. Use ``position_id`` for combo
+                positions, or ``condition_id`` / ``market_id`` for market positions.
+                Do not mix combo and market requests in the same batch.
+                Omit ``amount`` or pass ``"max"`` to merge the largest available
+                balanced amount for that condition.
+
+        Returns:
+            A transaction handle. Call ``wait()`` to wait for a terminal outcome.
+        """
+        if not positions:
+            raise UserInputError("positions must include at least one merge request")
+
+        env = self._ctx.environment
+        normalized = [
+            normalize_batch_merge_position_request(cast(Mapping[str, object], position))
+            for position in positions
+        ]
+        batch_kinds = {position.kind for position in normalized}
+        if len(batch_kinds) != 1:
+            raise UserInputError("Cannot mix market and combo positions in one merge batch")
+
+        seen_conditions: set[str] = set()
+        calls: list[TransactionCall] = []
+        for position in normalized:
+            if position.kind == "combo":
+                assert position.position_id is not None
+                decoded = decode_combo_outcome_position_id(position.position_id)
+                condition_key = str(decoded.condition_id)
+                if condition_key in seen_conditions:
+                    raise UserInputError("position_ids must reference distinct combo conditions")
+                seen_conditions.add(condition_key)
+                token_ids = derive_combo_outcome_position_ids(decoded.condition_id)
+                balance_call = erc1155_balance_of_batch_call(
+                    token_address=cast(EvmAddress, env.position_manager),
+                    owners=[self._ctx.wallet, self._ctx.wallet],
+                    token_ids=list(token_ids),
+                )
+                balances = decode_erc1155_balance_of_batch_result(
+                    self._ctx.rpc.eth_call(to=str(balance_call.to), data=balance_call.data)
+                )
+                resolved_amount = resolve_merge_amount_from_balances(
+                    decoded.condition_id, balances, position.amount
+                )
+                calls.append(
+                    merge_v2_call(
+                        router=cast(EvmAddress, env.protocol_v2_router),
+                        condition_id=decoded.condition_id,
+                        amount=resolved_amount,
+                    )
+                )
+                continue
+
+            context = self._resolve_market_position_context(
+                condition_id=position.condition_id,
+                market_id=position.market_id,
+            )
+            condition_key = str(context.condition_id)
+            if condition_key in seen_conditions:
+                raise UserInputError("positions must reference distinct market conditions")
+            seen_conditions.add(condition_key)
+            balance_call = erc1155_balance_of_batch_call(
+                token_address=context.position_erc1155_address,
+                owners=[self._ctx.wallet, self._ctx.wallet],
+                token_ids=[str(token_id) for token_id in context.token_ids],
+            )
+            balances = decode_erc1155_balance_of_batch_result(
+                self._ctx.rpc.eth_call(to=str(balance_call.to), data=balance_call.data)
+            )
+            resolved_amount = resolve_merge_amount_from_balances(
+                context.condition_id, balances, position.amount
+            )
+            calls.append(
+                merge_positions_call(
+                    target=context.adapter_address,
+                    collateral=cast(EvmAddress, env.collateral_token),
+                    condition_id=context.condition_id,
+                    amount=resolved_amount,
+                )
+            )
+
+        batch_label = "combo positions" if "combo" in batch_kinds else "positions"
+        resolved_metadata = (
+            metadata if metadata is not None else f"Merge {len(calls)} {batch_label}"
+        )
+        return self.execute_transaction(calls=calls, metadata=resolved_metadata)
+
     def redeem_positions(
         self,
         *,
@@ -2223,6 +2370,7 @@ class SecureClient:
         context = self._resolve_market_position_context(
             condition_id=condition_id,
             market_id=market_id,
+            closed=True,
         )
         call = ctf_redeem_positions_call(
             ctf=context.adapter_address,
@@ -2286,8 +2434,8 @@ class SecureClient:
 
     def _deploy_default_deposit_wallet(self) -> None:
         ctx = self._ctx
-        current_deposit_wallet = derive_current_deposit_wallet_address_sync(
-            ctx.rpc, ctx.signer.address, ctx.environment.wallet_derivation
+        current_deposit_wallet = derive_beacon_deposit_wallet_address(
+            ctx.signer.address, ctx.environment.wallet_derivation
         )
         if str(ctx.wallet).lower() != current_deposit_wallet.lower():
             raise UserInputError(
@@ -2302,17 +2450,28 @@ class SecureClient:
         *,
         condition_id: str | None = None,
         market_id: str | None = None,
+        closed: bool | None = None,
     ) -> MarketPositionContext:
         if (condition_id is None) == (market_id is None):
             raise UserInputError("Provide exactly one of condition_id or market_id")
         env = self._ctx.environment
         if condition_id is not None:
             context = f"condition {condition_id}"
-            page = self.list_markets(condition_ids=[condition_id], page_size=1).first_page()
+            if closed is None:
+                page = self.list_markets(condition_ids=[condition_id], page_size=1).first_page()
+            else:
+                page = self.list_markets(
+                    condition_ids=[condition_id], closed=closed, page_size=1
+                ).first_page()
         else:
             assert market_id is not None
             context = f"market {market_id}"
-            page = self.list_markets(ids=[parse_market_id(market_id)], page_size=1).first_page()
+            if closed is None:
+                page = self.list_markets(ids=[parse_market_id(market_id)], page_size=1).first_page()
+            else:
+                page = self.list_markets(
+                    ids=[parse_market_id(market_id)], closed=closed, page_size=1
+                ).first_page()
         markets = page.items
         if not markets:
             raise UserInputError(f"No market found for {context}")
@@ -2364,14 +2523,20 @@ def _resolve_requested_wallet_sync(
 ) -> str:
     if wallet is not None:
         return wallet
-    rpc_transport = SyncTransport(base_url=environment.rpc_url, logger=logger)
-    rpc = SyncJsonRpcClient(rpc_transport)
+    legacy_deposit_wallet = derive_uups_deposit_wallet_address(
+        signer.address, environment.wallet_derivation
+    )
+    relayer = SyncTransport(base_url=environment.relayer_url, logger=logger)
     try:
-        return derive_current_deposit_wallet_address_sync(
-            rpc, signer.address, environment.wallet_derivation
-        )
+        if fetch_deployed_sync(
+            relayer,
+            address=legacy_deposit_wallet,
+            type=RelayerTransactionType.WALLET,
+        ):
+            return legacy_deposit_wallet
+        return derive_beacon_deposit_wallet_address(signer.address, environment.wallet_derivation)
     finally:
-        rpc.close()
+        relayer.close()
 
 
 def _relayer_transaction_type_for_wallet(

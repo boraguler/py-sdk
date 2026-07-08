@@ -354,7 +354,7 @@ def test_approve_erc20_retries_with_fresh_nonce_on_nonce_mismatch() -> None:
     assert submit_bodies[0]["signature"] != submit_bodies[1]["signature"]
 
 
-def test_wait_polls_until_mined() -> None:
+def test_wait_polls_until_confirmed() -> None:
     captured: list[httpx.Request] = []
     polls = 0
 
@@ -383,7 +383,7 @@ def test_wait_polls_until_mined() -> None:
                 )
             if path.startswith("/v1/account/transactions/"):
                 polls += 1
-                state = "STATE_MINED" if polls >= 2 else "STATE_NEW"
+                state = "STATE_CONFIRMED" if polls >= 2 else "STATE_NEW"
                 return httpx.Response(
                     200,
                     json={

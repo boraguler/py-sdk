@@ -160,13 +160,18 @@ def test_gasless_transaction_preserves_present_transaction_hash() -> None:
     assert tx.transaction_hash == expected
 
 
-def test_poll_until_terminal_returns_outcome_on_mined() -> None:
+def test_poll_until_terminal_waits_for_confirmed_after_mined() -> None:
+    polls = 0
+
     async def run() -> Any:
         def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal polls
+            polls += 1
+
             return httpx.Response(
                 200,
                 json={
-                    "state": "STATE_MINED",
+                    "state": "STATE_MINED" if polls == 1 else "STATE_CONFIRMED",
                     "transaction_hash": "0x" + "ab" * 32,
                     "transaction_id": "tx-7",
                 },
@@ -188,6 +193,7 @@ def test_poll_until_terminal_returns_outcome_on_mined() -> None:
     outcome = asyncio.run(run())
     assert outcome.transaction_id == "tx-7"
     assert outcome.transaction_hash == "0x" + "ab" * 32
+    assert polls == 2
 
 
 def test_poll_until_terminal_raises_on_failed_state() -> None:

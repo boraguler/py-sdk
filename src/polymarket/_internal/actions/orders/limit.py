@@ -27,7 +27,7 @@ from polymarket.errors import UserInputError
 from polymarket.models.types import OrderSide, TokenId
 from polymarket.types import EvmAddress, HexString
 
-_MIN_EXPIRATION_BUFFER_S = 60
+_MIN_EXPIRATION_BUFFER_S = 180
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

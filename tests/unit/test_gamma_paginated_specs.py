@@ -221,7 +221,7 @@ def test_search_spec_builds_request_with_filters() -> None:
         ascending=True,
         events_tag=["politics"],
         exclude_tag_ids=[5, 6],
-        sort="recent",
+        sort="volume",
     )
 
     assert isinstance(spec, PageBasedSpec)
@@ -232,13 +232,18 @@ def test_search_spec_builds_request_with_filters() -> None:
         "ascending": True,
         "events_tag": ("politics",),
         "exclude_tag_id": (5, 6),
-        "sort": "recent",
+        "sort": "volume",
     }
 
 
 def test_search_spec_rejects_invalid_recurrence() -> None:
     with pytest.raises(UserInputError, match="recurrence must be one of"):
         gamma_actions.search_spec(q="x", recurrence="yearly")  # type: ignore[arg-type]
+
+
+def test_search_spec_rejects_invalid_sort() -> None:
+    with pytest.raises(UserInputError, match="sort must be one of"):
+        gamma_actions.search_spec(q="x", sort="recent")  # type: ignore[arg-type]
 
 
 def test_list_markets_spec_treats_bare_slug_string_as_single_item() -> None:

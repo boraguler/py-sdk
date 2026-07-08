@@ -1,13 +1,38 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Literal, NotRequired, TypeAlias, TypedDict
 
 from polymarket.models.clob.relayer import TransactionOutcome
 
 if TYPE_CHECKING:
     from polymarket._internal.eoa.rpc import JsonRpcClient, SyncJsonRpcClient
     from polymarket.clients._transport import AsyncTransport, SyncTransport
+
+
+class MergeComboPositionRequest(TypedDict):
+    """Combo position merge request used by batch merge workflows."""
+
+    position_id: str
+    amount: NotRequired[int | Literal["max"]]
+
+
+class MergeMarketConditionRequest(TypedDict):
+    """Market position merge request identified by condition id."""
+
+    condition_id: str
+    amount: NotRequired[int | Literal["max"]]
+
+
+class MergeMarketIdRequest(TypedDict):
+    """Market position merge request identified by market id."""
+
+    market_id: str
+    amount: NotRequired[int | Literal["max"]]
+
+
+MergeMarketPositionRequest: TypeAlias = MergeMarketConditionRequest | MergeMarketIdRequest
+MergePositionRequest: TypeAlias = MergeComboPositionRequest | MergeMarketPositionRequest
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +167,11 @@ SyncTransactionHandle: TypeAlias = SyncGaslessTransactionHandle | SyncEoaTransac
 __all__ = [
     "EoaTransactionHandle",
     "GaslessTransactionHandle",
+    "MergeComboPositionRequest",
+    "MergeMarketConditionRequest",
+    "MergeMarketIdRequest",
+    "MergeMarketPositionRequest",
+    "MergePositionRequest",
     "DeprecatedTransactionHandle",
     "SyncDeprecatedTransactionHandle",
     "SyncEoaTransactionHandle",

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -108,7 +108,7 @@ def make_rpc_handler(
     receipt_responses: list[dict[str, object] | None] | None = None,
     chain_id: int = 137,
 ) -> Callable[[httpx.Request], httpx.Response]:
-    captured: list[dict[str, object]] = []
+    captured: list[object] = []
     receipt_iter = iter(receipt_responses or [])
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -157,52 +157,106 @@ def trading_approval_rpc_handler(
     receipt_responses: list[dict[str, object] | None] | None = None,
     chain_id: int = 137,
 ) -> Callable[[httpx.Request], httpx.Response]:
-    captured: list[dict[str, object]] = []
+    captured: list[object] = []
     receipt_iter = iter(receipt_responses or [])
-    allowance_selector = "0x" + keccak(b"allowance(address,address)")[:4].hex()
-    approved_selector = "0x" + keccak(b"isApprovedForAll(address,address)")[:4].hex()
 
     def handler(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content.decode("utf-8"))
+        body = cast(object, json.loads(request.content.decode("utf-8")))
         captured.append(body)
-        method = body["method"]
-        if method == "eth_call":
-            data = body["params"][0]["data"]
-            if data.startswith(allowance_selector):
-                result: object = "0x" + hex(allowance)[2:].rjust(64, "0")
-            elif data.startswith(approved_selector):
-                result = "0x" + ("1" if approved else "0").rjust(64, "0")
-            else:
-                result = "0x" + "0" * 64
-        elif method == "eth_chainId":
-            result = hex(chain_id)
-        elif method == "eth_getTransactionCount":
-            result = hex(nonce)
-        elif method == "eth_gasPrice":
-            result = hex(gas_price)
-        elif method == "eth_estimateGas":
-            result = hex(gas_estimate)
-        elif method == "eth_sendRawTransaction":
-            result = send_response or ("0x" + "ab" * 32)
-        elif method == "eth_getTransactionReceipt":
-            try:
-                result = next(receipt_iter)
-            except StopIteration:
-                result = None
-        else:
+
+        if isinstance(body, list):
             return httpx.Response(
                 200,
-                json={"jsonrpc": "2.0", "id": body["id"], "error": {"message": "unmocked"}},
+                json=[
+                    _trading_approval_rpc_response(
+                        item,
+                        allowance=allowance,
+                        approved=approved,
+                        nonce=nonce,
+                        gas_price=gas_price,
+                        gas_estimate=gas_estimate,
+                        send_response=send_response,
+                        receipt_iter=receipt_iter,
+                        chain_id=chain_id,
+                    )
+                    for item in cast(list[object], body)
+                ],
                 request=request,
             )
-        return httpx.Response(
-            200,
-            json={"jsonrpc": "2.0", "id": body["id"], "result": result},
-            request=request,
+
+        if not isinstance(body, dict):
+            return httpx.Response(400, request=request)
+
+        response = _trading_approval_rpc_response(
+            cast(dict[str, object], body),
+            allowance=allowance,
+            approved=approved,
+            nonce=nonce,
+            gas_price=gas_price,
+            gas_estimate=gas_estimate,
+            send_response=send_response,
+            receipt_iter=receipt_iter,
+            chain_id=chain_id,
         )
+        if "error" in response:
+            return httpx.Response(200, json=response, request=request)
+        return httpx.Response(200, json=response, request=request)
 
     handler.captured = captured  # type: ignore[attr-defined]
     return handler
+
+
+def _trading_approval_rpc_response(
+    body: object,
+    *,
+    allowance: int,
+    approved: bool,
+    nonce: int,
+    gas_price: int,
+    gas_estimate: int,
+    send_response: str | None,
+    receipt_iter: Iterator[dict[str, object] | None],
+    chain_id: int,
+) -> dict[str, object]:
+    allowance_selector = "0x" + keccak(b"allowance(address,address)")[:4].hex()
+    approved_selector = "0x" + keccak(b"isApprovedForAll(address,address)")[:4].hex()
+
+    if not isinstance(body, dict):
+        return {"jsonrpc": "2.0", "id": None, "error": {"message": "malformed"}}
+
+    request = cast(dict[str, Any], body)
+    method = request["method"]
+    if method == "eth_call":
+        params = cast(list[dict[str, Any]], request["params"])
+        data = params[0]["data"]
+        if data.startswith(allowance_selector):
+            result: object = "0x" + hex(allowance)[2:].rjust(64, "0")
+        elif data.startswith(approved_selector):
+            result = "0x" + ("1" if approved else "0").rjust(64, "0")
+        else:
+            result = "0x" + "0" * 64
+    elif method == "eth_chainId":
+        result = hex(chain_id)
+    elif method == "eth_getTransactionCount":
+        result = hex(nonce)
+    elif method == "eth_gasPrice":
+        result = hex(gas_price)
+    elif method == "eth_estimateGas":
+        result = hex(gas_estimate)
+    elif method == "eth_sendRawTransaction":
+        result = send_response or ("0x" + "ab" * 32)
+    elif method == "eth_getTransactionReceipt":
+        try:
+            result = next(receipt_iter)
+        except StopIteration:
+            result = None
+    else:
+        return {
+            "jsonrpc": "2.0",
+            "id": request["id"],
+            "error": {"message": "unmocked"},
+        }
+    return {"jsonrpc": "2.0", "id": request["id"], "result": result}
 
 
 async def make_safe_client() -> AsyncSecureClient:

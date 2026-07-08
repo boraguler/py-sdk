@@ -53,6 +53,53 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+Custom transaction calls:
+
+```python
+from polymarket.calls import merge_v2_call
+from polymarket.types import EvmAddress
+
+router = EvmAddress(client.environment.protocol_v2_router)
+
+handle = client.execute_transaction(
+    calls=[
+        merge_v2_call(router=router, condition_id="0x03...", amount=1_000_000),
+        merge_v2_call(router=router, condition_id="0x03...", amount=2_000_000),
+        merge_v2_call(router=router, condition_id="0x03...", amount=500_000),
+    ],
+    metadata="Merge 3 combo positions",
+)
+
+outcome = handle.wait()
+```
+
+Batch position merges:
+
+```python
+# Merge regular market positions by condition or market id.
+handle = client.merge_multiple_positions(
+    positions=[
+        {"condition_id": condition_id_1},
+        {"market_id": market_id_2, "amount": "max"},
+        {"condition_id": condition_id_3, "amount": 500_000},
+    ],
+)
+
+outcome = handle.wait()
+
+# Or merge combo positions by position id. Do not mix market and combo
+# requests in the same batch.
+handle = client.merge_multiple_positions(
+    positions=[
+        {"position_id": combo_position_id_1},
+        {"position_id": combo_position_id_2, "amount": "max"},
+        {"position_id": combo_position_id_3, "amount": 500_000},
+    ],
+)
+
+outcome = handle.wait()
+```
+
 ## API Design
 
 See [SDK Direction](docs/sdk-direction.md) for public API design principles and developer-experience decisions.

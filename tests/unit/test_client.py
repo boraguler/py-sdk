@@ -147,14 +147,62 @@ def test_secure_client_invalid_key_raises_user_input_error() -> None:
         SecureClient.create(private_key="not-a-valid-key", wallet=SIGNER_ADDRESS)
 
 
-def test_secure_client_wallet_defaults_to_current_deposit_wallet_when_omitted() -> None:
+def test_secure_client_wallet_defaults_to_beacon_deposit_wallet_when_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from eth_account import Account
 
+    import polymarket.clients.secure as secure_module
+    from polymarket._internal.wallet import (
+        derive_beacon_deposit_wallet_address,
+        derive_uups_deposit_wallet_address,
+    )
+    from polymarket.environments import PRODUCTION
+    from polymarket.models.clob.relayer import RelayerTransactionType
+
+    signer = Account.from_key(PRIVATE_KEY)
+    legacy_wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+    expected = derive_beacon_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+
+    def fake_fetch_deployed_sync(
+        *args: object, address: str, type: RelayerTransactionType | None
+    ) -> bool:
+        assert address == legacy_wallet
+        assert type == RelayerTransactionType.WALLET
+        return False
+
+    monkeypatch.setattr(secure_module, "fetch_deployed_sync", fake_fetch_deployed_sync)
+
+    with SecureClient._create(
+        private_key=PRIVATE_KEY,
+        credentials=FAKE_CREDS,
+        validate_credentials=False,
+    ) as client:
+        assert client.wallet_type == "DEPOSIT_WALLET"
+        assert str(client.wallet) == expected
+
+
+def test_secure_client_wallet_defaults_to_existing_legacy_deposit_wallet_when_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from eth_account import Account
+
+    import polymarket.clients.secure as secure_module
     from polymarket._internal.wallet import derive_uups_deposit_wallet_address
     from polymarket.environments import PRODUCTION
+    from polymarket.models.clob.relayer import RelayerTransactionType
 
     signer = Account.from_key(PRIVATE_KEY)
     expected = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+
+    def fake_fetch_deployed_sync(
+        *args: object, address: str, type: RelayerTransactionType | None
+    ) -> bool:
+        assert address == expected
+        assert type == RelayerTransactionType.WALLET
+        return True
+
+    monkeypatch.setattr(secure_module, "fetch_deployed_sync", fake_fetch_deployed_sync)
 
     with SecureClient._create(
         private_key=PRIVATE_KEY,
@@ -173,14 +221,68 @@ def test_async_secure_client_invalid_key_raises_user_input_error() -> None:
     asyncio.run(run())
 
 
-def test_async_secure_client_wallet_defaults_to_current_deposit_wallet_when_omitted() -> None:
+def test_async_secure_client_wallet_defaults_to_beacon_deposit_wallet_when_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from eth_account import Account
 
+    import polymarket.clients.async_secure as async_secure_module
+    from polymarket._internal.wallet import (
+        derive_beacon_deposit_wallet_address,
+        derive_uups_deposit_wallet_address,
+    )
+    from polymarket.environments import PRODUCTION
+    from polymarket.models.clob.relayer import RelayerTransactionType
+
+    signer = Account.from_key(PRIVATE_KEY)
+    legacy_wallet = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+    expected = derive_beacon_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+
+    async def fake_fetch_deployed(
+        *args: object, address: str, type: RelayerTransactionType | None
+    ) -> bool:
+        assert address == legacy_wallet
+        assert type == RelayerTransactionType.WALLET
+        return False
+
+    monkeypatch.setattr(async_secure_module, "fetch_deployed", fake_fetch_deployed)
+
+    async def run() -> str:
+        client = await AsyncSecureClient._create(
+            private_key=PRIVATE_KEY,
+            credentials=FAKE_CREDS,
+            validate_credentials=False,
+        )
+        try:
+            assert client.wallet_type == "DEPOSIT_WALLET"
+            return str(client.wallet)
+        finally:
+            await client.close()
+
+    assert asyncio.run(run()) == expected
+
+
+def test_async_secure_client_wallet_defaults_to_existing_legacy_deposit_wallet_when_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from eth_account import Account
+
+    import polymarket.clients.async_secure as async_secure_module
     from polymarket._internal.wallet import derive_uups_deposit_wallet_address
     from polymarket.environments import PRODUCTION
+    from polymarket.models.clob.relayer import RelayerTransactionType
 
     signer = Account.from_key(PRIVATE_KEY)
     expected = derive_uups_deposit_wallet_address(signer.address, PRODUCTION.wallet_derivation)
+
+    async def fake_fetch_deployed(
+        *args: object, address: str, type: RelayerTransactionType | None
+    ) -> bool:
+        assert address == expected
+        assert type == RelayerTransactionType.WALLET
+        return True
+
+    monkeypatch.setattr(async_secure_module, "fetch_deployed", fake_fetch_deployed)
 
     async def run() -> str:
         client = await AsyncSecureClient._create(

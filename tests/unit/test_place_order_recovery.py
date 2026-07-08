@@ -248,7 +248,7 @@ def test_place_limit_order_recovers_buy_with_approve_max_then_retries() -> None:
             return httpx.Response(
                 200,
                 json={
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transactionHash": "0x" + "ab" * 32,
                     "transactionID": "tx-approve",
                 },
@@ -258,7 +258,7 @@ def test_place_limit_order_recovers_buy_with_approve_max_then_retries() -> None:
             return httpx.Response(
                 200,
                 json={
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transaction_hash": "0x" + "ab" * 32,
                     "transaction_id": "tx-approve",
                 },
@@ -341,7 +341,7 @@ def test_place_limit_order_recovers_sell_with_erc1155_approve_for_all_then_retri
             return httpx.Response(
                 200,
                 json={
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transactionHash": "0x" + "cd" * 32,
                     "transactionID": "tx-erc1155",
                 },
@@ -351,7 +351,7 @@ def test_place_limit_order_recovers_sell_with_erc1155_approve_for_all_then_retri
             return httpx.Response(
                 200,
                 json={
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transaction_hash": "0x" + "cd" * 32,
                     "transaction_id": "tx-erc1155",
                 },
@@ -437,7 +437,7 @@ def test_place_limit_order_retry_failure_surfaces_directly() -> None:
             return httpx.Response(
                 200,
                 json={
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transactionHash": "0x" + "ab" * 32,
                     "transactionID": "tx-a",
                 },
@@ -447,7 +447,7 @@ def test_place_limit_order_retry_failure_surfaces_directly() -> None:
             return httpx.Response(
                 200,
                 json={
-                    "state": "STATE_MINED",
+                    "state": "STATE_CONFIRMED",
                     "transaction_hash": "0x" + "ab" * 32,
                     "transaction_id": "tx-a",
                 },

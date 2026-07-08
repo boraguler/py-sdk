@@ -29,6 +29,7 @@ from polymarket._internal.actions.gamma import (
     CommentParentEntityType,
     DateFilter,
     Recurrence,
+    SearchSort,
     TagMatch,
     TimestampFilter,
 )
@@ -36,6 +37,7 @@ from polymarket._internal.actions.orders.estimate import (
     estimate_market_price as _estimate_market_price,
 )
 from polymarket._internal.actions.orders.types import MarketOrderType
+from polymarket._internal.actions.perps import public as _perps_actions
 from polymarket._internal.context import AsyncClientContext
 from polymarket._internal.dispatch import (
     async_dispatch,
@@ -92,6 +94,19 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
+from polymarket.models.perps import (
+    PerpsBook,
+    PerpsBookDepth,
+    PerpsCandle,
+    PerpsFeeScheduleEntry,
+    PerpsFundingRate,
+    PerpsInstrument,
+    PerpsInstrumentCategory,
+    PerpsKlineInterval,
+    PerpsMarketEvent,
+    PerpsTicker,
+    PerpsTrade,
+)
 from polymarket.models.rtds_events import (
     CommentsEvent,
     CryptoPricesEvent,
@@ -106,13 +121,17 @@ from polymarket.streams._specs import (
     CryptoPricesSpec,
     EquityPricesSpec,
     MarketSpec,
+    PerpsSpec,
     PublicSubscription,
     SportsSpec,
     normalize_specs,
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from polymarket._internal.streams.clob.market import ClobMarketStreamManager
+    from polymarket._internal.streams.perps.market import PerpsMarketStreamManager
     from polymarket._internal.streams.rtds.manager import RtdsStreamManager
     from polymarket._internal.streams.sports.manager import SportsStreamManager
 
@@ -135,10 +154,12 @@ class AsyncPublicClient:
             data=AsyncTransport(base_url=environment.data_url, logger=logger),
             rfq=AsyncTransport(base_url=environment.rfq_url, logger=logger),
             clob=AsyncTransport(base_url=environment.clob_url, logger=logger),
+            perps=AsyncTransport(base_url=environment.perps_url, logger=logger),
         )
         self._market_manager: ClobMarketStreamManager | None = None
         self._sports_manager: SportsStreamManager | None = None
         self._rtds_manager: RtdsStreamManager | None = None
+        self._perps_manager: PerpsMarketStreamManager | None = None
         self._streams_logger = logger
 
     @property
@@ -161,6 +182,8 @@ class AsyncPublicClient:
         self, specs: EquityPricesSpec, /
     ) -> SubscriptionHandle[EquityPricesEvent]: ...
     @overload
+    async def subscribe(self, specs: PerpsSpec, /) -> SubscriptionHandle[PerpsMarketEvent]: ...
+    @overload
     async def subscribe(
         self, specs: Sequence[MarketSpec], /
     ) -> SubscriptionHandle[MarketEvent]: ...
@@ -182,12 +205,16 @@ class AsyncPublicClient:
     ) -> SubscriptionHandle[EquityPricesEvent]: ...
     @overload
     async def subscribe(
+        self, specs: Sequence[PerpsSpec], /
+    ) -> SubscriptionHandle[PerpsMarketEvent]: ...
+    @overload
+    async def subscribe(
         self, specs: Sequence[PublicSubscription], /
-    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]: ...
+    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | PerpsMarketEvent]: ...
     async def subscribe(
         self,
         specs: PublicSubscription | Sequence[PublicSubscription],
-    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent]:
+    ) -> SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | PerpsMarketEvent]:
         """Subscribe to one or more public realtime streams.
 
         Pass a single subscription spec for one stream or a sequence of specs to
@@ -213,6 +240,8 @@ class AsyncPublicClient:
                     )
                 elif isinstance(spec, SportsSpec):
                     handles.append(await self._get_sports_manager().subscribe())
+                elif isinstance(spec, PerpsSpec):
+                    handles.append(await self._get_perps_manager().subscribe(spec))
                 elif isinstance(spec, CommentsSpec | CryptoPricesSpec | EquityPricesSpec):  # pyright: ignore[reportUnnecessaryIsInstance]
                     handles.append(await self._get_rtds_manager().subscribe(spec))
                 else:
@@ -223,11 +252,14 @@ class AsyncPublicClient:
                     await handle.close()
             raise
         if len(handles) == 1:
-            return cast(SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent], handles[0])
+            return cast(
+                SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | PerpsMarketEvent],
+                handles[0],
+            )
         from polymarket._internal.streams.merged_handle import MergedSubscriptionHandle
 
         return cast(
-            SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent],
+            SubscriptionHandle[MarketEvent | SportsEvent | RtdsEvent | PerpsMarketEvent],
             MergedSubscriptionHandle(handles),
         )
 
@@ -261,6 +293,16 @@ class AsyncPublicClient:
             )
         return self._sports_manager
 
+    def _get_perps_manager(self) -> "PerpsMarketStreamManager":
+        if self._perps_manager is None:
+            from polymarket._internal.streams.perps.market import PerpsMarketStreamManager
+
+            self._perps_manager = PerpsMarketStreamManager(
+                url=self._ctx.environment.perps_ws_url,
+                logger=self._streams_logger,
+            )
+        return self._perps_manager
+
     async def __aenter__(self) -> Self:
         return self
 
@@ -287,15 +329,22 @@ class AsyncPublicClient:
                         await self._rtds_manager.close()
                 finally:
                     try:
-                        await self._ctx.gamma.close()
+                        if self._perps_manager is not None:
+                            await self._perps_manager.close()
                     finally:
                         try:
-                            await self._ctx.data.close()
+                            await self._ctx.gamma.close()
                         finally:
                             try:
-                                await self._ctx.rfq.close()
+                                await self._ctx.data.close()
                             finally:
-                                await self._ctx.clob.close()
+                                try:
+                                    await self._ctx.rfq.close()
+                                finally:
+                                    try:
+                                        await self._ctx.clob.close()
+                                    finally:
+                                        await self._ctx.perps.close()
 
     async def get_market(
         self,
@@ -1061,10 +1110,17 @@ class AsyncPublicClient:
         recurrence: Recurrence | None = None,
         search_profiles: bool | None = None,
         search_tags: bool | None = None,
-        sort: str | None = None,
+        sort: SearchSort | None = None,
         page_size: int = 10,
     ) -> AsyncPaginator[SearchResults]:
         """Search Polymarket content.
+
+        Args:
+            keep_closed_markets: Include markets closed within this many hours when
+                searching active events.
+            sort: Event sort field. Supported values are ``volume``, ``volume_24hr``,
+                ``liquidity``, ``competitive``, ``closed_time``, ``start_date``, and
+                ``end_date``.
 
         Returns:
             An async paginator over search result pages.
@@ -1241,3 +1297,101 @@ class AsyncPublicClient:
             )
 
         return AsyncPaginator(fetch=fetch)
+
+    async def fetch_perps_instruments(
+        self,
+        *,
+        instrument_id: int | None = None,
+        category: PerpsInstrumentCategory | None = None,
+    ) -> tuple[PerpsInstrument, ...]:
+        """Fetch Perps instruments, optionally filtered by instrument or category."""
+        return await _perps_actions.fetch_instruments(
+            self._ctx.perps, instrument_id=instrument_id, category=category
+        )
+
+    async def fetch_perps_ticker(self, *, instrument_id: int) -> PerpsTicker:
+        """Fetch the current Perps ticker for an instrument."""
+        return await _perps_actions.fetch_ticker(self._ctx.perps, instrument_id=instrument_id)
+
+    async def fetch_perps_tickers(
+        self, *, instrument_id: int | None = None
+    ) -> tuple[PerpsTicker, ...]:
+        """Fetch current Perps tickers."""
+        return await _perps_actions.fetch_tickers(self._ctx.perps, instrument_id=instrument_id)
+
+    async def fetch_perps_book(
+        self, *, instrument_id: int, depth: PerpsBookDepth = 100
+    ) -> PerpsBook:
+        """Fetch a Perps order book snapshot.
+
+        ``depth`` controls the number of price levels returned on each side.
+        """
+        return await _perps_actions.fetch_book(
+            self._ctx.perps, instrument_id=instrument_id, depth=depth
+        )
+
+    async def fetch_perps_fees(self) -> tuple[PerpsFeeScheduleEntry, ...]:
+        """Fetch the Perps fee schedule."""
+        return await _perps_actions.fetch_fees(self._ctx.perps)
+
+    def list_perps_candles(
+        self,
+        *,
+        instrument_id: int,
+        interval: PerpsKlineInterval,
+        start: "datetime | int | None" = None,
+        end: "datetime | int | None" = None,
+    ) -> AsyncPaginator[PerpsCandle]:
+        """List Perps candles for an instrument with SDK-owned pagination.
+
+        Defaults to the past 24 hours when ``start`` is omitted. ``start`` and
+        ``end`` accept a ``datetime`` or an epoch-milliseconds int.
+
+        Returns:
+            An async paginator over matching candles.
+        """
+        return _perps_actions.list_candles(
+            self._ctx.perps,
+            instrument_id=instrument_id,
+            interval=interval,
+            start=start,
+            end=end,
+        )
+
+    def list_perps_funding_history(
+        self,
+        *,
+        instrument_id: int,
+        start: "datetime | int | None" = None,
+        end: "datetime | int | None" = None,
+    ) -> AsyncPaginator[PerpsFundingRate]:
+        """List Perps funding-rate history with SDK-owned pagination.
+
+        Defaults to the past 24 hours when ``start`` is omitted. ``start`` and
+        ``end`` accept a ``datetime`` or an epoch-milliseconds int.
+
+        Returns:
+            An async paginator over funding-rate observations.
+        """
+        return _perps_actions.list_funding_history(
+            self._ctx.perps, instrument_id=instrument_id, start=start, end=end
+        )
+
+    def list_perps_trades(
+        self,
+        *,
+        instrument_id: int,
+        start: "datetime | int | None" = None,
+        end: "datetime | int | None" = None,
+    ) -> AsyncPaginator[PerpsTrade]:
+        """List recent public Perps trades with SDK-owned pagination.
+
+        Defaults to the past 24 hours when ``start`` is omitted. ``start`` and
+        ``end`` accept a ``datetime`` or an epoch-milliseconds int.
+
+        Returns:
+            An async paginator over matching trades.
+        """
+        return _perps_actions.list_trades(
+            self._ctx.perps, instrument_id=instrument_id, start=start, end=end
+        )

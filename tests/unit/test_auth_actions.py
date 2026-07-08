@@ -4,8 +4,11 @@ from polymarket._internal.actions.auth import (
     build_l1_auth_headers,
     parse_api_key_creds,
     parse_api_keys_response,
+    parse_builder_api_key_creds,
+    parse_builder_api_keys_response,
 )
 from polymarket._internal.l1_auth import ApiKeyAuthSignature
+from polymarket.auth import BuilderApiKey
 from polymarket.errors import UnexpectedResponseError
 
 
@@ -60,3 +63,46 @@ def test_parse_api_keys_response_rejects_missing_field() -> None:
 def test_parse_api_keys_response_rejects_non_string_entry() -> None:
     with pytest.raises(UnexpectedResponseError):
         parse_api_keys_response({"apiKeys": [1, 2]})
+
+
+def test_parse_builder_api_key_creds_returns_builder_api_key() -> None:
+    creds = parse_builder_api_key_creds({"key": "k", "secret": "s", "passphrase": "p"})
+
+    assert isinstance(creds, BuilderApiKey)
+    assert (creds.key, creds.secret, creds.passphrase) == ("k", "s", "p")
+
+
+def test_parse_builder_api_key_creds_rejects_missing_field() -> None:
+    with pytest.raises(UnexpectedResponseError):
+        parse_builder_api_key_creds({"key": "k", "secret": "s"})
+
+
+def test_parse_builder_api_key_creds_rejects_non_dict() -> None:
+    with pytest.raises(UnexpectedResponseError):
+        parse_builder_api_key_creds([])
+
+
+def test_parse_builder_api_keys_response_parses_records() -> None:
+    keys = parse_builder_api_keys_response(
+        [{"key": "k", "createdAt": "1700000000000", "revokedAt": None}]
+    )
+
+    assert len(keys) == 1
+    assert keys[0].key == "k"
+    assert keys[0].created_at is not None
+    assert keys[0].revoked_at is None
+
+
+def test_parse_builder_api_keys_response_normalizes_bare_string_elements() -> None:
+    keys = parse_builder_api_keys_response(["a", {"key": "b"}])
+
+    assert [k.key for k in keys] == ["a", "b"]
+
+
+def test_parse_builder_api_keys_response_accepts_empty_list() -> None:
+    assert parse_builder_api_keys_response([]) == ()
+
+
+def test_parse_builder_api_keys_response_rejects_non_list() -> None:
+    with pytest.raises(UnexpectedResponseError):
+        parse_builder_api_keys_response({"apiKeys": []})
