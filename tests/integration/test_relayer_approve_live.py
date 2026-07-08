@@ -132,10 +132,19 @@ def test_approve_erc1155_for_all_live(require_env: Callable[[str], str]) -> None
 
 @pytest.mark.integration
 @pytest.mark.metered
-@pytest.mark.skip(reason=_SKIP_REASON)
-def test_setup_trading_approvals_live(require_env: Callable[[str], str]) -> None:
+def test_setup_trading_approvals_live(
+    builder_api_key: BuilderApiKey,
+    deposit_wallet_private_key: str,
+    deposit_wallet_address: str,
+) -> None:
     async def run() -> None:
-        async with _secure_client(require_env) as client:
+        client = await AsyncSecureClient.create(
+            private_key=deposit_wallet_private_key,
+            wallet=deposit_wallet_address,
+            api_key=builder_api_key,
+        )
+        async with client:
+            # Live side effect: submits any missing trading approvals for the configured wallet.
             handle = await client.setup_trading_approvals()
             await handle.wait()
 
