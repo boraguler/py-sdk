@@ -226,6 +226,7 @@ def test_combo_position_parses_payload() -> None:
     assert combo.condition_id == payload["combo_condition_id"]
     assert combo.position_id == "123"
     assert combo.outcome == "YES"
+    assert combo.wallet == "0x0000000000000000000000000000000000000001"
     assert combo.shares == Decimal("42.5")
     assert combo.realized_payout_usdc == Decimal("6.25")
     assert combo.total_cost_usdc == Decimal("5.1")
@@ -278,8 +279,9 @@ def test_combo_activity_normalizes_upstream_type_and_redeem_fields() -> None:
     assert activity.type == "REDEEM"
     assert activity.condition_id == _COMBO_CONDITION_ID
     assert activity.position_id == "123"
-    assert activity.amount_usdc == Decimal("4.5")
-    assert activity.payout_usdc == Decimal("6.25")
+    assert activity.wallet == "0x0000000000000000000000000000000000000001"
+    assert activity.amount == Decimal("4.5")
+    assert activity.payout == Decimal("6.25")
 
 
 def test_open_interest_rejects_malformed_condition_id() -> None:

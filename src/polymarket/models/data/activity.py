@@ -289,11 +289,10 @@ ComboActivityType = Literal["SPLIT", "MERGE", "CONVERT", "COMPRESS", "WRAP", "UN
 
 class _ComboActivityBase(BaseModel):
     id: str
-    module_kind: str
-    user_address: EvmAddress
+    wallet: EvmAddress = Field(validation_alias="user_address")
     condition_id: ComboConditionId = Field(validation_alias="combo_condition_id")
     module_id: int
-    amount_usdc: Decimal | None = None
+    amount: Decimal | None = Field(default=None, validation_alias="amount_usdc")
     timestamp: datetime
     transaction_at: datetime = Field(validation_alias="tx_dttm")
     transaction_hash: TransactionHash = Field(validation_alias="tx_hash")
@@ -306,7 +305,7 @@ class _ComboActivityBase(BaseModel):
     def _validate_condition_id(cls, value: object) -> ComboConditionId:
         return validate_combo_condition_id(value)
 
-    @field_validator("amount_usdc", mode="before")
+    @field_validator("amount", mode="before")
     @classmethod
     def _parse_decimal(cls, value: object) -> Decimal | None:
         return parse_optional_decimal(value)
@@ -344,11 +343,11 @@ class ComboUnwrapActivity(_ComboActivityBase):
 class ComboRedeemActivity(_ComboActivityBase):
     type: Literal["REDEEM"]
     position_id: PositionId = Field(validation_alias="combo_position_id")
-    payout_usdc: Decimal | None = None
+    payout: Decimal | None = Field(default=None, validation_alias="payout_usdc")
 
-    @field_validator("payout_usdc", mode="before")
+    @field_validator("payout", mode="before")
     @classmethod
-    def _parse_payout_usdc(cls, value: object) -> Decimal | None:
+    def _parse_payout(cls, value: object) -> Decimal | None:
         return parse_optional_decimal(value)
 
 

@@ -231,7 +231,7 @@ class ComboPosition(BaseModel):
     position_id: PositionId = Field(validation_alias="combo_position_id")
     outcome: ComboPositionOutcome = Field(validation_alias="side")
     module_id: int = Field(validation_alias="module_id")
-    user_address: EvmAddress = Field(validation_alias="user_address")
+    wallet: EvmAddress = Field(validation_alias="user_address")
     shares: Decimal = Field(validation_alias="shares_balance")
     entry_avg_price_usdc: Decimal | None = None
     entry_cost_usdc: Decimal | None = None
