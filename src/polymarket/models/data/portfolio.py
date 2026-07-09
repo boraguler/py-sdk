@@ -25,6 +25,7 @@ from polymarket.models.types import (
 from polymarket.types import EvmAddress
 
 ComboPositionStatus = Literal["OPEN", "PARTIAL", "RESOLVED_WIN", "RESOLVED_LOSS"]
+ComboPositionOutcome = Literal["YES", "NO"]
 
 
 class PortfolioValue(BaseModel):
@@ -228,14 +229,19 @@ class ComboPositionLeg(BaseModel):
 class ComboPosition(BaseModel):
     condition_id: ComboConditionId = Field(validation_alias="combo_condition_id")
     position_id: PositionId = Field(validation_alias="combo_position_id")
+    outcome: ComboPositionOutcome = Field(validation_alias="side")
     module_id: int = Field(validation_alias="module_id")
     user_address: EvmAddress = Field(validation_alias="user_address")
     shares: Decimal = Field(validation_alias="shares_balance")
     entry_avg_price_usdc: Decimal | None = None
     entry_cost_usdc: Decimal | None = None
+    realized_payout_usdc: Decimal | None = None
+    total_cost_usdc: Decimal | None = None
     status: ComboPositionStatus
+    redeemable: bool
     first_entry_at: datetime
     resolved_at: datetime | None = None
+    updated_at: datetime | None = None
     legs_total: int
     legs_resolved: int
     legs_pending: int
@@ -246,7 +252,14 @@ class ComboPosition(BaseModel):
     def _validate_condition_id(cls, value: object) -> ComboConditionId:
         return validate_combo_condition_id(value)
 
-    @field_validator("shares", "entry_avg_price_usdc", "entry_cost_usdc", mode="before")
+    @field_validator(
+        "shares",
+        "entry_avg_price_usdc",
+        "entry_cost_usdc",
+        "realized_payout_usdc",
+        "total_cost_usdc",
+        mode="before",
+    )
     @classmethod
     def _parse_decimal(cls, value: object) -> Decimal | None:
         return parse_optional_decimal(value)
@@ -255,6 +268,7 @@ class ComboPosition(BaseModel):
 __all__ = [
     "ClosedPosition",
     "ComboPosition",
+    "ComboPositionOutcome",
     "ComboPositionLeg",
     "ComboPositionMarket",
     "ComboPositionMarketEvent",

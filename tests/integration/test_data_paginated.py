@@ -6,6 +6,8 @@ from polymarket import (
     Activity,
     AsyncPublicClient,
     ClosedPosition,
+    ComboActivity,
+    ComboPosition,
     LeaderboardEntry,
     MetaMarketPosition,
     Position,
@@ -15,6 +17,7 @@ from polymarket import (
 )
 
 WALLET = "0x16c9fb76d5e12c6e35738fd92223ea603004ffa7"
+COMBO_WALLET = "0x7c3db723f1d4d8cb9c550095203b686cb11e5c6b"
 
 
 def _condition_ids_for_event(event_id: str = "902661") -> list[str]:
@@ -60,6 +63,28 @@ def test_list_closed_positions_first_page() -> None:
 
 
 @pytest.mark.integration
+def test_list_combo_positions_first_page() -> None:
+    with PublicClient() as client:
+        page = client.list_combo_positions(user=COMBO_WALLET, page_size=1).first_page()
+    assert all(isinstance(p, ComboPosition) for p in page.items)
+    assert len(page.items) <= 1
+
+
+@pytest.mark.integration
+def test_list_combo_positions_filters_by_condition_id() -> None:
+    with PublicClient() as client:
+        first = client.list_combo_positions(user=COMBO_WALLET, page_size=1).first_page()
+        if not first.items:
+            pytest.skip("wallet has no combo positions")
+        condition_id = first.items[0].condition_id
+        filtered = client.list_combo_positions(
+            user=COMBO_WALLET, condition_id=condition_id, page_size=1
+        ).first_page()
+    assert filtered.items
+    assert filtered.items[0].condition_id == condition_id
+
+
+@pytest.mark.integration
 def test_list_market_positions_first_page() -> None:
     condition_ids = _condition_ids_for_event()
     if not condition_ids:
@@ -82,6 +107,15 @@ def test_list_activity_first_page() -> None:
         page = client.list_activity(user=WALLET, page_size=5).first_page()
     valid_activity = (Activity.__args__) if hasattr(Activity, "__args__") else ()
     assert all(isinstance(a, valid_activity) for a in page.items) if valid_activity else True
+
+
+@pytest.mark.integration
+def test_list_combo_activity_first_page() -> None:
+    with PublicClient() as client:
+        page = client.list_combo_activity(user=COMBO_WALLET, page_size=1).first_page()
+    valid_activity = (ComboActivity.__args__) if hasattr(ComboActivity, "__args__") else ()
+    assert all(isinstance(a, valid_activity) for a in page.items) if valid_activity else True
+    assert len(page.items) <= 1
 
 
 @pytest.mark.integration

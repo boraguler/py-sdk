@@ -50,15 +50,18 @@ def test_list_combo_positions_spec_builds_request() -> None:
     spec = data_actions.list_combo_positions_spec(
         user="0xWALLET",
         status="OPEN",
+        sort="updated_asc",
         condition_id=f"{_COMBO_CONDITION_ID}01",
-        position_id="123",
+        updated_after=1_797_360_000,
     )
     assert spec.path == "/v1/positions/combos"
+    assert spec.cursor_param == "cursor"
     assert spec.base_params == {
         "user": "0xWALLET",
         "status": "OPEN",
-        "combo_condition_id": _COMBO_CONDITION_ID,
-        "combo_position_id": "123",
+        "sort": "updated_asc",
+        "market_id": _COMBO_CONDITION_ID,
+        "updatedAfter": 1_797_360_000,
     }
 
 
@@ -70,6 +73,20 @@ def test_list_combo_positions_spec_validates_status() -> None:
 def test_list_combo_positions_spec_rejects_non_combo_condition_id() -> None:
     with pytest.raises(UserInputError, match="combo condition ID"):
         data_actions.list_combo_positions_spec(user="0xWALLET", condition_id=_CTF_CONDITION_ID)
+
+
+def test_list_combo_activity_spec_builds_request() -> None:
+    spec = data_actions.list_combo_activity_spec(
+        user="0xWALLET",
+        condition_id=[f"{_COMBO_CONDITION_ID}00", f"{_COMBO_CONDITION_ID}01"],
+    )
+
+    assert spec.path == "/v1/activity/combos"
+    assert spec.cursor_param == "cursor"
+    assert spec.base_params == {
+        "user": "0xWALLET",
+        "market_id": f"{_COMBO_CONDITION_ID},{_COMBO_CONDITION_ID}",
+    }
 
 
 def test_list_market_positions_spec_requires_market() -> None:
