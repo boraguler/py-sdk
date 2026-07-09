@@ -484,6 +484,8 @@ class PublicClient:
         taker_only: bool | None = None,
         filter_type: TradeFilterType | None = None,
         filter_amount: float | None = None,
+        start: int | None = None,
+        end: int | None = None,
         page_size: int = 20,
     ) -> Paginator[Trade]:
         """List public trades.
@@ -499,6 +501,8 @@ class PublicClient:
             taker_only=taker_only,
             filter_type=filter_type,
             filter_amount=filter_amount,
+            start=start,
+            end=end,
         )
         return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 

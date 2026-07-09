@@ -116,9 +116,33 @@ def test_list_trades_spec_accepts_paired_filter() -> None:
     assert spec.base_params == {"filterType": "CASH", "filterAmount": 10.0}
 
 
+def test_list_trades_spec_serializes_start_and_end() -> None:
+    spec = data_actions.list_trades_spec(start=1_797_360_000, end=1_797_446_400)
+
+    assert spec.base_params == {"start": 1_797_360_000, "end": 1_797_446_400}
+
+
+@pytest.mark.parametrize("field", ["start", "end"])
+def test_list_trades_spec_rejects_negative_time_bounds(field: str) -> None:
+    with pytest.raises(UserInputError, match=field):
+        if field == "start":
+            data_actions.list_trades_spec(start=-1)
+        else:
+            data_actions.list_trades_spec(end=-1)
+
+
 def test_list_activity_spec_validates_type_entries() -> None:
     with pytest.raises(UserInputError, match="activity_types entries"):
         data_actions.list_activity_spec(user="0xWALLET", activity_types=["BOGUS"])  # type: ignore[list-item]
+
+
+@pytest.mark.parametrize("field", ["start", "end"])
+def test_list_activity_spec_rejects_negative_time_bounds(field: str) -> None:
+    with pytest.raises(UserInputError, match=field):
+        if field == "start":
+            data_actions.list_activity_spec(user="0xWALLET", start=-1)
+        else:
+            data_actions.list_activity_spec(user="0xWALLET", end=-1)
 
 
 def test_list_activity_spec_serializes_filters() -> None:

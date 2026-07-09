@@ -688,6 +688,8 @@ class AsyncPublicClient:
         taker_only: bool | None = None,
         filter_type: TradeFilterType | None = None,
         filter_amount: float | None = None,
+        start: int | None = None,
+        end: int | None = None,
         page_size: int = 20,
     ) -> AsyncPaginator[Trade]:
         """List public trades.
@@ -703,6 +705,8 @@ class AsyncPublicClient:
             taker_only=taker_only,
             filter_type=filter_type,
             filter_amount=filter_amount,
+            start=start,
+            end=end,
         )
         return async_paginate_offset(self._ctx, spec, page_size=page_size)
 

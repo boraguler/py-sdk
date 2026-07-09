@@ -358,6 +358,8 @@ def list_trades_spec(
     event_id: int | Sequence[int] | None = None,
     user: str | None = None,
     side: TradeSide | None = None,
+    start: int | None = None,
+    end: int | None = None,
 ) -> OffsetPaginatedSpec[Trade]:
     if market is not None and event_id is not None:
         raise UserInputError("Provide market or event_id, not both.")
@@ -365,6 +367,8 @@ def list_trades_spec(
         raise UserInputError("filter_type and filter_amount must be provided together.")
     _check_enum("filter_type", filter_type, _TRADE_FILTER_TYPE)
     _check_enum("side", side, _TRADE_SIDE)
+    _check_nonnegative_int("start", start)
+    _check_nonnegative_int("end", end)
 
     return OffsetPaginatedSpec(
         service="data",
@@ -378,6 +382,8 @@ def list_trades_spec(
                 "eventId": event_id,
                 "user": user,
                 "side": side,
+                "start": start,
+                "end": end,
             }
         ),
         parse_items=_parser_for(Trade),
@@ -403,6 +409,8 @@ def list_activity_spec(
     _check_enum("sort_by", sort_by, _ACTIVITY_SORT_BY)
     _check_enum("sort_direction", sort_direction, _SORT_DIRECTION)
     _check_enum("side", side, _TRADE_SIDE)
+    _check_nonnegative_int("start", start)
+    _check_nonnegative_int("end", end)
     if activity_types is not None:
         for value in activity_types:
             if value not in _ACTIVITY_TYPES:
