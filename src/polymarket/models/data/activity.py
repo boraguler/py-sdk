@@ -15,6 +15,7 @@ from polymarket.models.gamma.common import (
     parse_optional_decimal,
 )
 from polymarket.models.types import (
+    ComboActivityId,
     ComboConditionId,
     CtfConditionId,
     PositionId,
@@ -288,7 +289,7 @@ ComboActivityType = Literal["SPLIT", "MERGE", "CONVERT", "COMPRESS", "WRAP", "UN
 
 
 class _ComboActivityBase(BaseModel):
-    id: str
+    id: ComboActivityId
     wallet: EvmAddress = Field(validation_alias="user_address")
     condition_id: ComboConditionId = Field(validation_alias="combo_condition_id")
     module_id: int
