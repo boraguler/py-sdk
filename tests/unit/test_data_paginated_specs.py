@@ -1,7 +1,7 @@
 import pytest
 
 from polymarket._internal.actions import data as data_actions
-from polymarket.errors import UserInputError
+from polymarket.errors import UnexpectedResponseError, UserInputError
 
 _COMBO_CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
 _CTF_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
@@ -75,6 +75,11 @@ def test_list_combo_positions_spec_rejects_non_combo_condition_id() -> None:
         data_actions.list_combo_positions_spec(user="0xWALLET", condition_id=_CTF_CONDITION_ID)
 
 
+def test_list_combo_positions_spec_rejects_empty_condition_id_sequence() -> None:
+    with pytest.raises(UserInputError, match="condition_id"):
+        data_actions.list_combo_positions_spec(user="0xWALLET", condition_id=[])
+
+
 def test_list_combo_activity_spec_builds_request() -> None:
     spec = data_actions.list_combo_activity_spec(
         user="0xWALLET",
@@ -87,6 +92,45 @@ def test_list_combo_activity_spec_builds_request() -> None:
         "user": "0xWALLET",
         "market_id": f"{_COMBO_CONDITION_ID},{_COMBO_CONDITION_ID}",
     }
+
+
+def test_list_combo_activity_spec_rejects_empty_condition_id_sequence() -> None:
+    with pytest.raises(UserInputError, match="condition_id"):
+        data_actions.list_combo_activity_spec(user="0xWALLET", condition_id=[])
+
+
+def test_list_combo_positions_parser_treats_end_cursor_as_terminal() -> None:
+    spec = data_actions.list_combo_positions_spec(user="0xWALLET")
+    page = spec.parse_page(
+        {
+            "combos": [],
+            "pagination": {
+                "limit": 50,
+                "offset": 0,
+                "has_more": False,
+                "next_cursor": "LTE=",
+            },
+        }
+    )
+
+    assert page.items == ()
+    assert page.server_next_cursor is None
+
+
+def test_list_combo_activity_parser_rejects_empty_next_cursor() -> None:
+    spec = data_actions.list_combo_activity_spec(user="0xWALLET")
+    with pytest.raises(UnexpectedResponseError, match="next_cursor"):
+        spec.parse_page(
+            {
+                "activity": [],
+                "pagination": {
+                    "limit": 50,
+                    "offset": 0,
+                    "has_more": True,
+                    "next_cursor": "",
+                },
+            }
+        )
 
 
 def test_list_market_positions_spec_requires_market() -> None:

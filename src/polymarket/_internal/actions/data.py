@@ -1,6 +1,7 @@
 from collections.abc import Callable, Sequence
 from typing import Any, Literal, TypeVar, cast, get_args
 
+from polymarket._internal.actions._cursor import next_cursor_or_none
 from polymarket._internal.data_params import build_data_params
 from polymarket._internal.request import (
     KeysetPagePayload,
@@ -498,6 +499,8 @@ def _check_nonnegative_int(name: str, value: int | None) -> None:
 
 def _normalize_combo_condition_filter(value: str | Sequence[str]) -> str | tuple[str, ...]:
     values = (value,) if isinstance(value, str) else tuple(value)
+    if not values:
+        raise UserInputError("condition_id must be a non-empty sequence.")
     out: list[str] = []
     for item in values:
         try:
@@ -530,9 +533,7 @@ def _make_keyset_envelope_parser(
         pagination = response.get("pagination")
         if not isinstance(pagination, dict):
             raise UnexpectedResponseError("Paginated response is missing pagination.")
-        next_cursor = cast(dict[str, Any], pagination).get("next_cursor")
-        if next_cursor is not None and not isinstance(next_cursor, str):
-            raise UnexpectedResponseError("pagination.next_cursor must be a string or null.")
+        next_cursor = next_cursor_or_none(cast(dict[str, Any], pagination).get("next_cursor"))
         return KeysetPagePayload(
             items=parse_items(response[items_key]),
             server_next_cursor=next_cursor,
