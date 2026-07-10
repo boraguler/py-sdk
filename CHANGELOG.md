@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.0-b18](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b17...polymarket-client-v0.1.0-b18) (2026-07-10)
+
+
+### Bug Fixes
+
+* **models:** parse Combo activity type ([dd606ac](https://github.com/Polymarket/py-sdk/commit/dd606ac7e6b0435a19cac93c073efb9b24c0ecb6))
+* **models:** parse Combo activity type ([92ef685](https://github.com/Polymarket/py-sdk/commit/92ef685fc130108d27c6f9e6947875d3bb5e79a8))
+* **ws:** bound websocket close latency ([dadc671](https://github.com/Polymarket/py-sdk/commit/dadc671b3a0002acab54856afd00bf1a4921501c))
+* **ws:** bound websocket close latency ([0ea0808](https://github.com/Polymarket/py-sdk/commit/0ea08081fa28c77f2365e6765042682db9b4c429))
+
 ## [0.1.0-b17](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b16...polymarket-client-v0.1.0-b17) (2026-07-10)
 
 
