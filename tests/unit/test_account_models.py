@@ -126,6 +126,13 @@ def test_clob_trade_rejects_out_of_range_epoch_for_match_time() -> None:
         ClobTrade.parse_response(_clob_trade_payload(match_time=10**18))
 
 
+def test_clob_trade_rejects_negative_epoch_string_for_match_time() -> None:
+    # The shared epoch parser accepts only unsigned digit strings; a negative-string
+    # epoch is rejected (trade timestamps are never negative).
+    with pytest.raises(UnexpectedResponseError):
+        ClobTrade.parse_response(_clob_trade_payload(match_time="-1"))
+
+
 def test_clob_trade_parses_match_and_last_update() -> None:
     trade = ClobTrade.parse_response(_clob_trade_payload())
     assert trade.matched_at == datetime.fromtimestamp(1700000000, tz=UTC)
