@@ -254,11 +254,10 @@ def test_combo_position_rejects_invalid_condition_id() -> None:
         ComboPosition.parse_response(_combo_position_payload(condition_id=_CTF_CONDITION_ID))
 
 
-def test_combo_activity_normalizes_upstream_type_and_redeem_fields() -> None:
+def test_combo_activity_parses_api_type_and_redeem_fields() -> None:
     payload = {
         "id": "tx:1",
-        "side": "Redeem",
-        "module_kind": "combo",
+        "type": "REDEEM",
         "user_address": "0x0000000000000000000000000000000000000001",
         "combo_condition_id": _COMBO_CONDITION_ID,
         "combo_position_id": "123",
