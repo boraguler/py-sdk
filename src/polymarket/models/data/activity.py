@@ -375,14 +375,14 @@ _KNOWN_ACTIVITY_TYPES: dict[str, type[_KnownActivityBase]] = {
     "YIELD": YieldActivity,
 }
 
-_COMBO_ACTIVITY_TYPES: dict[str, tuple[ComboActivityType, type[_ComboActivityBase]]] = {
-    "Split": ("SPLIT", ComboSplitActivity),
-    "Merge": ("MERGE", ComboMergeActivity),
-    "Convert": ("CONVERT", ComboConvertActivity),
-    "Compress": ("COMPRESS", ComboCompressActivity),
-    "Wrap": ("WRAP", ComboWrapActivity),
-    "Unwrap": ("UNWRAP", ComboUnwrapActivity),
-    "Redeem": ("REDEEM", ComboRedeemActivity),
+_COMBO_ACTIVITY_TYPES: dict[ComboActivityType, type[_ComboActivityBase]] = {
+    "SPLIT": ComboSplitActivity,
+    "MERGE": ComboMergeActivity,
+    "CONVERT": ComboConvertActivity,
+    "COMPRESS": ComboCompressActivity,
+    "WRAP": ComboWrapActivity,
+    "UNWRAP": ComboUnwrapActivity,
+    "REDEEM": ComboRedeemActivity,
 }
 
 
@@ -410,11 +410,10 @@ def parse_combo_activity(payload: object) -> ComboActivity:
     if not isinstance(payload, dict):
         raise UnexpectedResponseError("Combo activity payload must be an object.")
     data = dict(cast(dict[str, Any], payload))
-    raw_type = data.get("side")
+    raw_type = data.get("type")
     if not isinstance(raw_type, str) or raw_type not in _COMBO_ACTIVITY_TYPES:
         raise UnexpectedResponseError("Combo activity response did not match expected shape")
-    activity_type, cls = _COMBO_ACTIVITY_TYPES[raw_type]
-    data["type"] = activity_type
+    cls = _COMBO_ACTIVITY_TYPES[raw_type]
     return cast(ComboActivity, cls.parse_response(data))
 
 
