@@ -173,6 +173,7 @@ from polymarket.models.perps.results import (
 )
 from polymarket.models.rfq import ComboMarket, ComboMarketOutcome, ComboMarketOutcomes
 from polymarket.models.types import (
+    ComboActivityId,
     ComboConditionId,
     CommentId,
     ConditionId,
@@ -240,6 +241,7 @@ __all__ = [
     "BuilderVolumeTimePeriod",
     "ClosedPosition",
     "ComboActivity",
+    "ComboActivityId",
     "ComboActivityType",
     "ComboCompressActivity",
     "ComboConvertActivity",

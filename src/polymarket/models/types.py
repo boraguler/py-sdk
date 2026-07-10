@@ -10,6 +10,7 @@ ChatId = NewType("ChatId", str)
 ClobRewardId = NewType("ClobRewardId", str)
 CollectionId = NewType("CollectionId", str)
 CommentId = NewType("CommentId", str)
+ComboActivityId = NewType("ComboActivityId", str)
 ComboConditionId = NewType("ComboConditionId", str)
 CtfConditionId = NewType("CtfConditionId", str)
 ConditionId = CtfConditionId
@@ -103,6 +104,7 @@ __all__ = [
     "ClobRewardId",
     "CollectionId",
     "CommentId",
+    "ComboActivityId",
     "ComboConditionId",
     "ConditionId",
     "CtfConditionId",
