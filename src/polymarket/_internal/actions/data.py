@@ -1,14 +1,22 @@
 from collections.abc import Callable, Sequence
-from typing import Literal, TypeVar, cast, get_args
+from typing import Any, Literal, TypeVar, cast, get_args
 
+from polymarket._internal.actions._cursor import next_cursor_or_none
 from polymarket._internal.data_params import build_data_params
-from polymarket._internal.request import OffsetPaginatedSpec, QueryParamValue, RequestSpec
+from polymarket._internal.request import (
+    KeysetPagePayload,
+    KeysetPaginatedSpec,
+    OffsetPaginatedSpec,
+    QueryParamValue,
+    RequestSpec,
+)
 from polymarket.errors import UnexpectedResponseError, UserInputError
 from polymarket.models.base import BaseModel
 from polymarket.models.data import (
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
     ClosedPosition,
+    ComboActivity,
     ComboPosition,
     ComboPositionStatus,
     LeaderboardCategory,
@@ -25,7 +33,7 @@ from polymarket.models.data import (
     TradedMarketCount,
     TraderLeaderboardEntry,
 )
-from polymarket.models.data.activity import Activity, parse_activities
+from polymarket.models.data.activity import Activity, parse_activities, parse_combo_activities
 from polymarket.models.types import to_combo_condition_id
 
 _BUILDER_VOLUME_TIME_PERIODS: tuple[str, ...] = get_args(BuilderVolumeTimePeriod)
@@ -66,6 +74,15 @@ ClosedPositionSortBy = Literal["REALIZEDPNL", "TITLE", "PRICE", "AVGPRICE", "TIM
 _CLOSED_POSITION_SORT_BY: tuple[str, ...] = get_args(ClosedPositionSortBy)
 
 _COMBO_POSITION_STATUS: tuple[str, ...] = get_args(ComboPositionStatus)
+
+ComboPositionSort = Literal[
+    "current_value_desc",
+    "first_entry_desc",
+    "entry_cost_desc",
+    "resolved_at_desc",
+    "updated_asc",
+]
+_COMBO_POSITION_SORT: tuple[str, ...] = get_args(ComboPositionSort)
 
 MarketPositionStatus = Literal["OPEN", "CLOSED", "ALL"]
 _MARKET_POSITION_STATUS: tuple[str, ...] = get_args(MarketPositionStatus)
@@ -252,30 +269,54 @@ def list_combo_positions_spec(
     *,
     user: str,
     status: ComboPositionStatus | None = None,
-    condition_id: str | None = None,
-    position_id: str | None = None,
-) -> OffsetPaginatedSpec[ComboPosition]:
+    sort: ComboPositionSort | None = None,
+    condition_id: str | Sequence[str] | None = None,
+    updated_after: int | None = None,
+    updated_before: int | None = None,
+) -> KeysetPaginatedSpec[ComboPosition]:
     if not user:
         raise UserInputError("user is required.")
     _check_enum("status", status, _COMBO_POSITION_STATUS)
+    _check_enum("sort", sort, _COMBO_POSITION_SORT)
     if condition_id is not None:
-        try:
-            condition_id = to_combo_condition_id(condition_id)
-        except TypeError as error:
-            raise UserInputError(str(error)) from error
+        condition_id = _normalize_combo_condition_filter(condition_id)
+    _check_nonnegative_int("updated_after", updated_after)
+    _check_nonnegative_int("updated_before", updated_before)
 
-    return OffsetPaginatedSpec(
+    return KeysetPaginatedSpec(
         service="data",
         path="/v1/positions/combos",
         base_params=build_data_params(
             {
                 "user": user,
                 "status": status,
-                "combo_condition_id": condition_id,
-                "combo_position_id": position_id,
+                "sort": sort,
+                "market_id": condition_id,
+                "updatedAfter": updated_after,
+                "updatedBefore": updated_before,
             }
         ),
-        parse_items=_parse_combo_positions,
+        parse_page=_make_keyset_envelope_parser("combos", ComboPosition.parse_response_list),
+        cursor_param="cursor",
+    )
+
+
+def list_combo_activity_spec(
+    *,
+    user: str,
+    condition_id: str | Sequence[str] | None = None,
+) -> KeysetPaginatedSpec[ComboActivity]:
+    if not user:
+        raise UserInputError("user is required.")
+    if condition_id is not None:
+        condition_id = _normalize_combo_condition_filter(condition_id)
+
+    return KeysetPaginatedSpec(
+        service="data",
+        path="/v1/activity/combos",
+        base_params=build_data_params({"user": user, "market_id": condition_id}),
+        parse_page=_make_keyset_envelope_parser("activity", parse_combo_activities),
+        cursor_param="cursor",
     )
 
 
@@ -318,6 +359,8 @@ def list_trades_spec(
     event_id: int | Sequence[int] | None = None,
     user: str | None = None,
     side: TradeSide | None = None,
+    start: int | None = None,
+    end: int | None = None,
 ) -> OffsetPaginatedSpec[Trade]:
     if market is not None and event_id is not None:
         raise UserInputError("Provide market or event_id, not both.")
@@ -325,6 +368,8 @@ def list_trades_spec(
         raise UserInputError("filter_type and filter_amount must be provided together.")
     _check_enum("filter_type", filter_type, _TRADE_FILTER_TYPE)
     _check_enum("side", side, _TRADE_SIDE)
+    _check_nonnegative_int("start", start)
+    _check_nonnegative_int("end", end)
 
     return OffsetPaginatedSpec(
         service="data",
@@ -338,6 +383,8 @@ def list_trades_spec(
                 "eventId": event_id,
                 "user": user,
                 "side": side,
+                "start": start,
+                "end": end,
             }
         ),
         parse_items=_parser_for(Trade),
@@ -363,6 +410,8 @@ def list_activity_spec(
     _check_enum("sort_by", sort_by, _ACTIVITY_SORT_BY)
     _check_enum("sort_direction", sort_direction, _SORT_DIRECTION)
     _check_enum("side", side, _TRADE_SIDE)
+    _check_nonnegative_int("start", start)
+    _check_nonnegative_int("end", end)
     if activity_types is not None:
         for value in activity_types:
             if value not in _ACTIVITY_TYPES:
@@ -443,6 +492,24 @@ def _check_enum(name: str, value: object, allowed: tuple[str, ...]) -> None:
         raise UserInputError(f"{name} must be one of {allowed}, got {value!r}.")
 
 
+def _check_nonnegative_int(name: str, value: int | None) -> None:
+    if value is not None and value < 0:
+        raise UserInputError(f"{name} must be non-negative.")
+
+
+def _normalize_combo_condition_filter(value: str | Sequence[str]) -> str | tuple[str, ...]:
+    values = (value,) if isinstance(value, str) else tuple(value)
+    if not values:
+        raise UserInputError("condition_id must be a non-empty sequence.")
+    out: list[str] = []
+    for item in values:
+        try:
+            out.append(to_combo_condition_id(item))
+        except TypeError as error:
+            raise UserInputError(str(error)) from error
+    return tuple(out) if not isinstance(value, str) else out[0]
+
+
 _M = TypeVar("_M", bound=BaseModel)
 
 
@@ -453,18 +520,33 @@ def _parser_for(model: type[_M]) -> Callable[[object], tuple[_M, ...]]:
     return parse
 
 
-def _parse_combo_positions(payload: object) -> tuple[ComboPosition, ...]:
-    if not isinstance(payload, dict):
-        raise UnexpectedResponseError("ComboPosition response did not match expected shape")
-    response = cast(dict[str, object], payload)
-    combos = response.get("combos")
-    return ComboPosition.parse_response_list(combos)
+def _make_keyset_envelope_parser(
+    items_key: str,
+    parse_items: Callable[[object], tuple[_M, ...]],
+) -> Callable[[object], KeysetPagePayload[_M]]:
+    def parse(payload: object) -> KeysetPagePayload[_M]:
+        if not isinstance(payload, dict):
+            raise UnexpectedResponseError("Paginated response did not match expected shape")
+        response = cast(dict[str, Any], payload)
+        if items_key not in response:
+            raise UnexpectedResponseError(f"Paginated response is missing '{items_key}'.")
+        pagination = response.get("pagination")
+        if not isinstance(pagination, dict):
+            raise UnexpectedResponseError("Paginated response is missing pagination.")
+        next_cursor = next_cursor_or_none(cast(dict[str, Any], pagination).get("next_cursor"))
+        return KeysetPagePayload(
+            items=parse_items(response[items_key]),
+            server_next_cursor=next_cursor,
+        )
+
+    return parse
 
 
 __all__ = [
     "ActivitySortBy",
     "ActivityTypeFilter",
     "ClosedPositionSortBy",
+    "ComboPositionSort",
     "ComboPositionStatus",
     "MarketPositionSortBy",
     "MarketPositionStatus",
@@ -482,6 +564,7 @@ __all__ = [
     "list_activity_spec",
     "list_builder_leaderboard_spec",
     "list_closed_positions_spec",
+    "list_combo_activity_spec",
     "list_combo_positions_spec",
     "list_market_positions_spec",
     "list_positions_spec",

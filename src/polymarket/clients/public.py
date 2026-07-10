@@ -16,6 +16,7 @@ from polymarket._internal.actions.data import (
     ActivitySortBy,
     ActivityTypeFilter,
     ClosedPositionSortBy,
+    ComboPositionSort,
     ComboPositionStatus,
     MarketPositionSortBy,
     MarketPositionStatus,
@@ -75,6 +76,7 @@ from polymarket.models.data import (
     BuilderVolumeEntry,
     BuilderVolumeTimePeriod,
     ClosedPosition,
+    ComboActivity,
     ComboPosition,
     LeaderboardCategory,
     LeaderboardEntry,
@@ -427,8 +429,10 @@ class PublicClient:
         *,
         user: str,
         status: ComboPositionStatus | None = None,
-        condition_id: str | None = None,
-        position_id: str | None = None,
+        sort: ComboPositionSort | None = None,
+        condition_id: str | Sequence[str] | None = None,
+        updated_after: int | None = None,
+        updated_before: int | None = None,
         page_size: int = 20,
     ) -> Paginator[ComboPosition]:
         """List combo positions for a user.
@@ -439,10 +443,12 @@ class PublicClient:
         spec = _data_actions.list_combo_positions_spec(
             user=user,
             status=status,
+            sort=sort,
             condition_id=condition_id,
-            position_id=position_id,
+            updated_after=updated_after,
+            updated_before=updated_before,
         )
-        return sync_paginate_offset(self._ctx, spec, page_size=page_size)
+        return sync_paginate_keyset(self._ctx, spec, page_size=page_size)
 
     def list_market_positions(
         self,
@@ -478,6 +484,8 @@ class PublicClient:
         taker_only: bool | None = None,
         filter_type: TradeFilterType | None = None,
         filter_amount: float | None = None,
+        start: int | None = None,
+        end: int | None = None,
         page_size: int = 20,
     ) -> Paginator[Trade]:
         """List public trades.
@@ -493,6 +501,8 @@ class PublicClient:
             taker_only=taker_only,
             filter_type=filter_type,
             filter_amount=filter_amount,
+            start=start,
+            end=end,
         )
         return sync_paginate_offset(self._ctx, spec, page_size=page_size)
 
@@ -527,6 +537,21 @@ class PublicClient:
             end=end,
         )
         return sync_paginate_offset(self._ctx, spec, page_size=page_size)
+
+    def list_combo_activity(
+        self,
+        *,
+        user: str,
+        condition_id: str | Sequence[str] | None = None,
+        page_size: int = 50,
+    ) -> Paginator[ComboActivity]:
+        """List combo lifecycle activity for a user.
+
+        Returns:
+            A paginator over matching combo lifecycle activity entries.
+        """
+        spec = _data_actions.list_combo_activity_spec(user=user, condition_id=condition_id)
+        return sync_paginate_keyset(self._ctx, spec, page_size=page_size)
 
     def list_builder_leaderboard(
         self,

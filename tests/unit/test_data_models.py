@@ -9,6 +9,7 @@ from polymarket.models.data import (
     BuilderVolumeEntry,
     ClosedPosition,
     ComboPosition,
+    ComboRedeemActivity,
     Holder,
     LiveVolume,
     MetaHolder,
@@ -17,6 +18,7 @@ from polymarket.models.data import (
     Position,
     TradedMarketCount,
 )
+from polymarket.models.data.activity import parse_combo_activity
 
 _COMBO_CONDITION_ID = "0x032def24bfb0c5c57fb236fac08b94236a0000000000000000000000000000"
 _CTF_CONDITION_ID = "0x5c19f205507ce03ff5f3be08a8090a5969ea6870cc07b902a4ca2e61dfe48fdd"
@@ -26,14 +28,19 @@ def _combo_position_payload(*, condition_id: str = _COMBO_CONDITION_ID) -> dict[
     return {
         "combo_condition_id": condition_id,
         "combo_position_id": "123",
+        "side": "YES",
         "module_id": 3,
         "user_address": "0x0000000000000000000000000000000000000001",
         "shares_balance": "42.5",
         "entry_avg_price_usdc": "0.12",
         "entry_cost_usdc": "5.1",
+        "realized_payout_usdc": "6.25",
+        "total_cost_usdc": "5.1",
         "status": "OPEN",
+        "redeemable": False,
         "first_entry_at": "2026-06-01T12:00:00Z",
         "resolved_at": None,
+        "updated_at": "2026-06-02T12:00:00Z",
         "legs_total": 2,
         "legs_resolved": 1,
         "legs_pending": 1,
@@ -218,8 +225,14 @@ def test_combo_position_parses_payload() -> None:
 
     assert combo.condition_id == payload["combo_condition_id"]
     assert combo.position_id == "123"
+    assert combo.outcome == "YES"
+    assert combo.wallet == "0x0000000000000000000000000000000000000001"
     assert combo.shares == Decimal("42.5")
+    assert combo.realized_payout_usdc == Decimal("6.25")
+    assert combo.total_cost_usdc == Decimal("5.1")
     assert combo.status == "OPEN"
+    assert combo.redeemable is False
+    assert combo.updated_at == datetime(2026, 6, 2, 12, tzinfo=UTC)
     assert combo.legs[0].leg_position_id == "456"
     assert combo.legs[0].leg_current_price == Decimal("0.77")
     assert combo.legs[0].market is not None
@@ -239,6 +252,36 @@ def test_combo_position_normalizes_binary_wire_condition_id() -> None:
 def test_combo_position_rejects_invalid_condition_id() -> None:
     with pytest.raises(UnexpectedResponseError, match="ComboPosition response"):
         ComboPosition.parse_response(_combo_position_payload(condition_id=_CTF_CONDITION_ID))
+
+
+def test_combo_activity_normalizes_upstream_type_and_redeem_fields() -> None:
+    payload = {
+        "id": "tx:1",
+        "side": "Redeem",
+        "module_kind": "combo",
+        "user_address": "0x0000000000000000000000000000000000000001",
+        "combo_condition_id": _COMBO_CONDITION_ID,
+        "combo_position_id": "123",
+        "module_id": 3,
+        "amount_usdc": "4.5",
+        "payout_usdc": "6.25",
+        "timestamp": 1_797_360_000,
+        "tx_dttm": "2026-06-01T12:00:00Z",
+        "tx_hash": "0xabc",
+        "log_index": 1,
+        "block_number": 123456,
+        "legs": _combo_position_payload()["legs"],
+    }
+
+    activity = parse_combo_activity(payload)
+
+    assert isinstance(activity, ComboRedeemActivity)
+    assert activity.type == "REDEEM"
+    assert activity.condition_id == _COMBO_CONDITION_ID
+    assert activity.position_id == "123"
+    assert activity.wallet == "0x0000000000000000000000000000000000000001"
+    assert activity.amount == Decimal("4.5")
+    assert activity.payout == Decimal("6.25")
 
 
 def test_open_interest_rejects_malformed_condition_id() -> None:

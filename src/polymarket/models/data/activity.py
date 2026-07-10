@@ -8,6 +8,7 @@ from pydantic import Field, field_validator
 
 from polymarket.errors import UnexpectedResponseError
 from polymarket.models.base import BaseModel
+from polymarket.models.data.portfolio import ComboPositionLeg
 from polymarket.models.gamma.common import (
     empty_string_to_none,
     parse_epoch_seconds_optional,
@@ -283,6 +284,83 @@ Activity = (
     | UnknownActivity
 )
 
+ComboActivityType = Literal["SPLIT", "MERGE", "CONVERT", "COMPRESS", "WRAP", "UNWRAP", "REDEEM"]
+
+
+class _ComboActivityBase(BaseModel):
+    id: str
+    wallet: EvmAddress = Field(validation_alias="user_address")
+    condition_id: ComboConditionId = Field(validation_alias="combo_condition_id")
+    module_id: int
+    amount: Decimal | None = Field(default=None, validation_alias="amount_usdc")
+    timestamp: datetime
+    transaction_at: datetime = Field(validation_alias="tx_dttm")
+    transaction_hash: TransactionHash = Field(validation_alias="tx_hash")
+    log_index: int
+    block_number: int
+    legs: tuple[ComboPositionLeg, ...]
+
+    @field_validator("condition_id", mode="before")
+    @classmethod
+    def _validate_condition_id(cls, value: object) -> ComboConditionId:
+        return validate_combo_condition_id(value)
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def _parse_decimal(cls, value: object) -> Decimal | None:
+        return parse_optional_decimal(value)
+
+    @field_validator("timestamp", mode="before")
+    @classmethod
+    def _parse_timestamp(cls, value: object) -> datetime | None:
+        return parse_epoch_seconds_optional(value)
+
+
+class ComboSplitActivity(_ComboActivityBase):
+    type: Literal["SPLIT"]
+
+
+class ComboMergeActivity(_ComboActivityBase):
+    type: Literal["MERGE"]
+
+
+class ComboConvertActivity(_ComboActivityBase):
+    type: Literal["CONVERT"]
+
+
+class ComboCompressActivity(_ComboActivityBase):
+    type: Literal["COMPRESS"]
+
+
+class ComboWrapActivity(_ComboActivityBase):
+    type: Literal["WRAP"]
+
+
+class ComboUnwrapActivity(_ComboActivityBase):
+    type: Literal["UNWRAP"]
+
+
+class ComboRedeemActivity(_ComboActivityBase):
+    type: Literal["REDEEM"]
+    position_id: PositionId = Field(validation_alias="combo_position_id")
+    payout: Decimal | None = Field(default=None, validation_alias="payout_usdc")
+
+    @field_validator("payout", mode="before")
+    @classmethod
+    def _parse_payout(cls, value: object) -> Decimal | None:
+        return parse_optional_decimal(value)
+
+
+ComboActivity = (
+    ComboSplitActivity
+    | ComboMergeActivity
+    | ComboConvertActivity
+    | ComboCompressActivity
+    | ComboWrapActivity
+    | ComboUnwrapActivity
+    | ComboRedeemActivity
+)
+
 
 _KNOWN_ACTIVITY_TYPES: dict[str, type[_KnownActivityBase]] = {
     "TRADE": TradeActivity,
@@ -294,6 +372,16 @@ _KNOWN_ACTIVITY_TYPES: dict[str, type[_KnownActivityBase]] = {
     "MAKER_REBATE": MakerRebateActivity,
     "REFERRAL_REWARD": ReferralRewardActivity,
     "YIELD": YieldActivity,
+}
+
+_COMBO_ACTIVITY_TYPES: dict[str, tuple[ComboActivityType, type[_ComboActivityBase]]] = {
+    "Split": ("SPLIT", ComboSplitActivity),
+    "Merge": ("MERGE", ComboMergeActivity),
+    "Convert": ("CONVERT", ComboConvertActivity),
+    "Compress": ("COMPRESS", ComboCompressActivity),
+    "Wrap": ("WRAP", ComboWrapActivity),
+    "Unwrap": ("UNWRAP", ComboUnwrapActivity),
+    "Redeem": ("REDEEM", ComboRedeemActivity),
 }
 
 
@@ -315,6 +403,24 @@ def parse_activities(payload: object) -> tuple[Activity, ...]:
     if not isinstance(payload, list):
         raise UnexpectedResponseError("Activity list payload must be a list.")
     return tuple(parse_activity(item) for item in cast(list[object], payload))
+
+
+def parse_combo_activity(payload: object) -> ComboActivity:
+    if not isinstance(payload, dict):
+        raise UnexpectedResponseError("Combo activity payload must be an object.")
+    data = dict(cast(dict[str, Any], payload))
+    raw_type = data.get("side")
+    if not isinstance(raw_type, str) or raw_type not in _COMBO_ACTIVITY_TYPES:
+        raise UnexpectedResponseError("Combo activity response did not match expected shape")
+    activity_type, cls = _COMBO_ACTIVITY_TYPES[raw_type]
+    data["type"] = activity_type
+    return cast(ComboActivity, cls.parse_response(data))
+
+
+def parse_combo_activities(payload: object) -> tuple[ComboActivity, ...]:
+    if not isinstance(payload, list):
+        raise UnexpectedResponseError("Combo activity list payload must be a list.")
+    return tuple(parse_combo_activity(item) for item in cast(list[object], payload))
 
 
 def _normalize_activity_payload(data: dict[str, Any]) -> dict[str, Any]:
@@ -340,7 +446,16 @@ def _normalize_activity_payload(data: dict[str, Any]) -> dict[str, Any]:
 __all__ = [
     "Activity",
     "ActivityType",
+    "ComboActivity",
+    "ComboActivityType",
+    "ComboCompressActivity",
+    "ComboConvertActivity",
+    "ComboMergeActivity",
+    "ComboRedeemActivity",
+    "ComboSplitActivity",
     "ComboTradeActivity",
+    "ComboUnwrapActivity",
+    "ComboWrapActivity",
     "ConversionActivity",
     "MakerRebateActivity",
     "MergeActivity",
@@ -354,4 +469,6 @@ __all__ = [
     "YieldActivity",
     "parse_activities",
     "parse_activity",
+    "parse_combo_activities",
+    "parse_combo_activity",
 ]
