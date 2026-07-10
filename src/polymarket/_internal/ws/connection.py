@@ -21,6 +21,7 @@ OnError = Callable[[BaseException], None]
 
 DEFAULT_WATCHDOG_INTERVAL_S = 5.0
 DEFAULT_OPEN_TIMEOUT_S = 10.0
+DEFAULT_CLOSE_TIMEOUT_S = 0.5
 
 
 @dataclass(frozen=True)
@@ -40,13 +41,17 @@ class AsyncWebSocketConnection:
         logger: logging.Logger | None = None,
         watchdog_interval_s: float = DEFAULT_WATCHDOG_INTERVAL_S,
         open_timeout_s: float = DEFAULT_OPEN_TIMEOUT_S,
+        close_timeout_s: float = DEFAULT_CLOSE_TIMEOUT_S,
     ) -> None:
         if watchdog_interval_s <= 0:
             raise ValueError("watchdog_interval_s must be positive")
+        if close_timeout_s <= 0:
+            raise ValueError("close_timeout_s must be positive")
         self._heartbeat: Heartbeat = heartbeat or NoopHeartbeat()
         self._logger = logger or logging.getLogger("polymarket.ws")
         self._watchdog_interval_s = watchdog_interval_s
         self._open_timeout_s = open_timeout_s
+        self._close_timeout_s = close_timeout_s
         self._socket: ClientConnection | None = None
         self._reader_task: asyncio.Task[None] | None = None
         self._watchdog_task: asyncio.Task[None] | None = None
@@ -108,6 +113,7 @@ class AsyncWebSocketConnection:
                 url,
                 additional_headers=additional_headers,
                 open_timeout=self._open_timeout_s,
+                close_timeout=self._close_timeout_s,
             )
         except (OSError, TimeoutError, WebSocketException) as error:
             raise TransportError(str(error) or f"WebSocket connection failed: {url}") from error
@@ -184,6 +190,10 @@ class AsyncWebSocketConnection:
                 await self._heartbeat.stop()
                 if watchdog is not None:
                     watchdog.cancel()
+                try:
+                    await socket.close()
+                except Exception:
+                    self._logger.debug("error closing socket after reader stopped", exc_info=True)
                 if on_close is not None:
                     try:
                         on_close()
