@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.0-b17](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b16...polymarket-client-v0.1.0-b17) (2026-07-10)
+
+
+### Features
+
+* **client:** add combo data pagination ([27a4ed6](https://github.com/Polymarket/py-sdk/commit/27a4ed682811dceb287196d7a8745637362940f0))
+* **client:** add combo data pagination ([e8e7269](https://github.com/Polymarket/py-sdk/commit/e8e726937ad7c50ac704afb2f6cb304106238ce8))
+* **clients:** add typed overloads for market/event/tag lookups ([5189151](https://github.com/Polymarket/py-sdk/commit/51891514cefc759a7f7735145b983226eca989af))
+* **clients:** add typed overloads for mutually-exclusive lookup args ([93252f3](https://github.com/Polymarket/py-sdk/commit/93252f3ec121945a156967dd81e1d13cdd6185aa))
+* **clients:** add typed overloads for redeem_positions ([7d77862](https://github.com/Polymarket/py-sdk/commit/7d77862c3732fdfb2c182b9e72655b6892734e90))
+
+
+### Bug Fixes
+
+* **client:** add trade time filters ([6d26ab4](https://github.com/Polymarket/py-sdk/commit/6d26ab4ae0a81ff6aba51c2445eded54c9700e98))
+* **client:** harden combo pagination filters ([c37f6ca](https://github.com/Polymarket/py-sdk/commit/c37f6caf87c6c14d566309c253d075a1707e7864))
+* **client:** normalize combo data field names ([7727ae5](https://github.com/Polymarket/py-sdk/commit/7727ae565789f9859186987da80cf6c961205f1d))
+* **models:** brand combo activity ids ([7de9aa5](https://github.com/Polymarket/py-sdk/commit/7de9aa57b043bbccfae14dd5d081b5f24c1b131a))
+* **models:** brand combo activity ids ([b58323e](https://github.com/Polymarket/py-sdk/commit/b58323ede883f058e33bb2c32fcbc00625c41194))
+
 ## [0.1.0-b16](https://github.com/Polymarket/py-sdk/compare/polymarket-client-v0.1.0-b15...polymarket-client-v0.1.0-b16) (2026-07-08)
 
 
