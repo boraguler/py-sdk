@@ -48,6 +48,8 @@ class PrepareMarketOrderParams:
     max_price: Decimal | None = None
     min_price: Decimal | None = None
     builder_code: HexString | None = None
+    tick_size: Decimal | None = None
+    neg_risk: bool | None = None
 
 
 def validate_market_order_params(
@@ -61,6 +63,8 @@ def validate_market_order_params(
     min_price: Decimal | int | float | str | None = None,
     order_type: MarketOrderType = "FAK",
     builder_code: str | None = None,
+    tick_size: Decimal | int | float | str | None = None,
+    neg_risk: bool | None = None,
 ) -> PrepareMarketOrderParams:
     validated_token = TokenId(require_nonempty("token_id", token_id))
     if side not in ("BUY", "SELL"):
@@ -68,6 +72,9 @@ def validate_market_order_params(
     if order_type not in ("FAK", "FOK"):
         raise UserInputError(f"order_type must be 'FAK' or 'FOK', got {order_type!r}.")
     validated_builder = validate_builder_code(builder_code) if builder_code is not None else None
+    validated_tick_size = _validate_provided_tick_size(tick_size)
+    if neg_risk is not None and not isinstance(neg_risk, bool):
+        raise UserInputError("neg_risk must be a bool when provided.")
     if side == "BUY":
         if amount is None:
             raise UserInputError("amount is required for BUY market orders.")
@@ -90,6 +97,8 @@ def validate_market_order_params(
             max_spend=validated_max_spend,
             max_price=validated_max_price,
             builder_code=validated_builder,
+            tick_size=validated_tick_size,
+            neg_risk=neg_risk,
         )
     if shares is None:
         raise UserInputError("shares is required for SELL market orders.")
@@ -109,17 +118,19 @@ def validate_market_order_params(
         shares=coerce_positive_decimal("shares", shares),
         min_price=validated_min_price,
         builder_code=validated_builder,
+        tick_size=validated_tick_size,
+        neg_risk=neg_risk,
     )
 
 
 async def prepare_market_order_draft(
     ctx: AsyncSecureClientContext, params: PrepareMarketOrderParams
 ) -> OrderDraft:
-    tick_size = await fetch_tick_size(ctx, token_id=params.token_id)
+    tick_size = params.tick_size or await fetch_tick_size(ctx, token_id=params.token_id)
     notional = params.amount if params.side == "BUY" else params.shares
     assert notional is not None
     price = await _resolve_market_order_price(ctx, params, notional=notional, tick_size=tick_size)
-    neg_risk = await fetch_neg_risk(ctx, token_id=params.token_id)
+    neg_risk = params.neg_risk if params.neg_risk is not None else await fetch_neg_risk(ctx, token_id=params.token_id)
     resolved_amount = await _resolve_buy_amount_for_fees(ctx, params, price=price)
     offered, requested = _compute_market_order_amounts(
         amount=resolved_amount,
@@ -146,11 +157,11 @@ async def prepare_market_order_draft(
 def prepare_market_order_draft_sync(
     ctx: SyncSecureClientContext, params: PrepareMarketOrderParams
 ) -> OrderDraft:
-    tick_size = fetch_tick_size_sync(ctx, token_id=params.token_id)
+    tick_size = params.tick_size or fetch_tick_size_sync(ctx, token_id=params.token_id)
     notional = params.amount if params.side == "BUY" else params.shares
     assert notional is not None
     price = _resolve_market_order_price_sync(ctx, params, notional=notional, tick_size=tick_size)
-    neg_risk = fetch_neg_risk_sync(ctx, token_id=params.token_id)
+    neg_risk = params.neg_risk if params.neg_risk is not None else fetch_neg_risk_sync(ctx, token_id=params.token_id)
     resolved_amount = _resolve_buy_amount_for_fees_sync(ctx, params, price=price)
     offered, requested = _compute_market_order_amounts(
         amount=resolved_amount,
@@ -229,6 +240,19 @@ def _resolve_protected_market_price(price: Decimal, tick_size: Decimal, *, field
             f"{config.price} decimal places."
         )
     return price
+
+
+def _validate_provided_tick_size(
+    tick_size: Decimal | int | float | str | None,
+) -> Decimal | None:
+    if tick_size is None:
+        return None
+    value = coerce_positive_decimal("tick_size", tick_size)
+    try:
+        resolve_rounding_config(value)
+    except Exception as error:
+        raise UserInputError(f"Unsupported tick_size: {value}") from error
+    return value
 
 
 def _has_protected_price(params: PrepareMarketOrderParams) -> bool:

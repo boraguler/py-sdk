@@ -251,6 +251,33 @@ def test_prepare_market_order_draft_buy_uses_max_price_without_book() -> None:
     assert "/book" not in captured
 
 
+def test_prepare_market_order_draft_uses_supplied_metadata_without_gets() -> None:
+    captured: list[str] = []
+
+    async def run() -> tuple[int, int]:
+        client = await _make_client()
+        try:
+            _install_public_clob(client, _tracked_route_handler({}, captured))
+            params = validate_market_order_params(
+                token_id="8501497",
+                side="BUY",
+                amount=Decimal("100"),
+                max_price=Decimal("0.55"),
+                tick_size=Decimal("0.01"),
+                neg_risk=False,
+                order_type="FOK",
+            )
+            draft = await prepare_market_order_draft(client._ctx, params)
+            return draft.offered_amount, draft.requested_amount
+        finally:
+            await client.close()
+
+    offered, requested = asyncio.run(run())
+    assert offered == 100_000_000
+    assert requested == 181_818_200
+    assert captured == []
+
+
 def test_prepare_market_order_draft_sell_uses_min_price_without_book() -> None:
     captured: list[str] = []
     routes = {

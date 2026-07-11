@@ -1670,6 +1670,8 @@ class SecureClient:
         max_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
+        tick_size: Decimal | int | float | str | None = None,
+        neg_risk: bool | None = None,
     ) -> SignedOrder: ...
     @overload
     def create_market_order(
@@ -1681,6 +1683,8 @@ class SecureClient:
         min_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
+        tick_size: Decimal | int | float | str | None = None,
+        neg_risk: bool | None = None,
     ) -> SignedOrder: ...
     def create_market_order(
         self,
@@ -1694,12 +1698,15 @@ class SecureClient:
         min_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
+        tick_size: Decimal | int | float | str | None = None,
+        neg_risk: bool | None = None,
     ) -> SignedOrder:
         """Create and sign a market order without posting it.
 
         BUY orders use ``amount`` as the spend amount and may include
         ``max_spend`` and ``max_price``. SELL orders use ``shares`` as the
-        number of shares to sell and may include ``min_price``.
+        number of shares to sell and may include ``min_price``. Supplying
+        verified ``tick_size`` and ``neg_risk`` avoids metadata lookups.
 
         Raises:
             UserInputError: If side-specific order parameters are invalid.
@@ -1716,6 +1723,8 @@ class SecureClient:
             min_price=min_price,
             order_type=order_type,
             builder_code=builder_code,
+            tick_size=tick_size,
+            neg_risk=neg_risk,
         )
 
     def place_limit_order(
@@ -1763,6 +1772,8 @@ class SecureClient:
         max_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
+        tick_size: Decimal | int | float | str | None = None,
+        neg_risk: bool | None = None,
     ) -> OrderResponse: ...
     @overload
     def place_market_order(
@@ -1774,6 +1785,8 @@ class SecureClient:
         min_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
+        tick_size: Decimal | int | float | str | None = None,
+        neg_risk: bool | None = None,
     ) -> OrderResponse: ...
     def place_market_order(
         self,
@@ -1787,6 +1800,8 @@ class SecureClient:
         min_price: Decimal | int | float | str | None = None,
         order_type: MarketOrderType = "FAK",
         builder_code: str | None = None,
+        tick_size: Decimal | int | float | str | None = None,
+        neg_risk: bool | None = None,
     ) -> OrderResponse:
         """Create, sign, and post a market order.
 
@@ -1811,6 +1826,8 @@ class SecureClient:
             min_price=min_price,
             order_type=order_type,
             builder_code=builder_code,
+            tick_size=tick_size,
+            neg_risk=neg_risk,
         )
         return post_order_with_allowance_recovery_sync(self, signed)
 
@@ -1905,6 +1922,8 @@ class SecureClient:
         min_price: Decimal | int | float | str | None,
         order_type: MarketOrderType,
         builder_code: str | None,
+        tick_size: Decimal | int | float | str | None,
+        neg_risk: bool | None,
     ) -> SignedOrder:
         params = validate_market_order_params(
             token_id=token_id,
@@ -1916,6 +1935,8 @@ class SecureClient:
             min_price=min_price,
             order_type=order_type,
             builder_code=builder_code,
+            tick_size=tick_size,
+            neg_risk=neg_risk,
         )
         draft = prepare_market_order_draft_sync(self._ctx, params)
         return self._sign_order(draft, post_only=False)
