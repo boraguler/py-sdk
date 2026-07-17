@@ -2049,6 +2049,8 @@ class AsyncSecureClient:
         post_only: bool = False,
         expiration: int | None = None,
         builder_code: str | None = None,
+        tick_size: Decimal | int | float | str | None = None,
+        neg_risk: bool | None = None,
     ) -> SignedOrder:
         """Create and sign a limit order without posting it.
 
@@ -2058,6 +2060,9 @@ class AsyncSecureClient:
         When ``expiration`` is provided, it must be a Unix timestamp at least
         3 minutes in the future. Use extra buffer for immediate submissions to
         account for latency and clock skew.
+
+        Supplying verified ``tick_size`` and ``neg_risk`` avoids metadata lookups
+        (GET /tick-size and /neg-risk), mirroring the market-order fast path.
         """
         params = validate_limit_order_params(
             token_id=token_id,
@@ -2067,6 +2072,8 @@ class AsyncSecureClient:
             post_only=post_only,
             expiration=expiration,
             builder_code=builder_code,
+            tick_size=tick_size,
+            neg_risk=neg_risk,
         )
         draft = await prepare_limit_order_draft(self._ctx, params)
         return await self._sign_order(draft, post_only=params.post_only)
@@ -2175,12 +2182,16 @@ class AsyncSecureClient:
         post_only: bool = False,
         expiration: int | None = None,
         builder_code: str | None = None,
+        tick_size: Decimal | int | float | str | None = None,
+        neg_risk: bool | None = None,
     ) -> OrderResponse:
         """Create, sign, and post a limit order.
 
         When ``expiration`` is provided, it must be a Unix timestamp at least
         3 minutes in the future. Use extra buffer for immediate submissions to
         account for latency and clock skew.
+
+        Supplying verified ``tick_size`` and ``neg_risk`` avoids metadata lookups.
         """
         signed = await self.create_limit_order(
             token_id=token_id,
@@ -2190,6 +2201,8 @@ class AsyncSecureClient:
             post_only=post_only,
             expiration=expiration,
             builder_code=builder_code,
+            tick_size=tick_size,
+            neg_risk=neg_risk,
         )
         return await post_order_with_allowance_recovery(self, signed)
 

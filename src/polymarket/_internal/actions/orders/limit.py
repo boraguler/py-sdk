@@ -13,6 +13,7 @@ from polymarket._internal.actions.orders.market_data import (
     fetch_tick_size,
     fetch_tick_size_sync,
 )
+from polymarket._internal.actions.orders.market import _validate_provided_tick_size
 from polymarket._internal.actions.orders.math import (
     decimal_places,
     parse_amount,
@@ -39,6 +40,8 @@ class PrepareLimitOrderParams:
     post_only: bool = False
     expiration: int | None = None
     builder_code: HexString | None = None
+    tick_size: Decimal | None = None
+    neg_risk: bool | None = None
 
 
 def validate_limit_order_params(
@@ -50,6 +53,8 @@ def validate_limit_order_params(
     post_only: bool = False,
     expiration: int | None = None,
     builder_code: str | None = None,
+    tick_size: Decimal | int | float | str | None = None,
+    neg_risk: bool | None = None,
 ) -> PrepareLimitOrderParams:
     validated_token = TokenId(require_nonempty("token_id", token_id))
     validated_price = coerce_positive_decimal("price", price)
@@ -69,6 +74,9 @@ def validate_limit_order_params(
                 f"expiration must be at least {_MIN_EXPIRATION_BUFFER_S} seconds in the future."
             )
     validated_builder = validate_builder_code(builder_code) if builder_code is not None else None
+    validated_tick_size = _validate_provided_tick_size(tick_size)
+    if neg_risk is not None and not isinstance(neg_risk, bool):
+        raise UserInputError("neg_risk must be a bool when provided.")
     return PrepareLimitOrderParams(
         token_id=validated_token,
         price=validated_price,
@@ -77,14 +85,16 @@ def validate_limit_order_params(
         post_only=post_only,
         expiration=expiration,
         builder_code=validated_builder,
+        tick_size=validated_tick_size,
+        neg_risk=neg_risk,
     )
 
 
 async def prepare_limit_order_draft(
     ctx: AsyncSecureClientContext, params: PrepareLimitOrderParams
 ) -> OrderDraft:
-    tick_size = await fetch_tick_size(ctx, token_id=params.token_id)
-    neg_risk = await fetch_neg_risk(ctx, token_id=params.token_id)
+    tick_size = params.tick_size or await fetch_tick_size(ctx, token_id=params.token_id)
+    neg_risk = params.neg_risk if params.neg_risk is not None else await fetch_neg_risk(ctx, token_id=params.token_id)
     price = _resolve_price(params.price, tick_size)
     offered, requested = _compute_limit_order_amounts(
         price=price, size=params.size, side=params.side, tick_size=tick_size
@@ -107,8 +117,8 @@ async def prepare_limit_order_draft(
 def prepare_limit_order_draft_sync(
     ctx: SyncSecureClientContext, params: PrepareLimitOrderParams
 ) -> OrderDraft:
-    tick_size = fetch_tick_size_sync(ctx, token_id=params.token_id)
-    neg_risk = fetch_neg_risk_sync(ctx, token_id=params.token_id)
+    tick_size = params.tick_size or fetch_tick_size_sync(ctx, token_id=params.token_id)
+    neg_risk = params.neg_risk if params.neg_risk is not None else fetch_neg_risk_sync(ctx, token_id=params.token_id)
     price = _resolve_price(params.price, tick_size)
     offered, requested = _compute_limit_order_amounts(
         price=price, size=params.size, side=params.side, tick_size=tick_size
